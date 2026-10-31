@@ -1,10 +1,10 @@
-//! The launcher's system items: the volume, network, Wi-Fi, Bluetooth, battery, clock and
-//! power actions that Explorer's taskbar would otherwise offer. This builds the rows from a
+//! The launcher's system items: the audio devices and their volume, network, Wi-Fi, Bluetooth,
+//! battery, clock and power actions that Explorer's taskbar would otherwise offer. This builds the rows from a
 //! snapshot of the system and searches them; reading and changing the system is the platform's.
 
 use crate::search::fuzzy;
 
-/// The default output's volume.
+/// The volume of the default output or input.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Volume {
     /// 0 to 100.
@@ -27,6 +27,107 @@ pub struct Battery {
 pub struct Network {
     pub name: Option<String>,
     pub internet: bool,
+}
+
+/// An audio output or input device that is plugged in and enabled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioDevice {
+    /// The endpoint id Windows knows it by.
+    pub id: String,
+    /// Like `Headphones (RME Babyface Pro)`.
+    pub name: String,
+    /// Whether it is the one in use.
+    pub default: bool,
+}
+
+/// A saved Wi-Fi network that is in range.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WifiNetwork {
+    /// The saved profile's name, which connecting goes by.
+    pub profile: String,
+    /// The name of the network.
+    pub name: String,
+    /// 0 to 100.
+    pub signal: u8,
+    pub connected: bool,
+}
+
+/// A paired Bluetooth device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BluetoothDevice {
+    pub name: String,
+    pub connected: bool,
+}
+
+/// A group of system rows, which the launcher shows on their own when its bar's button for the
+/// group is picked, like the taskbar's quick settings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Group {
+    Output,
+    Input,
+    Wifi,
+    Bluetooth,
+    /// Not part of a panel: found by searching.
+    Other,
+}
+
+impl Group {
+    /// What the search box says while the group is open.
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::Output => "Sound output",
+            Self::Input => "Microphone",
+            Self::Wifi => "Wi-Fi",
+            Self::Bluetooth => "Bluetooth",
+            Self::Other => "",
+        }
+    }
+
+    /// Whether the group's switch is on: sound and microphone not muted, the radio on. `None`
+    /// when there is nothing to switch.
+    pub fn is_on(self, status: &Status) -> Option<bool> {
+        match self {
+            Self::Output => status.volume.map(|v| !v.muted),
+            Self::Input => status.mic.map(|v| !v.muted),
+            Self::Wifi => status.wifi,
+            Self::Bluetooth => status.bluetooth,
+            Self::Other => None,
+        }
+    }
+
+    /// The action that flips the group's switch.
+    pub fn toggle(self, status: &Status) -> Option<Action> {
+        let on = self.is_on(status)?;
+        Some(match self {
+            Self::Output => Action::Mute(on),
+            Self::Input => Action::MuteMic(on),
+            Self::Wifi => Action::SetRadio(Radio::Wifi, !on),
+            Self::Bluetooth => Action::SetRadio(Radio::Bluetooth, !on),
+            Self::Other => return None,
+        })
+    }
+}
+
+impl Status {
+    /// Records what `action` will have done, so what is shown follows a switch before the
+    /// system is read again.
+    pub fn expect(&mut self, action: &Action) {
+        match action {
+            Action::Mute(muted) => {
+                if let Some(v) = &mut self.volume {
+                    v.muted = *muted;
+                }
+            }
+            Action::MuteMic(muted) => {
+                if let Some(v) = &mut self.mic {
+                    v.muted = *muted;
+                }
+            }
+            Action::SetRadio(Radio::Wifi, on) => self.wifi = self.wifi.map(|_| *on),
+            Action::SetRadio(Radio::Bluetooth, on) => self.bluetooth = self.bluetooth.map(|_| *on),
+            _ => {}
+        }
+    }
 }
 
 /// A radio that can be switched.
@@ -68,11 +169,18 @@ impl Power {
 }
 
 /// What picking a system row does.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     SetVolume(u8),
     Mute(bool),
+    SetMicVolume(u8),
+    MuteMic(bool),
+    /// Make the device with this endpoint id the one in use, output or input.
+    SwitchDevice(String),
     SetRadio(Radio, bool),
+    /// Connect to the saved Wi-Fi network with this profile name.
+    WifiConnect(String),
+    WifiDisconnect,
     /// Open a Settings page (an `ms-settings:` URI).
     Open(&'static str),
     Power(Power),
@@ -83,6 +191,12 @@ pub enum Action {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Status {
     pub volume: Option<Volume>,
+    /// The default input's volume.
+    pub mic: Option<Volume>,
+    pub outputs: Vec<AudioDevice>,
+    pub inputs: Vec<AudioDevice>,
+    pub wifi_networks: Vec<WifiNetwork>,
+    pub bluetooth_devices: Vec<BluetoothDevice>,
     pub battery: Option<Battery>,
     pub network: Option<Network>,
     pub wifi: Option<bool>,
@@ -99,6 +213,8 @@ pub struct Entry {
     /// Other words that find it.
     pub keywords: &'static str,
     pub action: Action,
+    /// The panel it belongs to.
+    pub group: Group,
 }
 
 fn entry(
@@ -112,6 +228,15 @@ fn entry(
         subtitle: subtitle.into(),
         keywords,
         action,
+        group: Group::Other,
+    }
+}
+
+impl Entry {
+    /// The same row, in a panel.
+    fn in_group(mut self, group: Group) -> Self {
+        self.group = group;
+        self
     }
 }
 
@@ -149,6 +274,21 @@ fn battery_subtitle(b: &Battery) -> String {
     }
 }
 
+/// A row for switching to an audio device.
+fn device_entry(kind: &str, device: &AudioDevice, keywords: &'static str) -> Entry {
+    let subtitle = if device.default {
+        "In use"
+    } else {
+        "Enter to switch to it"
+    };
+    entry(
+        &format!("{kind}: {}", device.name),
+        subtitle,
+        keywords,
+        Action::SwitchDevice(device.id.clone()),
+    )
+}
+
 /// Every row for `status`, in the order they are listed.
 pub fn entries(status: &Status) -> Vec<Entry> {
     let mut out = Vec::new();
@@ -158,24 +298,76 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         } else {
             (format!("Volume: {}%", v.percent), "Enter to mute")
         };
-        out.push(entry(
-            &title,
-            hint,
-            "sound audio speakers mute unmute",
-            Action::Mute(!v.muted),
-        ));
-        out.push(entry(
-            "Volume up",
-            format!("To {}%", v.percent.saturating_add(VOLUME_STEP).min(100)),
-            "louder sound audio",
-            Action::SetVolume(v.percent.saturating_add(VOLUME_STEP).min(100)),
-        ));
-        out.push(entry(
-            "Volume down",
-            format!("To {}%", v.percent.saturating_sub(VOLUME_STEP)),
-            "quieter sound audio",
-            Action::SetVolume(v.percent.saturating_sub(VOLUME_STEP)),
-        ));
+        out.push(
+            entry(
+                &title,
+                hint,
+                "sound audio speakers mute unmute",
+                Action::Mute(!v.muted),
+            )
+            .in_group(Group::Output),
+        );
+        out.push(
+            entry(
+                "Volume up",
+                format!("To {}%", v.percent.saturating_add(VOLUME_STEP).min(100)),
+                "louder sound audio",
+                Action::SetVolume(v.percent.saturating_add(VOLUME_STEP).min(100)),
+            )
+            .in_group(Group::Output),
+        );
+        out.push(
+            entry(
+                "Volume down",
+                format!("To {}%", v.percent.saturating_sub(VOLUME_STEP)),
+                "quieter sound audio",
+                Action::SetVolume(v.percent.saturating_sub(VOLUME_STEP)),
+            )
+            .in_group(Group::Output),
+        );
+    }
+    for device in &status.outputs {
+        out.push(
+            device_entry("Output", device, "speakers headphones sound audio")
+                .in_group(Group::Output),
+        );
+    }
+    if let Some(m) = status.mic {
+        let (title, hint) = if m.muted {
+            ("Microphone: muted".to_owned(), "Enter to unmute")
+        } else {
+            (format!("Microphone: {}%", m.percent), "Enter to mute")
+        };
+        out.push(
+            entry(
+                &title,
+                hint,
+                "mic input audio mute unmute",
+                Action::MuteMic(!m.muted),
+            )
+            .in_group(Group::Input),
+        );
+        out.push(
+            entry(
+                "Microphone up",
+                format!("To {}%", m.percent.saturating_add(VOLUME_STEP).min(100)),
+                "mic input louder",
+                Action::SetMicVolume(m.percent.saturating_add(VOLUME_STEP).min(100)),
+            )
+            .in_group(Group::Input),
+        );
+        out.push(
+            entry(
+                "Microphone down",
+                format!("To {}%", m.percent.saturating_sub(VOLUME_STEP)),
+                "mic input quieter",
+                Action::SetMicVolume(m.percent.saturating_sub(VOLUME_STEP)),
+            )
+            .in_group(Group::Input),
+        );
+    }
+    for device in &status.inputs {
+        out.push(device_entry("Input", device, "microphone mic audio").in_group(Group::Input));
     }
     if let Some(n) = &status.network {
         let title = match (&n.name, n.internet) {
@@ -188,25 +380,92 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         } else {
             "No internet. Enter for network settings"
         };
-        out.push(entry(
-            &title,
-            subtitle,
-            "internet wifi wi-fi ethernet connection",
-            Action::Open("ms-settings:network"),
-        ));
+        out.push(
+            entry(
+                &title,
+                subtitle,
+                "internet wifi wi-fi ethernet connection",
+                Action::Open("ms-settings:network"),
+            )
+            .in_group(Group::Wifi),
+        );
     }
-    out.extend(radio_entry(
-        "Wi-Fi",
-        "wifi wireless network",
-        Radio::Wifi,
-        status.wifi,
-    ));
-    out.extend(radio_entry(
-        "Bluetooth",
-        "wireless devices",
-        Radio::Bluetooth,
-        status.bluetooth,
-    ));
+    out.extend(
+        radio_entry("Wi-Fi", "wifi wireless network", Radio::Wifi, status.wifi)
+            .map(|e| e.in_group(Group::Wifi)),
+    );
+    for network in &status.wifi_networks {
+        let (subtitle, action) = if network.connected {
+            (
+                format!("Connected, signal {}%. Enter to disconnect", network.signal),
+                Action::WifiDisconnect,
+            )
+        } else {
+            (
+                format!(
+                    "Saved network, signal {}%. Enter to connect",
+                    network.signal
+                ),
+                Action::WifiConnect(network.profile.clone()),
+            )
+        };
+        out.push(
+            entry(
+                &format!("Wi-Fi: {}", network.name),
+                subtitle,
+                "wifi wi-fi wireless network connect",
+                action,
+            )
+            .in_group(Group::Wifi),
+        );
+    }
+    if status.wifi.is_some() {
+        out.push(
+            entry(
+                "Wi-Fi settings",
+                "Enter to join a new network",
+                "wifi wi-fi wireless network add",
+                Action::Open("ms-settings:network-wifi"),
+            )
+            .in_group(Group::Wifi),
+        );
+    }
+    out.extend(
+        radio_entry(
+            "Bluetooth",
+            "wireless devices",
+            Radio::Bluetooth,
+            status.bluetooth,
+        )
+        .map(|e| e.in_group(Group::Bluetooth)),
+    );
+    for device in &status.bluetooth_devices {
+        let state = if device.connected {
+            "Connected"
+        } else {
+            "Paired"
+        };
+        out.push(
+            entry(
+                &format!("Bluetooth: {}", device.name),
+                format!("{state}. Enter for Bluetooth settings to connect or remove it"),
+                "bluetooth wireless headphones device paired",
+                Action::Open("ms-settings:bluetooth"),
+            )
+            .in_group(Group::Bluetooth),
+        );
+    }
+    if status.bluetooth.is_some() {
+        out.push(
+            entry(
+                "Bluetooth devices",
+                "Enter for Bluetooth settings, to pair or connect",
+                "bluetooth wireless headphones pair connect",
+                Action::Open("ms-settings:bluetooth"),
+            )
+            .in_group(Group::Bluetooth),
+        );
+    }
     if let Some(b) = &status.battery {
         out.push(entry(
             &format!("Battery: {}%", b.percent),
@@ -241,14 +500,18 @@ pub fn entries(status: &Status) -> Vec<Entry> {
     out
 }
 
-/// `volume 30` or `vol 30%`: the percentage asked for.
-fn volume_request(query: &str) -> Option<u8> {
+/// `volume 30` or `vol 30%` for the output, `mic 30` or `microphone 30%` for the input: whether
+/// the input, and the percentage asked for.
+fn volume_request(query: &str) -> Option<(bool, u8)> {
     let (word, number) = query.trim().split_once(char::is_whitespace)?;
-    if !["volume", "vol"].contains(&word.to_lowercase().as_str()) {
-        return None;
-    }
+    let word = word.to_lowercase();
+    let input = match word.as_str() {
+        "volume" | "vol" => false,
+        "mic" | "microphone" => true,
+        _ => return None,
+    };
     let percent: u8 = number.trim().trim_end_matches('%').parse().ok()?;
-    (percent <= 100).then_some(percent)
+    (percent <= 100).then_some((input, percent))
 }
 
 /// The rows for `status` that match `query`, best first. An empty query matches them all.
@@ -256,15 +519,20 @@ pub fn find(query: &str, status: &Status) -> Vec<Entry> {
     let query = query.trim();
     let mut all = entries(status);
     let mut out = Vec::new();
-    if status.volume.is_some()
-        && let Some(percent) = volume_request(query)
-    {
-        out.push(entry(
+    match volume_request(query) {
+        Some((false, percent)) if status.volume.is_some() => out.push(entry(
             &format!("Set volume to {percent}%"),
             "Enter to set it",
             "",
             Action::SetVolume(percent),
-        ));
+        )),
+        Some((true, percent)) if status.mic.is_some() => out.push(entry(
+            &format!("Set microphone volume to {percent}%"),
+            "Enter to set it",
+            "",
+            Action::SetMicVolume(percent),
+        )),
+        _ => {}
     }
     if query.is_empty() {
         out.append(&mut all);
@@ -285,6 +553,29 @@ pub fn find(query: &str, status: &Status) -> Vec<Entry> {
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
     out.extend(scored.into_iter().map(|(_, e)| e));
     out
+}
+
+/// The rows of one panel that match `query`, best first; all of them, in order, for an empty
+/// query.
+pub fn find_group(group: Group, query: &str, status: &Status) -> Vec<Entry> {
+    let query = query.trim();
+    let rows = entries(status).into_iter().filter(|e| e.group == group);
+    if query.is_empty() {
+        return rows.collect();
+    }
+    let mut scored: Vec<(f64, Entry)> = rows
+        .filter_map(|e| {
+            let by_title = fuzzy(query, &e.title);
+            let by_keywords = fuzzy(query, e.keywords).map(|s| s * 0.5);
+            by_title
+                .into_iter()
+                .chain(by_keywords)
+                .max_by(f64::total_cmp)
+                .map(|score| (score, e))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.into_iter().map(|(_, e)| e).collect()
 }
 
 const WEEKDAYS: [&str; 7] = [
@@ -376,7 +667,174 @@ mod tests {
             wifi: Some(true),
             bluetooth: Some(false),
             clock: Some("10:42 pm, Saturday 31 October 2026".into()),
+            mic: Some(Volume {
+                percent: 70,
+                muted: false,
+            }),
+            outputs: vec![
+                device(
+                    "{0.0.0.00000000}.{a}",
+                    "Headphones (RME Babyface Pro)",
+                    true,
+                ),
+                device("{0.0.0.00000000}.{b}", "Speakers (RME Babyface Pro)", false),
+            ],
+            inputs: vec![device(
+                "{0.0.1.00000000}.{c}",
+                "Mic (RME Babyface Pro)",
+                true,
+            )],
+            bluetooth_devices: vec![BluetoothDevice {
+                name: "WH-1000XM5".into(),
+                connected: true,
+            }],
+            wifi_networks: vec![
+                WifiNetwork {
+                    profile: "Home".into(),
+                    name: "Home".into(),
+                    signal: 80,
+                    connected: true,
+                },
+                WifiNetwork {
+                    profile: "Cafe".into(),
+                    name: "Cafe wifi".into(),
+                    signal: 40,
+                    connected: false,
+                },
+            ],
         }
+    }
+
+    fn device(id: &str, name: &str, default: bool) -> AudioDevice {
+        AudioDevice {
+            id: id.into(),
+            name: name.into(),
+            default,
+        }
+    }
+
+    #[test]
+    fn audio_devices_can_be_switched_to() {
+        let rows = find("speakers", &status());
+        let output = rows
+            .iter()
+            .find(|e| e.title.starts_with("Output:"))
+            .unwrap();
+        assert_eq!(output.title, "Output: Speakers (RME Babyface Pro)");
+        assert_eq!(output.subtitle, "Enter to switch to it");
+        assert_eq!(
+            output.action,
+            Action::SwitchDevice("{0.0.0.00000000}.{b}".into())
+        );
+        let rows = find("headphones", &status());
+        let current = rows
+            .iter()
+            .find(|e| e.title.starts_with("Output:"))
+            .unwrap();
+        assert_eq!(current.subtitle, "In use");
+        let inputs = find("mic", &status());
+        assert!(
+            inputs
+                .iter()
+                .any(|e| e.title == "Input: Mic (RME Babyface Pro)")
+        );
+    }
+
+    #[test]
+    fn the_microphone_has_its_own_mute_and_volume() {
+        let rows = find("microphone", &status());
+        let mute = rows.iter().find(|e| e.title == "Microphone: 70%").unwrap();
+        assert_eq!(mute.action, Action::MuteMic(true));
+        let up = rows.iter().find(|e| e.title == "Microphone up").unwrap();
+        assert_eq!(up.action, Action::SetMicVolume(80));
+        let typed = find("mic 25", &status());
+        assert_eq!(typed[0].action, Action::SetMicVolume(25));
+        assert_eq!(typed[0].title, "Set microphone volume to 25%");
+        // Volume stays the output's.
+        assert_eq!(
+            find("volume 25", &status())[0].action,
+            Action::SetVolume(25)
+        );
+    }
+
+    #[test]
+    fn saved_wifi_networks_connect_and_disconnect() {
+        let rows = find("wifi", &status());
+        let home = rows.iter().find(|e| e.title == "Wi-Fi: Home").unwrap();
+        assert_eq!(home.action, Action::WifiDisconnect);
+        let cafe = rows.iter().find(|e| e.title == "Wi-Fi: Cafe wifi").unwrap();
+        assert_eq!(cafe.action, Action::WifiConnect("Cafe".into()));
+        assert!(cafe.subtitle.contains("signal 40%"));
+    }
+
+    #[test]
+    fn a_panel_holds_only_its_own_rows() {
+        let output: Vec<_> = find_group(Group::Output, "", &status())
+            .into_iter()
+            .map(|e| e.title)
+            .collect();
+        assert_eq!(
+            output,
+            [
+                "Volume: 45%",
+                "Volume up",
+                "Volume down",
+                "Output: Headphones (RME Babyface Pro)",
+                "Output: Speakers (RME Babyface Pro)",
+            ]
+        );
+        let input = find_group(Group::Input, "", &status());
+        assert!(
+            input
+                .iter()
+                .all(|e| e.title.starts_with("Microphone") || e.title.starts_with("Input"))
+        );
+        let narrowed = find_group(Group::Output, "speak", &status());
+        assert_eq!(narrowed[0].title, "Output: Speakers (RME Babyface Pro)");
+        assert!(
+            find_group(Group::Other, "", &status())
+                .iter()
+                .any(|e| e.title == "Clock")
+        );
+    }
+
+    #[test]
+    fn a_group_reports_and_flips_its_switch() {
+        let mut s = status();
+        assert_eq!(Group::Output.is_on(&s), Some(true));
+        assert_eq!(Group::Wifi.is_on(&s), Some(true));
+        assert_eq!(Group::Other.is_on(&s), None);
+        let flip = Group::Output.toggle(&s).unwrap();
+        assert_eq!(flip, Action::Mute(true));
+        s.expect(&flip);
+        assert_eq!(Group::Output.is_on(&s), Some(false));
+        assert_eq!(Group::Output.toggle(&s), Some(Action::Mute(false)));
+        let flip = Group::Wifi.toggle(&s).unwrap();
+        s.expect(&flip);
+        assert_eq!(Group::Wifi.is_on(&s), Some(false));
+        s.bluetooth = None;
+        assert_eq!(Group::Bluetooth.toggle(&s), None);
+    }
+
+    #[test]
+    fn the_bluetooth_panel_lists_paired_devices() {
+        let rows = find_group(Group::Bluetooth, "", &status());
+        let titles: Vec<_> = rows.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            ["Bluetooth", "Bluetooth: WH-1000XM5", "Bluetooth devices"]
+        );
+        assert!(rows[1].subtitle.starts_with("Connected"));
+    }
+
+    #[test]
+    fn bluetooth_devices_open_settings() {
+        let rows = find("bluetooth", &status());
+        let devices = rows
+            .iter()
+            .find(|e| e.title == "Bluetooth devices")
+            .unwrap();
+        assert_eq!(devices.action, Action::Open("ms-settings:bluetooth"));
     }
 
     fn titles(query: &str, status: &Status) -> Vec<String> {
@@ -423,8 +881,10 @@ mod tests {
         assert_eq!(rows[0].action, Action::SetRadio(Radio::Bluetooth, true));
         let rows = find("wi-fi", &status());
         assert_eq!(rows[0].action, Action::SetRadio(Radio::Wifi, false));
+        // Both the speakers and the microphone have a mute row.
         let rows = find("mute", &status());
-        assert_eq!(rows[0].action, Action::Mute(true));
+        assert!(rows.iter().any(|e| e.action == Action::Mute(true)));
+        assert!(rows.iter().any(|e| e.action == Action::MuteMic(true)));
     }
 
     #[test]

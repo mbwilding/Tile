@@ -26,9 +26,13 @@ windows-sys = { workspace = true, features = [
 ] }
 # The COM and WinRT interfaces behind the launcher's volume, network, Wi-Fi and Bluetooth items.
 windows = { workspace = true, features = [
+    "Devices_Bluetooth",
+    "Devices_Enumeration",
     "Devices_Radios",
     "Foundation",
     "Foundation_Collections",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_WiFi",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
     "Win32_Networking_NetworkListManager",

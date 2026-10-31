@@ -522,22 +522,19 @@ pub struct Launcher {
     pub selected: Option<Color>,
     /// Text on the selected row. Unset follows `theme.accent_foreground`.
     pub selected_foreground: Option<Color>,
-    /// Shown in the empty search box, with `{prefix}` replaced by `command_prefix`. Empty shows
-    /// `Search apps or equations, <prefix> for commands`, leaving out what is switched off.
+    /// Shown in the empty search box. Empty shows `Search apps, equations and commands`,
+    /// leaving out what is switched off.
     pub placeholder: String,
     /// Show the value of a search that reads as a calculation (`12 * 3`, `sqrt(2)`) first;
     /// Enter copies it.
     pub calculator: bool,
-    /// Text starting with this runs a command line or a Tile dispatcher instead of searching
-    /// apps. Empty switches command mode off.
-    pub command_prefix: String,
+    /// Offer Tile's dispatchers (`workspace 3`) and running what is typed as a command line
+    /// among the results.
+    pub commands: bool,
     /// Offer the system items (volume, network, Wi-Fi, Bluetooth, battery, clock and power
     /// actions) and the notification area's tray icons among the results when they match what
-    /// is typed. Off, they are still listed by `system_prefix`.
+    /// is typed.
     pub system_items: bool,
-    /// Text starting with this lists the system items and tray icons, narrowed by what follows.
-    /// Empty switches that off.
-    pub system_prefix: String,
     /// Show the bar at the bottom with the time (with seconds), the date and the buttons for
     /// switching user, logging out, locking, restarting and shutting down.
     pub bar: bool,
@@ -550,20 +547,16 @@ pub struct Launcher {
 impl Launcher {
     /// The text shown in the empty search box.
     pub fn placeholder_text(&self) -> String {
-        let prefix = &self.command_prefix;
         if !self.placeholder.is_empty() {
-            return self.placeholder.replace("{prefix}", prefix);
+            return self.placeholder.clone();
         }
-        let search = if self.calculator {
-            "Search apps or equations"
-        } else {
-            "Search apps"
-        };
-        if prefix.is_empty() {
-            search.into()
-        } else {
-            format!("{search}, {prefix} for commands")
+        match (self.calculator, self.commands) {
+            (true, true) => "Search apps, equations and commands",
+            (true, false) => "Search apps or equations",
+            (false, true) => "Search apps and commands",
+            (false, false) => "Search apps",
         }
+        .into()
     }
 }
 
@@ -593,9 +586,8 @@ impl Default for Launcher {
             selected_foreground: None,
             placeholder: String::new(),
             calculator: true,
-            command_prefix: "!".into(),
+            commands: true,
             system_items: true,
-            system_prefix: "@".into(),
             bar: true,
             fix_popups: true,
         }

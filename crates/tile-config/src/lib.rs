@@ -295,23 +295,21 @@ mod tests {
     #[test]
     fn placeholder_follows_the_settings() {
         let mut launcher = Launcher::default();
-        let mut check = |calculator: bool, prefix: &str, expected: &str| {
+        let mut check = |calculator: bool, commands: bool, expected: &str| {
             launcher.calculator = calculator;
-            launcher.command_prefix = prefix.into();
+            launcher.commands = commands;
             assert_eq!(launcher.placeholder_text(), expected);
         };
-        check(true, "!", "Search apps or equations, ! for commands");
-        check(true, ">", "Search apps or equations, > for commands");
-        check(true, "", "Search apps or equations");
-        check(false, "!", "Search apps, ! for commands");
-        check(false, "", "Search apps");
+        check(true, true, "Search apps, equations and commands");
+        check(true, false, "Search apps or equations");
+        check(false, true, "Search apps and commands");
+        check(false, false, "Search apps");
 
         let custom = Launcher {
-            command_prefix: ";".into(),
-            placeholder: "Find ({prefix} runs)".into(),
+            placeholder: "Find".into(),
             ..Launcher::default()
         };
-        assert_eq!(custom.placeholder_text(), "Find (; runs)");
+        assert_eq!(custom.placeholder_text(), "Find");
     }
 
     #[test]

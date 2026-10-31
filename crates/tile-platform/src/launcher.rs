@@ -23,7 +23,7 @@ use tile_core::{
     Command, Rect, calc,
     input::Input,
     search::{self, App, CommandEntry, RankOptions, Usage},
-    system::{self, Action, Power, format_date, format_time},
+    system::{self, Action, Group, Power, format_date, format_time},
 };
 use tile_hook::notify::{Click, IconImage, ItemKey, Registry, TrayItem};
 use tokio::sync::mpsc::UnboundedSender;
@@ -136,9 +136,9 @@ impl Launcher {
         wake(&self.hwnd);
     }
 
-    /// Opens the launcher on the focused window's monitor, or closes it if it is open. With
-    /// nothing focused (the desktop or taskbar), it opens in `fallback` (Tile's focused
-    /// monitor's work area), or else on the monitor under the pointer.
+    /// Opens the launcher on `fallback` (Tile's focused monitor's work area, which is right
+    /// even when that monitor has no windows), or else on the focused window's monitor, or
+    /// else on the monitor under the pointer. Closes it if it is open.
     pub fn toggle(&self, fallback: Option<Rect>) {
         self.send(Request::Toggle(fallback));
     }
@@ -282,6 +282,8 @@ struct State {
     tray_hover: Option<usize>,
     /// The bar button the pointer is over.
     bar_hover: Option<usize>,
+    /// The group of controls shown in place of the results, while one is open.
+    panel: Option<Group>,
     /// What the system was doing when the launcher opened.
     status: system::Status,
     /// The system rows matching the search.
@@ -312,15 +314,40 @@ struct MenuWatch {
 const MENU_TIMER: usize = 2;
 /// Repaints the bar's clock while the launcher is open.
 const CLOCK_TIMER: usize = 3;
-/// The buttons of the bar, left to right: a name, its icon in Windows' icon font, and what it
-/// does.
-const BAR_BUTTONS: [(&str, char, Power); 5] = [
-    ("Switch user", '\u{E748}', Power::SwitchUser),
-    ("Log out", '\u{F3B1}', Power::SignOut),
-    ("Lock", '\u{E72E}', Power::Lock),
-    ("Restart", '\u{E777}', Power::Restart),
-    ("Shut down", '\u{E7E8}', Power::ShutDown),
+/// What a bar button does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BarAction {
+    /// Lists a group of controls in place of the results.
+    Panel(Group),
+    /// Ends the session or puts the machine away.
+    Power(Power),
+}
+
+/// The buttons of the bar, left to right: an icon in Windows' icon font and what it does. The
+/// first [`QUICK_BUTTONS`] open panels, the rest are power buttons.
+const BAR_BUTTONS: [(char, BarAction); 9] = [
+    ('\u{E767}', BarAction::Panel(Group::Output)),
+    ('\u{E720}', BarAction::Panel(Group::Input)),
+    ('\u{E701}', BarAction::Panel(Group::Wifi)),
+    ('\u{E702}', BarAction::Panel(Group::Bluetooth)),
+    ('\u{E748}', BarAction::Power(Power::SwitchUser)),
+    ('\u{F3B1}', BarAction::Power(Power::SignOut)),
+    ('\u{E72E}', BarAction::Power(Power::Lock)),
+    ('\u{E777}', BarAction::Power(Power::Restart)),
+    ('\u{E7E8}', BarAction::Power(Power::ShutDown)),
 ];
+/// How many of the bar's buttons open panels.
+const QUICK_BUTTONS: usize = 4;
+/// Refreshes what the panel shows a moment after something in it was changed.
+const STATUS_TIMER: usize = 4;
+
+/// The power action of a bar button, if it is one.
+fn power_at(index: usize) -> Option<Power> {
+    match BAR_BUTTONS[index].1 {
+        BarAction::Power(power) => Some(power),
+        BarAction::Panel(_) => None,
+    }
+}
 /// How long a menu may take to appear before it is taken to have never come.
 const MENU_GRACE: Duration = Duration::from_millis(1500);
 /// How long after a click a popup in a corner is moved, and how often it is looked for then.
@@ -464,41 +491,47 @@ impl State {
             sort_by_usage: config.sort_by_usage,
             max_results: config.max_results,
         };
-        let prefix = config.command_prefix.clone();
-        let system_prefix = config.system_prefix.clone();
+        let commands = config.commands;
         let calculator = config.calculator;
         let system_items = config.system_items;
         let query = self.query.text().to_owned();
         self.armed = None;
         self.system.clear();
-        self.results =
-            if let Some(rest) = query.strip_prefix(&prefix).filter(|_| !prefix.is_empty()) {
-                search::commands(rest)
+        if let Some(group) = self.panel {
+            self.system = system::find_group(group, &query, &self.status);
+            self.results = (0..self.system.len()).map(Row::System).collect();
+            self.selected = 0;
+            self.scroll = 0;
+            return;
+        }
+        let searching = !query.trim().is_empty();
+        let sum = calculator.then(|| calc::calculation(&query)).flatten();
+        let is_sum = sum.is_some();
+        let mut results: Vec<Row> = sum
+            .map(Row::Calc)
+            .into_iter()
+            .chain(
+                search::rank(&query, &self.apps, &self.usage, &options)
                     .into_iter()
-                    .map(Row::Command)
-                    .collect()
-            } else if let Some(rest) = query
-                .strip_prefix(&system_prefix)
-                .filter(|_| !system_prefix.is_empty())
+                    .map(Row::App),
+            )
+            .collect();
+        if searching && system_items {
+            results.extend(self.system_rows(&query));
+        }
+        if searching && commands {
+            let mut rows = search::commands(&query);
+            // Running the text as a command line is offered when it reads like one, or when
+            // nothing else matched.
+            let shell = rows.pop();
+            results.extend(rows.into_iter().map(Row::Command));
+            if let Some(shell) = shell
+                && (results.is_empty() || !is_sum && query.trim().contains(char::is_whitespace))
             {
-                self.system_rows(rest)
-            } else {
-                let sum = calculator.then(|| calc::calculation(&query)).flatten();
-                let extras = if system_items && !query.trim().is_empty() {
-                    self.system_rows(&query)
-                } else {
-                    Vec::new()
-                };
-                sum.map(Row::Calc)
-                    .into_iter()
-                    .chain(
-                        search::rank(&query, &self.apps, &self.usage, &options)
-                            .into_iter()
-                            .map(Row::App),
-                    )
-                    .chain(extras)
-                    .collect()
-            };
+                results.push(Row::Command(shell));
+            }
+        }
+        self.results = results;
         self.selected = 0;
         self.scroll = 0;
     }
@@ -651,7 +684,11 @@ impl State {
         let mut buttons = Vec::new();
         if bar_h > 0 {
             let mut x = bar.right;
-            for _ in BAR_BUTTONS {
+            for i in (0..BAR_BUTTONS.len()).rev() {
+                // A wider gap between the panels' buttons and the power buttons.
+                if i + 1 == QUICK_BUTTONS {
+                    x -= self.scale(14);
+                }
                 buttons.push(w::RECT {
                     left: x - bar_h,
                     top: bar.top,
@@ -732,7 +769,7 @@ impl State {
     /// The width the bar needs for its clock, date and buttons.
     fn bar_width(&self, main_px: i32, date_px: i32) -> i32 {
         let button = main_px + self.scale(16);
-        let buttons = BAR_BUTTONS.len() as i32 * (button + self.scale(6));
+        let buttons = BAR_BUTTONS.len() as i32 * (button + self.scale(6)) + self.scale(14);
         let clock = (12 * main_px + 24 * date_px) * 11 / 20;
         2 * self.scale(12) + clock + self.scale(16) + buttons
     }
@@ -791,7 +828,7 @@ impl State {
                 let Some(entry) = self.system.get(i) else {
                     return Picked::Nothing;
                 };
-                let action = entry.action;
+                let action = entry.action.clone();
                 if let Action::Power(power) = action
                     && power.needs_confirmation()
                     && self.armed != Some(power)
@@ -818,7 +855,7 @@ impl State {
             Some(Row::Command(CommandEntry::Invalid { .. })) => return Picked::Nothing,
             Some(Row::Command(CommandEntry::Shell(line))) => LauncherEvent::Run(line),
             Some(Row::Command(CommandEntry::Complete { name, .. })) => {
-                let text = format!("{}{name} ", self.config().command_prefix);
+                let text = format!("{name} ");
                 self.query.set(text);
                 self.rank();
                 return Picked::Edited;
@@ -927,15 +964,18 @@ fn save_usage(path: &PathBuf, usage: &Usage) {
     }
 }
 
-/// The work area to open in: the focused window's monitor, then `fallback`, then the
-/// pointer's monitor.
-fn open_area(fallback: Option<Rect>) -> Option<Rect> {
+/// The work area to open in: `preferred` (the monitor Tile has focused, empty or not), then the
+/// focused window's monitor, then the pointer's monitor.
+fn open_area(preferred: Option<Rect>) -> Option<Rect> {
     let work_area = |monitor: w::HMONITOR| monitor.GetMonitorInfo().ok().map(|i| rect(i.rcWork));
-    // The desktop and taskbar have focus on an empty monitor, but say nothing about which.
-    let focused = w::HWND::GetForegroundWindow()
-        .filter(|hwnd| !crate::is_shell_window(hwnd.ptr() as isize))
-        .and_then(|hwnd| work_area(hwnd.MonitorFromWindow(co::MONITOR::DEFAULTTONEAREST)));
-    focused.or(fallback).or_else(|| {
+    // The desktop and taskbar have focus on an empty monitor, but say nothing about which, and
+    // Windows may leave focus on a window of another monitor.
+    let focused = || {
+        w::HWND::GetForegroundWindow()
+            .filter(|hwnd| !crate::is_shell_window(hwnd.ptr() as isize))
+            .and_then(|hwnd| work_area(hwnd.MonitorFromWindow(co::MONITOR::DEFAULTTONEAREST)))
+    };
+    preferred.or_else(focused).or_else(|| {
         work_area(w::HMONITOR::MonitorFromPoint(
             w::GetCursorPos().unwrap_or_default(),
             co::MONITOR::DEFAULTTONEAREST,
@@ -1008,6 +1048,7 @@ fn run(
         tray: Vec::new(),
         tray_hover: None,
         bar_hover: None,
+        panel: None,
         status: system::Status::default(),
         system: Vec::new(),
         armed: None,
@@ -1060,16 +1101,19 @@ fn run(
     };
 
     wnd.on().wm_create({
-        let (wnd, state, refresh, hwnd_slot) = (
+        let (wnd, state, refresh, refresh_system, hwnd_slot) = (
             wnd.clone(),
             state.clone(),
             refresh.clone(),
+            refresh_system.clone(),
             hwnd_slot.clone(),
         );
         move |_| {
             style_window(wnd.hwnd(), &state.borrow().settings);
             hwnd_slot.store(wnd.hwnd().ptr() as isize, Ordering::Release);
             refresh();
+            // So the first time it opens already knows the system.
+            refresh_system();
             // Requests sent before the window existed.
             tile_hook::post_app(wnd.hwnd().ptr() as isize, 0);
             Ok(0)
@@ -1082,6 +1126,8 @@ fn run(
             wnd.hwnd().ShowWindow(co::SW::HIDE);
         }
     };
+
+    let status_refresh = refresh_system.clone();
 
     let toggle = {
         let (wnd, state, hide, refresh) = (wnd.clone(), state.clone(), hide.clone(), refresh);
@@ -1126,6 +1172,7 @@ fn run(
             s.mouse = None;
             s.tray_hover = None;
             s.bar_hover = None;
+            s.panel = None;
             s.menu = None;
             s.rank();
             // Centred for the full number of rows, so it keeps its top as it shrinks.
@@ -1185,8 +1232,9 @@ fn run(
                         let mut s = state.borrow_mut();
                         if status != s.status {
                             s.status = status;
-                            // Re-ranking resets the selection, so only when system rows show.
-                            if !s.system.is_empty() {
+                            // Something typed may match rows that weren't known when it was
+                            // typed. Re-ranking resets the selection, so it is put back.
+                            if !s.query.text().trim().is_empty() || s.panel.is_some() {
                                 let (selected, scroll) = (s.selected, s.scroll);
                                 s.rank();
                                 s.selected = selected.min(s.results.len().saturating_sub(1));
@@ -1206,6 +1254,15 @@ fn run(
                 let _ = wnd.hwnd().UpdateWindow();
             }
             Ok(0)
+        }
+    });
+
+    wnd.on().wm_timer(STATUS_TIMER, {
+        let (wnd, status_refresh) = (wnd.clone(), status_refresh.clone());
+        move || {
+            let _ = wnd.hwnd().KillTimer(STATUS_TIMER);
+            status_refresh();
+            Ok(())
         }
     });
 
@@ -1327,7 +1384,21 @@ fn run(
             match s.pick(secondary) {
                 Picked::Done(event) => {
                     let events = s.events.clone();
+                    let in_panel = s.panel.is_some();
                     drop(s);
+                    // In a panel the launcher stays, to change more; what it shows catches up
+                    // a moment later. Opening Settings or ending the session closes it.
+                    let stays = in_panel
+                        && matches!(
+                            &event,
+                            LauncherEvent::System(a)
+                                if !matches!(a, Action::Open(_) | Action::Power(_))
+                        );
+                    if stays {
+                        let _ = events.send(event);
+                        let _ = wnd.hwnd().SetTimer(STATUS_TIMER, 400, None);
+                        return;
+                    }
                     if let LauncherEvent::Tray { key, click, at } = &event {
                         // So the app can show its window or menu in front.
                         tile_hook::notify::allow_foreground();
@@ -1384,10 +1455,44 @@ fn run(
 
     // A button of the bar. Those that lose unsaved work ask for a second click first.
     let click_bar = {
-        let (wnd, hide) = (wnd.clone(), hide.clone());
-        move |state: &Rc<RefCell<State>>, index: usize| {
-            let power = BAR_BUTTONS[index].2;
+        let (wnd, hide, status_refresh) = (wnd.clone(), hide.clone(), status_refresh.clone());
+        move |state: &Rc<RefCell<State>>, index: usize, right: bool| {
             let mut s = state.borrow_mut();
+            let power = match BAR_BUTTONS[index].1 {
+                BarAction::Panel(group) if !right => {
+                    // A left click flips the switch; what is shown follows at once.
+                    if let Some(action) = group.toggle(&s.status) {
+                        s.status.expect(&action);
+                        let events = s.events.clone();
+                        if s.panel.is_some() {
+                            s.rank();
+                        }
+                        drop(s);
+                        let _ = events.send(LauncherEvent::System(action));
+                        let _ = wnd.hwnd().SetTimer(STATUS_TIMER, 400, None);
+                        let _ = wnd.hwnd().InvalidateRect(None, false);
+                    }
+                    return;
+                }
+                BarAction::Panel(group) => {
+                    // The same button again goes back to the results.
+                    s.panel = if s.panel == Some(group) {
+                        None
+                    } else {
+                        Some(group)
+                    };
+                    s.query.clear();
+                    s.rank();
+                    fit_window(&wnd, &mut s);
+                    drop(s);
+                    let _ = wnd.hwnd().InvalidateRect(None, false);
+                    let _ = wnd.hwnd().UpdateWindow();
+                    // So it shows what things are now.
+                    status_refresh();
+                    return;
+                }
+                BarAction::Power(power) => power,
+            };
             if power.needs_confirmation() && s.armed != Some(power) {
                 s.armed = Some(power);
                 drop(s);
@@ -1415,6 +1520,15 @@ fn run(
             let mut edited = false;
             match p.vkey_code {
                 co::VK::ESCAPE => {
+                    if s.panel.take().is_some() {
+                        s.query.clear();
+                        s.rank();
+                        fit_window(&wnd, &mut s);
+                        drop(s);
+                        let _ = wnd.hwnd().InvalidateRect(None, false);
+                        let _ = wnd.hwnd().UpdateWindow();
+                        return Ok(());
+                    }
                     drop(s);
                     hide();
                     return Ok(());
@@ -1520,7 +1634,7 @@ fn run(
             if bar_hover != s.bar_hover {
                 s.bar_hover = bar_hover;
                 // Moving off a button that was asked to confirm takes the question back.
-                if s.armed.is_some() && bar_hover.map(|i| BAR_BUTTONS[i].2) != s.armed {
+                if s.armed.is_some() && bar_hover.and_then(power_at) != s.armed {
                     s.armed = None;
                 }
                 let _ = wnd.hwnd().InvalidateRect(None, false);
@@ -1558,7 +1672,7 @@ fn run(
             }
             if let Some(index) = s.bar_button_at(&layout, p.coords.x, p.coords.y) {
                 drop(s);
-                click_bar(&state, index);
+                click_bar(&state, index, false);
                 return Ok(());
             }
             if let Some(row) = s.row_at(&layout, p.coords.x, p.coords.y) {
@@ -1582,6 +1696,11 @@ fn run(
             if let Some(index) = s.tray_at(&layout, p.coords.x, p.coords.y) {
                 drop(s);
                 click_tray(&state, index, Click::Right);
+                return Ok(());
+            }
+            if let Some(index) = s.bar_button_at(&layout, p.coords.x, p.coords.y) {
+                drop(s);
+                click_bar(&state, index, true);
                 return Ok(());
             }
             if let Some(row) = s.row_at(&layout, p.coords.x, p.coords.y)
@@ -1688,7 +1807,9 @@ fn paint_with(s: &mut State, fonts: &Fonts, dc: &w::HDC, client: w::RECT) -> w::
     let (main, small) = (&*fonts.main, &*fonts.small);
     let left = co::DT::LEFT | co::DT::VCENTER;
     if s.query.text().is_empty() {
-        let placeholder = config.placeholder_text();
+        let placeholder = s
+            .panel
+            .map_or_else(|| config.placeholder_text(), |g| g.title().to_owned());
         text(dc, main, style.dimmed, &placeholder, inner, left)?;
     } else {
         text(dc, main, style.foreground, s.query.text(), inner, left)?;
@@ -1780,37 +1901,44 @@ fn paint_with(s: &mut State, fonts: &Fonts, dc: &w::HDC, client: w::RECT) -> w::
             ..bar
         };
         text(dc, bold, style.foreground, &time, time_area, left)?;
-        // The button the pointer is over, or one waiting to be confirmed, names itself where
-        // the date is.
-        let caption = match (
-            BAR_BUTTONS.iter().find(|b| s.armed == Some(b.2)),
-            s.bar_hover,
-        ) {
-            (Some((label, ..)), _) => format!("Click again to confirm: {label}"),
-            (None, Some(i)) => BAR_BUTTONS[i].0.to_owned(),
-            (None, None) => date,
-        };
         let buttons_left = layout.buttons.first().map_or(bar.right, |b| b.left);
         let date_area = w::RECT {
             left: bar.left + inset + time_width + pad,
             right: buttons_left - pad,
             ..bar
         };
-        text(dc, &fonts.date, style.dimmed, &caption, date_area, left)?;
+        text(dc, &fonts.date, style.dimmed, &date, date_area, left)?;
         let idle = mix(style.background, style.foreground, 20);
         let hovered = mix(style.background, style.foreground, 40);
-        for (i, ((_, glyph, power), rect)) in BAR_BUTTONS.iter().zip(&layout.buttons).enumerate() {
-            let armed = s.armed == Some(*power);
-            let (fill, colour) = if armed {
+        for (i, ((glyph, action), rect)) in BAR_BUTTONS.iter().zip(&layout.buttons).enumerate() {
+            // A switch is lit while on and dim while off or missing; a power button is lit
+            // while it waits to be confirmed.
+            let active = match action {
+                BarAction::Panel(group) => group.is_on(&s.status) == Some(true),
+                BarAction::Power(power) => s.armed == Some(*power),
+            };
+            let off = matches!(action, BarAction::Panel(_)) && !active;
+            let (fill, colour) = if active {
                 (style.selected, style.selected_foreground)
             } else if s.bar_hover == Some(i) {
-                (hovered, style.foreground)
+                (hovered, if off { style.dimmed } else { style.foreground })
             } else {
-                (idle, style.foreground)
+                (idle, if off { style.dimmed } else { style.foreground })
             };
             fill_round(dc, *rect, s.scale(10), fill)?;
             let centred = co::DT::CENTER | co::DT::VCENTER;
             text(dc, &fonts.icons, colour, &glyph.to_string(), *rect, centred)?;
+            // A line under the button whose panel is open.
+            if matches!(action, BarAction::Panel(group) if s.panel == Some(*group)) {
+                let inset = (rect.right - rect.left) / 4;
+                let line = w::RECT {
+                    left: rect.left + inset,
+                    top: rect.bottom - s.scale(4),
+                    right: rect.right - inset,
+                    bottom: rect.bottom - s.scale(2),
+                };
+                fill_round(dc, line, s.scale(2), colour)?;
+            }
         }
     }
 

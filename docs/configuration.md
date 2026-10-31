@@ -144,11 +144,10 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 | `dimmed` | `theme.dimmed` | The app id line and the placeholder. |
 | `selected` | `theme.accent` | The selected row and the caret. |
 | `selected_foreground` | `theme.accent_foreground` | Text on the selected row. |
-| `placeholder` | `""` | Shown in the empty search box; `{prefix}` becomes `command_prefix`. Empty shows `Search apps or equations, ! for commands` with the real prefix, leaving out the calculator or commands when they are off. |
+| `placeholder` | `""` | Shown in the empty search box. Empty shows `Search apps, equations and commands`, leaving out the calculator or commands when they are off. |
 | `calculator` | `true` | Show the value of a search that reads as a calculation first; Enter copies it. See [calculator](launcher.md#calculator). |
-| `command_prefix` | `"!"` | Typing this first runs a command line or a Tile dispatcher instead of searching apps. `""` switches it off. See [commands](launcher.md#commands). |
-| `system_items` | `true` | List the system items (volume, network, Wi-Fi, Bluetooth, battery, clock, power) and tray icons that match what is typed, after the apps. See [system items](launcher.md#system-items-and-tray-icons). |
-| `system_prefix` | `"@"` | Typing this first lists every system item and tray icon, narrowed by what follows, even with `system_items` off. `""` switches it off. |
+| `commands` | `true` | Offer Tile's dispatchers and running the text as a command line among the results. See [commands](launcher.md#commands). |
+| `system_items` | `true` | List the system items (volume and the audio devices, microphone, network, Wi-Fi, Bluetooth, battery, clock, power) and tray icons that match what is typed, after the apps. See [system items](launcher.md#system-items-and-tray-icons). |
 | `bar` | `true` | Show the bar at the top of the launcher: the time (bold, with seconds) and date, and icon buttons for switch user, log out, lock, restart and shut down. See [the bar](launcher.md#the-bar). |
 | `fix_popups` | `true` | Move the popup of a tray icon's app next to the pointer when the app opens it in a monitor's corner (as G HUB does, for want of a taskbar to place it by). See [tray icons](launcher.md#tray-icons). |
 
@@ -294,11 +293,10 @@ launcher:
   opacity: 1.0                  # 0.1 to 1.0
   # background, border, foreground, dimmed, selected and selected_foreground
   # are unset and follow theme; set any of them to override it here
-  placeholder: ""                # "" for "Search apps or equations, ! for commands"; {prefix} is the prefix
+  placeholder: ""                # "" for "Search apps, equations and commands"
   calculator: true              # `12 * 3` shows = 36; Enter copies it
-  command_prefix: "!"           # run a command line or dispatcher; "" for off
-  system_items: true            # offer volume, network, Wi-Fi, Bluetooth, battery, power and tray icons in results
-  system_prefix: "@"            # lists them all; "" for off
+  commands: true                # offer Tile dispatchers and running the text as a command line
+  system_items: true            # offer audio, microphone, network, Wi-Fi, Bluetooth, battery, power and tray icons in results
   bar: true                     # top bar: clock, date and power buttons
   fix_popups: true              # move a tray app's popup from a monitor's corner to the pointer
 

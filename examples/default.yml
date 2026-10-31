@@ -85,11 +85,10 @@ launcher:
   opacity: 1.0 # 0.1 to 1.0
   # background, border, foreground, dimmed, selected and selected_foreground
   # are unset and follow theme; set any of them to override it here
-  placeholder: "" # "" for "Search apps or equations, ! for commands"; {prefix} is the prefix
+  placeholder: "" # "" for "Search apps, equations and commands"
   calculator: true # `12 * 3` shows = 36; Enter copies it
-  command_prefix: "!" # run a command line or dispatcher; "" for off
-  system_items: true # offer volume, network, Wi-Fi, Bluetooth, battery, power and tray icons in results
-  system_prefix: "@" # lists them all; "" for off
+  commands: true # offer Tile dispatchers and running the text as a command line
+  system_items: true # offer audio, microphone, network, Wi-Fi, Bluetooth, battery, power and tray icons in results
   bar: true # top bar: clock, date and power buttons
   fix_popups: true # move a tray app's popup from a monitor's corner to the pointer
 

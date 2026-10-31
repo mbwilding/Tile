@@ -617,18 +617,20 @@ impl Daemon {
     fn run_system(&mut self, action: Action) {
         if action == Action::Power(Power::Lock) {
             self.run_command(Command::Lock);
-        } else if let Some(line) = tile_platform::system_command_line(action) {
+        } else if let Some(line) = tile_platform::system_command_line(&action) {
             launch::exec(&line);
         } else {
+            let what = format!("{action:?}");
+            let failed = what.clone();
             let spawned = std::thread::Builder::new()
                 .name("system action".into())
                 .spawn(move || {
-                    if !tile_platform::apply_system_action(action) {
-                        tracing::warn!("couldn't do {action:?}");
+                    if !tile_platform::apply_system_action(&action) {
+                        tracing::warn!("couldn't do {failed}");
                     }
                 });
             if let Err(e) = spawned {
-                tracing::warn!("couldn't do {action:?}: {e}");
+                tracing::warn!("couldn't do {what}: {e}");
             }
         }
     }

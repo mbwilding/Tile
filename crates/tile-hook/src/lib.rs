@@ -8,6 +8,7 @@ pub mod backdrop;
 mod icon;
 pub mod notify;
 pub mod system;
+pub mod wifi;
 
 pub use icon::{Icon, monitor_dpi, render_hicon, shell_icon};
 

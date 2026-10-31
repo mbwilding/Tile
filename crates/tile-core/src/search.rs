@@ -247,7 +247,7 @@ pub fn rank(query: &str, apps: &[App], usage: &Usage, options: &RankOptions) -> 
     out
 }
 
-/// A row in the launcher's command mode (text after `launcher.command_prefix`).
+/// A command row of the launcher's results.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CommandEntry {
     /// Run a Tile dispatcher.
