@@ -72,9 +72,7 @@ impl Daemon {
             .map(|(bind, command)| (bind.clone(), command.works_while_paused()))
             .collect();
         self.commands = usable.iter().map(|(_, c)| c.clone()).collect();
-        for error in self.hotkeys.set_binds(&binds) {
-            tracing::error!("{error}");
-        }
+        self.hotkeys.set_binds(&binds);
         self.hotkeys
             .set_disable_start_menu(self.loaded.config.general.disable_start_menu);
     }

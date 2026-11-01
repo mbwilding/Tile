@@ -6,15 +6,20 @@ use crate::{Action, Chord, Config, Key, LayerId, MAIN, Mods};
 /// steady clock.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeyEvent {
+    /// The physical key.
     pub key: Key,
+    /// Pressed (or auto-repeating) rather than released.
     pub down: bool,
+    /// When it happened, in milliseconds.
     pub time: u64,
 }
 
 /// A key to send.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Out {
+    /// Press the key.
     Press(Key),
+    /// Release the key.
     Release(Key),
     /// Tap a key that does nothing, so releasing Alt or Win alone doesn't open a menu.
     Guard,
@@ -24,7 +29,9 @@ pub enum Out {
 /// `out`), or swallow it and send `out` instead.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Verdict {
+    /// Let the physical event through untouched.
     pub pass: bool,
+    /// Keys to send in its place.
     pub out: Vec<Out>,
 }
 
@@ -56,7 +63,7 @@ struct Pending {
     deadline: u64,
 }
 
-/// keyd's remapping, one physical event at a time.
+/// The remapper, one physical event at a time.
 ///
 /// Layers stack: the most recently activated one is searched first, then the others, then
 /// `main`. A key no layer binds is sent as itself, with the modifiers of every active layer.
@@ -79,6 +86,7 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// An engine with no keys held, running `config`.
     pub fn new(config: Config) -> Self {
         Self {
             config,
@@ -93,10 +101,7 @@ impl Engine {
         }
     }
 
-    pub fn config(&self) -> &Config {
-        &self.config
-    }
-
+    /// Handles one physical key event.
     pub fn event(&mut self, event: KeyEvent) -> Verdict {
         let mut out = Vec::new();
         let pass = self.step(event, true, &mut out);
@@ -357,5 +362,128 @@ impl Engine {
             }
         }
         self.mods = target;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse::sections;
+
+    fn engine(layers: &str) -> Engine {
+        Engine::new(sections(layers).unwrap())
+    }
+
+    fn record(log: &mut Vec<String>, out: Vec<Out>) {
+        log.extend(out.into_iter().map(|o| match o {
+            Out::Press(k) => format!("+{k}"),
+            Out::Release(k) => format!("-{k}"),
+            Out::Guard => "guard".to_owned(),
+        }));
+    }
+
+    /// Feeds `events` (`+a@0` presses `a` at 0ms, `-a@50` releases it, `tick@200` advances
+    /// the clock) and lists what came out: `+k`/`-k` sent, `=+k`/`=-k` let through.
+    fn run(engine: &mut Engine, events: &str) -> String {
+        let mut log = Vec::new();
+        for event in events.split_whitespace() {
+            let (what, time) = event.split_once('@').unwrap();
+            let time = time.parse().unwrap();
+            if what == "tick" {
+                record(&mut log, engine.tick(time));
+                continue;
+            }
+            let (down, name) = what.split_at(1);
+            let key = Key::from_name(name).unwrap();
+            let verdict = engine.event(KeyEvent {
+                key,
+                down: down == "+",
+                time,
+            });
+            if verdict.pass {
+                assert!(verdict.out.is_empty());
+                log.push(format!("={down}{key}"));
+            }
+            record(&mut log, verdict.out);
+        }
+        log.join(" ")
+    }
+
+    #[test]
+    fn unbound_keys_pass_through() {
+        let e = &mut engine("[main]\na = b");
+        assert_eq!(run(e, "+x@0 -x@10"), "=+x =-x");
+    }
+
+    #[test]
+    fn a_bound_key_sends_its_chord() {
+        let e = &mut engine("[main]\ncapslock = esc\nx = C-left");
+        assert_eq!(run(e, "+capslock@0 -capslock@10"), "+esc -esc");
+        assert_eq!(
+            run(e, "+x@20 -x@30"),
+            "+leftcontrol +left -left -leftcontrol"
+        );
+    }
+
+    #[test]
+    fn noop_swallows_the_key() {
+        let e = &mut engine("[main]\nx = noop");
+        assert_eq!(run(e, "+x@0 -x@10"), "");
+    }
+
+    #[test]
+    fn overload_taps_alone_and_holds_with_another_key() {
+        let e = &mut engine("[main]\ncapslock = overload(nav, esc)\n[nav]\nh = left");
+        assert_eq!(run(e, "+capslock@0 -capslock@10"), "+esc -esc");
+        assert_eq!(
+            run(e, "+capslock@20 +h@30 -h@40 -capslock@50"),
+            "+left -left"
+        );
+    }
+
+    #[test]
+    fn a_layer_adds_its_modifiers_to_keys_it_does_not_bind() {
+        let e = &mut engine("[main]\nspace = layer(nav)\n[nav:C]\nh = left");
+        assert_eq!(
+            run(e, "+space@0 +x@10 -x@20 +h@30 -h@40 -space@50"),
+            "+leftcontrol +x -x -leftcontrol +left -left +leftcontrol -leftcontrol"
+        );
+    }
+
+    #[test]
+    fn overloadt_decides_by_time_and_replays_what_waited() {
+        let e = &mut engine("[main]\na = overloadt(control, a, 200)");
+        assert_eq!(run(e, "+a@0 +s@10 -a@50 -s@80"), "+a -a +s -s");
+        assert_eq!(run(e, "+a@100 tick@300"), "+leftcontrol");
+        assert_eq!(run(e, "+c@310 -c@320 -a@330"), "+c -c -leftcontrol");
+        assert_eq!(e.deadline(), None);
+    }
+
+    #[test]
+    fn composite_layers_bind_while_both_are_active() {
+        let e = &mut engine(
+            "[main]\ncapslock = layer(nav)\nleftshift = layer(shift)\n[nav]\nh = left\n[nav+shift]\nh = home",
+        );
+        assert_eq!(
+            run(e, "+capslock@0 +leftshift@10 +h@20 -h@30"),
+            "+leftshift -leftshift +home -home +leftshift"
+        );
+    }
+
+    #[test]
+    fn the_modifier_guard_taps_before_a_lone_alt_is_released() {
+        let e = &mut engine("[main]\ncapslock = layer(alt)");
+        assert_eq!(
+            run(e, "+capslock@0 -capslock@10"),
+            "+leftalt guard -leftalt"
+        );
+    }
+
+    #[test]
+    fn reset_releases_what_is_held() {
+        let e = &mut engine("[main]\nx = y");
+        run(e, "+x@0");
+        assert_eq!(e.reset(), [Out::Release(Key::from_name("y").unwrap())]);
+        assert_eq!(run(e, "-x@10"), "=-x");
     }
 }

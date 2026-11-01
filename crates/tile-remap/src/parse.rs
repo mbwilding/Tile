@@ -1,8 +1,8 @@
-//! The `remap` section: keyd's layers and actions, compiled for the remapping engine.
+//! Remap layer names and actions, compiled into a [`Config`].
 
-use tile_remap::{Action, Chord, Config, Key, Layer, LayerId, Mods, shifted};
+use std::collections::BTreeMap;
 
-use crate::schema::Remap;
+use crate::{Action, Chord, Config, Key, Layer, LayerId, Mods, keys::shifted};
 
 /// `C-A` (from `name:C-A`) as modifiers.
 fn parse_mods(text: &str) -> Result<Mods, String> {
@@ -145,84 +145,105 @@ fn parse_action(config: &Config, text: &str) -> Result<Action, String> {
     }
 }
 
-/// Compiles `remap` for the engine, or lists everything wrong with it.
-pub fn compile(remap: &Remap) -> Result<Config, Vec<String>> {
-    let mut config = Config {
-        modifier_guard: remap.modifier_guard,
-        ..Config::default()
-    };
-    let mut errors = Vec::new();
+impl Config {
+    /// Compiles remap layers: each entry is named `main`, `nav`, `nav:C` (with modifiers) or
+    /// `nav+shift` (a composite) and maps key names to actions. Lists everything wrong on failure.
+    pub fn compile(
+        layers: &BTreeMap<String, BTreeMap<String, String>>,
+        modifier_guard: bool,
+    ) -> Result<Self, Vec<String>> {
+        let mut config = Self {
+            modifier_guard,
+            ..Self::default()
+        };
+        let mut errors = Vec::new();
 
-    // Declare every layer first, so actions can refer to any of them, and plain layers
-    // before composites, which are made of them.
-    let mut declared = Vec::new();
-    for composite in [false, true] {
-        for name in remap.layers.keys() {
-            if name.contains('+') != composite {
-                continue;
-            }
-            let id = if composite {
-                declare_composite(&mut config, name)
-            } else {
-                declare_layer(&mut config, name)
-            };
-            match id {
-                Ok(id) => declared.push((name, id)),
-                Err(e) => errors.push(format!("layer `{name}`: {e}")),
-            }
-        }
-    }
-
-    for (name, id) in declared {
-        for (key, action) in &remap.layers[name] {
-            let bound = Key::from_name(key.trim())
-                .ok_or_else(|| format!("unknown key `{key}`"))
-                .and_then(|k| Ok((k, parse_action(&config, action)?)));
-            match bound {
-                Ok((k, action)) => {
-                    config.layers[id].binds.insert(k, action);
+        // Declare every layer first, so actions can refer to any of them, and plain layers
+        // before composites, which are made of them.
+        let mut declared = Vec::new();
+        for composite in [false, true] {
+            for name in layers.keys() {
+                if name.contains('+') != composite {
+                    continue;
                 }
-                Err(e) => errors.push(format!("layer `{name}`: `{key} = \"{action}\"`: {e}")),
+                let id = if composite {
+                    declare_composite(&mut config, name)
+                } else {
+                    declare_layer(&mut config, name)
+                };
+                match id {
+                    Ok(id) => declared.push((name, id)),
+                    Err(e) => errors.push(format!("layer `{name}`: {e}")),
+                }
             }
         }
+
+        for (name, id) in declared {
+            for (key, action) in &layers[name] {
+                let bound = Key::from_name(key.trim())
+                    .ok_or_else(|| format!("unknown key `{key}`"))
+                    .and_then(|k| Ok((k, parse_action(&config, action)?)));
+                match bound {
+                    Ok((k, action)) => {
+                        config.layers[id].binds.insert(k, action);
+                    }
+                    Err(e) => errors.push(format!("layer `{name}`: `{key} = \"{action}\"`: {e}")),
+                }
+            }
+        }
+        if errors.is_empty() {
+            Ok(config)
+        } else {
+            Err(errors)
+        }
     }
-    if errors.is_empty() {
-        Ok(config)
-    } else {
-        Err(errors)
+}
+
+/// Compiles layers written as `[name]` headers, each followed by `key = action` lines.
+#[cfg(test)]
+pub(crate) fn sections(text: &str) -> Result<Config, Vec<String>> {
+    let mut layers: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    let mut section = String::new();
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            section = name.to_owned();
+            layers.entry(section.clone()).or_default();
+        } else if let Some((key, action)) = line.split_once(" = ") {
+            layers
+                .entry(section.clone())
+                .or_default()
+                .insert(key.trim().to_owned(), action.trim().to_owned());
+        }
     }
+    Config::compile(&layers, true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::MAIN;
 
     fn key(name: &str) -> Key {
         Key::from_name(name).unwrap()
     }
 
-    fn compile_yaml(text: &str) -> Result<Config, Vec<String>> {
-        compile(&serde_yaml_ng::from_str(text).unwrap())
-    }
-
     #[test]
     fn layers_and_actions() {
-        let config = compile_yaml(
-            r#"
-layers:
-  main:
-    capslock: overload(nav, esc)
-    a: overloadt(control, a, 200)
-    "=": C-S-x
-    x: "!"
-  "nav:C-A":
-    h: left
-  nav+shift:
-    h: noop
-"#,
+        let config = sections(
+            "
+[main]
+capslock = overload(nav, esc)
+a = overloadt(control, a, 200)
+= = C-S-x
+x = !
+[nav:C-A]
+h = left
+[nav+shift]
+h = noop
+",
         )
         .unwrap();
-        let main = &config.layers[tile_remap::MAIN].binds;
+        let main = &config.layers[MAIN].binds;
         let nav = config.layer("nav").unwrap();
         let control = config.layer("control").unwrap();
         assert_eq!(
@@ -265,21 +286,19 @@ layers:
 
     #[test]
     fn reports_every_problem() {
-        let errors = compile_yaml(
-            r#"
-modifier_guard: false
-layers:
-  main:
-    nope: a
-    b: nope
-    c: layer(missing)
-    d: oneshot(shift)
-    e: f
-  "x:Q":
-    g: h
-  y+missing:
-    g: h
-"#,
+        let errors = sections(
+            "
+[main]
+nope = a
+b = nope
+c = layer(missing)
+d = oneshot(shift)
+e = f
+[x:Q]
+g = h
+[y+missing]
+g = h
+",
         )
         .unwrap_err();
         assert_eq!(errors.len(), 6, "{errors:#?}");
@@ -287,12 +306,29 @@ layers:
     }
 
     #[test]
-    fn modifier_guard() {
-        assert!(compile_yaml("{}").unwrap().modifier_guard);
+    fn layer_modifiers_and_arity() {
+        assert!(parse_mods("C-X").is_err());
+        assert_eq!(parse_mods("M-G"), Ok(Mods::META | Mods::ALTGR));
+        let errors =
+            sections("[main]\na = overload(shift)\nb = overloadt(shift, b, soon)").unwrap_err();
         assert!(
-            !compile_yaml("modifier_guard: false")
-                .unwrap()
-                .modifier_guard
+            errors
+                .iter()
+                .any(|e| e.contains("takes 2 argument(s), got 1"))
         );
+        assert!(errors.iter().any(|e| e.contains("invalid timeout `soon`")));
+    }
+
+    #[test]
+    fn composites_cannot_be_activated() {
+        let errors = sections("[nav]\n[nav+shift]\n[main]\na = layer(nav+shift)").unwrap_err();
+        assert!(errors[0].contains("can't be activated"), "{errors:?}");
+    }
+
+    #[test]
+    fn modifier_guard() {
+        let layers = BTreeMap::new();
+        assert!(Config::compile(&layers, true).unwrap().modifier_guard);
+        assert!(!Config::compile(&layers, false).unwrap().modifier_guard);
     }
 }

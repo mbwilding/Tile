@@ -445,14 +445,14 @@ impl Default for Scrolling {
     }
 }
 
-/// Key remapping, keyd style. Each `layers` entry is a layer named as a keyd section header:
-/// `main`, `name`, `name:C` (a layer whose unbound keys get Control) or `a+b` (while both
-/// are active). It maps keys to actions, e.g. `capslock: overload(nav, esc)`.
+/// Key remapping. Each `layers` entry is a layer named `main`, `name`, `name:C` (a layer whose
+/// unbound keys get Control) or `a+b` (while both are active). It maps keys to actions, e.g.
+/// `capslock: overload(nav, esc)`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Remap {
     /// Tap a dummy key before a layer's lone Alt or Win is released, so it doesn't open a menu
-    /// or Start (keyd's modifier guard).
+    /// or Start (the modifier guard).
     pub modifier_guard: bool,
     pub layers: BTreeMap<String, BTreeMap<String, String>>,
 }

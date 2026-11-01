@@ -2,7 +2,6 @@
 //! reload.
 
 mod keys;
-mod remap;
 mod rules;
 mod schema;
 mod watch;
@@ -127,7 +126,8 @@ impl Loaded {
             binds.push((bind, command));
         }
         let rules = Rules::compile(&config.rules)?;
-        let remap = remap::compile(&config.remap).map_err(ConfigError::Remap)?;
+        let remap = tile_remap::Config::compile(&config.remap.layers, config.remap.modifier_guard)
+            .map_err(ConfigError::Remap)?;
         let launcher_hide = regex::RegexSetBuilder::new(&config.launcher.hide)
             .case_insensitive(true)
             .build()
@@ -400,8 +400,9 @@ mod tests {
 
     #[test]
     fn remap_layers_replace_the_defaults() {
+        assert!(Loaded::defaults().remap.is_empty());
         let loaded = Loaded::parse("remap:\n  layers:\n    main:\n      capslock: esc\n").unwrap();
-        assert!(loaded.remap.layer("capslock").is_none());
+        assert!(!loaded.remap.is_empty());
         let err = Loaded::parse("remap:\n  layers:\n    main:\n      capslock: layer(nav)\n")
             .unwrap_err();
         assert!(err.to_string().contains("unknown layer `nav`"), "{err}");

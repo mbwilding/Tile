@@ -23,7 +23,7 @@ Aliases in `.cargo/config.toml`:
 | Crate | Purpose |
 | --- | --- |
 | `tile-core` | Platform-independent window manager model: state, layouts, dispatchers, geometry and easing (unit tested) |
-| `tile-remap` | The remapping engine: keyd's layers and overloads as a pure state machine (tested) |
+| `tile-remap` | The key remapper: layers and overloads as a pure state machine, its config parser and the key names shared with keybinds (unit tested) |
 | `tile-config` | YAML schema, keybind parsing, window rules, remap layers, the tray switches and file watching |
 | `tile-ipc` | Named-pipe JSON protocol |
 | `tile-launcher` | The app launcher: the search, calculator and system items (tested), and its window |
