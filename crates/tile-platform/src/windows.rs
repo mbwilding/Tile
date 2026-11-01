@@ -265,11 +265,11 @@ pub fn run_as_admin(target: &str) {
 
 /// Closes the foreground window like Alt+F4, unless it belongs to the shell.
 pub fn close_foreground() {
-    if let Some(raw) = foreground()
-        && !is_shell_window(raw)
-        && !tile_sys::post_close(raw)
+    if let Some(id) = foreground()
+        && !is_shell_window(id.0)
+        && !tile_sys::post_close(id.0)
     {
-        tracing::debug!("couldn't ask {raw:#x} to close");
+        tracing::debug!("couldn't ask {:#x} to close", id.0);
     }
 }
 
@@ -323,12 +323,11 @@ impl Windows {
     }
 
     /// Checks a single window reported by an event.
-    pub fn discover(&mut self, raw: isize) -> Option<Discovered> {
-        let id = WindowId(raw);
+    pub fn discover(&mut self, id: WindowId) -> Option<Discovered> {
         if self.handles.contains_key(&id) {
             return None;
         }
-        let hwnd = tile_sys::hwnd(raw)?;
+        let hwnd = tile_sys::hwnd(id.0)?;
         let found = examine(&hwnd, self.own_pid)?;
         self.handles.insert(id, hwnd);
         Some(found)
@@ -560,9 +559,9 @@ pub fn is_shell_window(raw: isize) -> bool {
     tile_sys::class_name(raw).is_some_and(|class| SHELL_CLASSES.contains(&class.as_str()))
 }
 
-/// The current foreground window's raw handle.
-pub fn foreground() -> Option<isize> {
-    w::HWND::GetForegroundWindow().map(|h| h.ptr() as isize)
+/// The current foreground window.
+pub fn foreground() -> Option<WindowId> {
+    w::HWND::GetForegroundWindow().map(|h| id_of(&h))
 }
 
 pub fn cursor_pos() -> (i32, i32) {

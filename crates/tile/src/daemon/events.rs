@@ -11,17 +11,17 @@ use super::{DEFOCUS_GRACE, Daemon, FORCE_GRACE, consume, on_other_desktop};
 use crate::{launch, paths, remap};
 
 impl Daemon {
-    pub(super) fn on_foreground(&mut self, raw: isize) {
-        let id = WindowId(raw);
+    pub(super) fn on_foreground(&mut self, id: WindowId) {
         tracing::info!(
-            "foreground {raw:#x} {:?} managed={}",
+            "foreground {:#x} {:?} managed={}",
+            id.0,
             self.windows.info(id).map(|i| i.exe),
             self.desktops.is_managed(id)
         );
         if !self.desktops.is_managed(id) {
-            self.try_manage(raw);
+            self.try_manage(id);
             if !self.desktops.is_managed(id) {
-                if !is_shell_window(raw) {
+                if !is_shell_window(id.0) {
                     let effects = self.desktops.current().window_focused(id);
                     self.apply(effects);
                 }
@@ -41,7 +41,7 @@ impl Daemon {
             return;
         }
         // Focus can arrive before the desktop switch notification.
-        if self.desktops.owner(id) != Some(self.desktops.current_id())
+        if !self.desktops.is_current(id)
             && let Some(live) = vd::current_desktop()
         {
             self.switch_desktop(live);
@@ -55,65 +55,58 @@ impl Daemon {
             return;
         }
         match event {
-            WinEvent::Show(raw) | WinEvent::Uncloaked(raw) => {
-                let id = WindowId(raw);
+            WinEvent::Show(id) | WinEvent::Uncloaked(id) => {
                 if !self.desktops.is_managed(id) {
-                    self.try_manage(raw);
+                    self.try_manage(id);
                 } else if !consume(&mut self.pending_show, id)
                     && self.desktops.is_hidden(id)
-                    && self.desktops.owner(id) == Some(self.desktops.current_id())
+                    && self.desktops.is_current(id)
                 {
                     // The app re-showed a window we hid: follow it to its workspace.
                     let effects = self.desktops.with_owner(id, |s| s.window_focused(id));
                     self.apply(effects);
                 }
             }
-            WinEvent::Hide(raw) | WinEvent::Cloaked(raw) => {
-                let id = WindowId(raw);
+            WinEvent::Hide(id) | WinEvent::Cloaked(id) => {
                 if self.desktops.is_managed(id)
                     && !consume(&mut self.pending_hide, id)
                     && !self.windows.is_visible(id)
                 {
                     // The shell cloaks windows on other desktops: keep managing those.
-                    if on_other_desktop(raw) {
+                    if on_other_desktop(id) {
                         self.check_desktop(id);
                     } else {
                         self.unmanage(id);
                     }
                 }
             }
-            WinEvent::Destroy(raw) => {
-                let id = WindowId(raw);
+            WinEvent::Destroy(id) => {
                 self.ignored.remove(&id);
                 if self.desktops.is_managed(id) {
                     self.unmanage(id);
                 }
             }
-            WinEvent::Foreground(raw) => self.on_foreground(raw),
-            WinEvent::MinimizeStart(raw) => {
-                let id = WindowId(raw);
+            WinEvent::Foreground(id) => self.on_foreground(id),
+            WinEvent::MinimizeStart(id) => {
                 let effects = self.desktops.with_owner(id, |s| s.window_minimized(id));
                 self.apply(effects);
             }
-            WinEvent::MinimizeEnd(raw) => {
-                let id = WindowId(raw);
+            WinEvent::MinimizeEnd(id) => {
                 if self.desktops.is_managed(id) {
                     let effects = self.desktops.with_owner(id, |s| s.window_restored(id));
                     self.apply(effects);
                 } else {
-                    self.try_manage(raw);
+                    self.try_manage(id);
                 }
             }
-            WinEvent::MoveSizeStart(raw) => {
-                let id = WindowId(raw);
+            WinEvent::MoveSizeStart(id) => {
                 if self.desktops.is_managed(id) {
                     self.moving.insert(id);
                     self.resizing.remove(&id);
                     self.tweens.remove(&id);
                 }
             }
-            WinEvent::MoveSizeEnd(raw) => {
-                let id = WindowId(raw);
+            WinEvent::MoveSizeEnd(id) => {
                 if self.moving.remove(&id) {
                     self.placed.remove(&id);
                     let resized = self.resizing.remove(&id);
@@ -130,8 +123,7 @@ impl Daemon {
                     }
                 }
             }
-            WinEvent::NameChange(raw) => {
-                let id = WindowId(raw);
+            WinEvent::NameChange(id) => {
                 if self.desktops.is_managed(id) {
                     if self.focused() == Some(id)
                         && let Some(info) = self.windows.info(id)
@@ -139,13 +131,12 @@ impl Daemon {
                         self.desktops.current().set_info(id, info);
                         self.publish();
                     }
-                } else if foreground() == Some(raw) {
+                } else if foreground() == Some(id) {
                     // Some apps only set a title after showing their window.
-                    self.try_manage(raw);
+                    self.try_manage(id);
                 }
             }
-            WinEvent::LocationChange(raw) => {
-                let id = WindowId(raw);
+            WinEvent::LocationChange(id) => {
                 if self.moving.contains(&id) {
                     self.follow_resize(id);
                 } else {

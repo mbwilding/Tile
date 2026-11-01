@@ -72,8 +72,8 @@ impl Daemon {
         // Keep our notion of focus (and the highlight) truthful when Windows said no.
         if focus_refused && !self.resyncing_focus {
             self.resyncing_focus = true;
-            if let Some(raw) = foreground() {
-                self.on_foreground(raw);
+            if let Some(id) = foreground() {
+                self.on_foreground(id);
             }
             self.resyncing_focus = false;
         }
@@ -122,7 +122,7 @@ impl Daemon {
         if animations.enabled
             && may_animate
             && !self.desktops.is_hidden(id)
-            && self.desktops.owner(id) == Some(self.desktops.current_id())
+            && self.desktops.is_current(id)
             && let Some(previous) = previous
         {
             let now = std::time::Instant::now();
@@ -132,7 +132,7 @@ impl Daemon {
                 .remove(&id)
                 .map(|t| (t.animation.at(now).0, t.mover));
             if let Some((from, mover)) =
-                existing.or_else(|| Mover::spawn(id.0).map(|m| (previous, m)))
+                existing.or_else(|| Mover::spawn(id).map(|m| (previous, m)))
                 && let Some(insets) = self.windows.insets_of(id)
             {
                 let config = &self.loaded.config.animations;
@@ -194,7 +194,7 @@ impl Daemon {
             self.unmanage(id);
         }
         for id in self.desktops.managed() {
-            if self.desktops.owner(id) == Some(self.desktops.current_id()) {
+            if self.desktops.is_current(id) {
                 self.enforce_size(id);
             }
         }
@@ -231,9 +231,8 @@ impl Daemon {
             return;
         }
         let focused = self.desktops.current_ref().focused();
-        let current = self.desktops.current_id();
         for id in self.desktops.managed() {
-            if self.desktops.owner(id) != Some(current) || self.desktops.is_hidden(id) {
+            if !self.desktops.is_current(id) || self.desktops.is_hidden(id) {
                 continue;
             }
             let want = Some(if Some(id) == focused {

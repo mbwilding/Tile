@@ -1,31 +1,44 @@
 use std::{io, ops::Range};
 
+use tile_core::WindowId;
 use tokio::sync::mpsc;
 use wineventhook::{
     AccessibleObjectId, EventFilter, ObjectWindowEvent, SystemWindowEvent, WindowEvent,
     WindowEventHook, WindowEventType, raw_event,
 };
 
-/// A window event relevant to tiling, carrying the window's raw handle value.
+/// A window event relevant to tiling, about the top-level window it carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WinEvent {
-    Show(isize),
-    Hide(isize),
-    Destroy(isize),
-    Foreground(isize),
-    MinimizeStart(isize),
-    MinimizeEnd(isize),
-    MoveSizeStart(isize),
-    MoveSizeEnd(isize),
-    Cloaked(isize),
-    Uncloaked(isize),
-    LocationChange(isize),
-    NameChange(isize),
+    /// The window was shown.
+    Show(WindowId),
+    /// The window was hidden.
+    Hide(WindowId),
+    /// The window was destroyed.
+    Destroy(WindowId),
+    /// The window came to the foreground.
+    Foreground(WindowId),
+    /// The window is being minimised.
+    MinimizeStart(WindowId),
+    /// The window was restored from minimised.
+    MinimizeEnd(WindowId),
+    /// The user started moving or resizing the window with the mouse.
+    MoveSizeStart(WindowId),
+    /// The user finished moving or resizing the window.
+    MoveSizeEnd(WindowId),
+    /// The window was cloaked (by the shell, for another desktop, or by its app).
+    Cloaked(WindowId),
+    /// The window was uncloaked.
+    Uncloaked(WindowId),
+    /// The window moved or changed size.
+    LocationChange(WindowId),
+    /// The window's title changed.
+    NameChange(WindowId),
 }
 
 impl WinEvent {
     fn from_event(event: &WindowEvent) -> Option<Self> {
-        let raw = event.window_handle()?.as_ptr() as isize;
+        let raw = WindowId(event.window_handle()?.as_ptr() as isize);
         Some(match event.event_type() {
             WindowEventType::System(e) => match e {
                 SystemWindowEvent::Foreground => Self::Foreground(raw),
@@ -90,6 +103,7 @@ impl WinEventHooks {
         Ok((Self { hooks }, rx))
     }
 
+    /// Removes the hooks, after which no more events arrive.
     pub async fn unhook(self) {
         for hook in self.hooks {
             if let Err(e) = hook.unhook().await {

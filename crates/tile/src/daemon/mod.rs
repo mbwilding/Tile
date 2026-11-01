@@ -225,9 +225,19 @@ fn spawn_watchdog() {
     }
 }
 
+/// No windows or monitors yet, on the native desktop being shown, with `loaded`'s layouts.
+fn fresh_desktops(loaded: &Loaded) -> Desktops {
+    let config = &loaded.config;
+    Desktops::new(
+        vd::current_desktop().unwrap_or_default(),
+        config.layout_settings(),
+        config.general.layout,
+    )
+}
+
 /// Whether a window currently lives on a native desktop other than the visible one.
-fn on_other_desktop(raw: isize) -> bool {
-    matches!((vd::desktop_of(raw), vd::current_desktop()), (Some(d), Some(c)) if d != c)
+fn on_other_desktop(id: WindowId) -> bool {
+    matches!((vd::desktop_of(id), vd::current_desktop()), (Some(d), Some(c)) if d != c)
 }
 
 /// Runs the window manager. `config_error` says why the config file didn't load, if it didn't
@@ -282,12 +292,9 @@ pub async fn run(
     .ok();
     tokio::spawn(server.serve(ipc_tx));
 
-    let settings = loaded.config.layout_settings();
-    let layout = loaded.config.general.layout;
-    let current = vd::current_desktop().unwrap_or_default();
     let saved = settings::load();
     let mut daemon = Daemon {
-        desktops: Desktops::new(current, settings, layout),
+        desktops: fresh_desktops(&loaded),
         windows: Windows::new(),
         loaded,
         config_path,
@@ -483,8 +490,8 @@ impl Daemon {
     fn startup(&mut self) {
         self.refresh_monitors();
         self.discover_existing();
-        if let Some(raw) = foreground() {
-            self.on_foreground(raw);
+        if let Some(id) = foreground() {
+            self.on_foreground(id);
         }
     }
 
@@ -497,7 +504,7 @@ impl Daemon {
             (x, y)
         });
         for found in all {
-            if vd::is_pinned(found.id.0) {
+            if vd::is_pinned(found.id) {
                 self.windows.forget(found.id);
                 continue;
             }
