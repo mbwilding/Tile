@@ -1,6 +1,6 @@
 //! The command-line side of `tile`: talking to a running Tile, checking a config and installing.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
 use clap::{Subcommand, ValueEnum};
@@ -27,9 +27,13 @@ pub enum Cmd {
     Subscribe,
     /// Reload the config file.
     Reload,
-    /// Check a config file (default: %APPDATA%\Tile\config.yml) and print what is wrong.
-    Check { file: Option<PathBuf> },
-    /// Print the config file's path.
+    /// Check a config file (default: `--config`, else %APPDATA%\Tile\config.yml) and print
+    /// what is wrong.
+    Check {
+        /// The file to check.
+        file: Option<PathBuf>,
+    },
+    /// Print the config file's path: `--config` if given, else the default one.
     Config,
     /// Install Tile: copy it to C:\Program Files\Tile, run it as administrator at sign-in (so
     /// it manages admin windows and remaps keys in them), put `tile` on your PATH and start it
@@ -130,15 +134,16 @@ fn print_event(event: &Event) {
     println!("{}", serde_json::to_string(event).unwrap_or_default());
 }
 
-fn check(file: Option<PathBuf>) -> anyhow::Result<()> {
-    let path = file.unwrap_or_else(tile_config::default_path);
-    tile_config::Loaded::load(&path)?;
+fn check(path: &Path) -> anyhow::Result<()> {
+    tile_config::Loaded::load(path)?;
     println!("{}: ok", path.display());
     Ok(())
 }
 
 /// Runs `command`: a request to the running Tile, or one of the commands that work without it.
-pub async fn run(command: Cmd) -> anyhow::Result<()> {
+/// `config` is the `--config` file, if given.
+pub async fn run(command: Cmd, config: Option<PathBuf>) -> anyhow::Result<()> {
+    let config = config.unwrap_or_else(tile_config::default_path);
     let (request, json) = match command {
         Cmd::Dispatch { command } => (
             Request::Dispatch {
@@ -154,9 +159,9 @@ pub async fn run(command: Cmd) -> anyhow::Result<()> {
             },
             false,
         ),
-        Cmd::Check { file } => return check(file),
+        Cmd::Check { file } => return check(file.as_deref().unwrap_or(&config)),
         Cmd::Config => {
-            println!("{}", tile_config::default_path().display());
+            println!("{}", config.display());
             return Ok(());
         }
         Cmd::Install => return install::install().await,

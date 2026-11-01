@@ -13,6 +13,10 @@ tile config                    # print the config file's path
 tile install / uninstall       # see the README; `cargo deploy` installs a checkout's build
 ```
 
+`--config <file>` (`-c`) points Tile at another config file, in place of
+`%APPDATA%\Tile\config.yml`, when it runs and for `tile config` and `tile check` (unless `check`
+is given a file).
+
 Becoming the Windows shell is the tray's Shell item (or `tray.shell` in the config, or the
 `toggleshell` dispatcher), not a `tile` command; see [shell mode](shell.md).
 
