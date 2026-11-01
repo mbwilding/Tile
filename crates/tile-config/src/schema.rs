@@ -25,15 +25,6 @@ pub struct Config {
     pub rules: Vec<Rule>,
 }
 
-/// The program a command line starts: its first word, or the quoted path it starts with.
-pub fn program(command: &str) -> &str {
-    let command = command.trim();
-    match command.strip_prefix('"') {
-        Some(quoted) => quoted.split('"').next().unwrap_or(quoted),
-        None => command.split_whitespace().next().unwrap_or(command),
-    }
-}
-
 /// The default binds, which `binds` add to unless `general.default_binds` is off.
 const DEFAULT_BINDS: &[(&str, &str)] = &[
     ("super+b", "exec chrome.exe --new-window"),
@@ -88,7 +79,7 @@ const DEFAULT_BINDS: &[(&str, &str)] = &[
 ];
 
 /// The default binds, by key.
-pub fn default_binds() -> BTreeMap<String, String> {
+pub(crate) fn default_binds() -> BTreeMap<String, String> {
     let mut binds: BTreeMap<String, String> = DEFAULT_BINDS
         .iter()
         .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
@@ -743,17 +734,6 @@ impl fmt::Display for Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn program_is_the_first_word_or_quoted_path() {
-        assert_eq!(program("  notepad.exe file.txt"), "notepad.exe");
-        assert_eq!(
-            program(r#""C:\Program Files\App\app.exe" --flag"#),
-            r"C:\Program Files\App\app.exe"
-        );
-        assert_eq!(program(r#""unterminated path"#), "unterminated path");
-        assert_eq!(program(""), "");
-    }
 
     #[test]
     fn layout_settings_clamp_out_of_range_values() {
