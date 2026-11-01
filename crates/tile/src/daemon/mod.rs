@@ -182,6 +182,14 @@ fn spawn_watchdog() {
     }
 }
 
+/// Sleeps until `at`, or forever without one.
+async fn until(at: Option<Instant>) {
+    match at {
+        Some(at) => sleep_until(at).await,
+        None => std::future::pending().await,
+    }
+}
+
 /// No windows or monitors yet, on the native desktop being shown, with `loaded`'s layouts.
 fn fresh_desktops(loaded: &Loaded) -> Desktops {
     let config = &loaded.config;
@@ -357,50 +365,17 @@ impl Daemon {
                 .tracked
                 .values()
                 .filter_map(|t| t.tween.as_ref())
-                .map(|t| t.animation.end())
+                .map(|t| Instant::from_std(t.animation.end()))
                 .min();
-            let animations = async {
-                match animation_end {
-                    Some(at) => sleep_until(Instant::from_std(at)).await,
-                    None => std::future::pending().await,
-                }
-            };
-            let reload = async {
-                match reload_at {
-                    Some(at) => sleep_until(at).await,
-                    None => std::future::pending().await,
-                }
-            };
-            let relock_at = self.relock_at;
-            let relock = async {
-                match relock_at {
-                    Some(at) => sleep_until(at).await,
-                    None => std::future::pending().await,
-                }
-            };
-            let heal_at = self.heal_at;
-            let heal = async {
-                match heal_at {
-                    Some(at) => sleep_until(at).await,
-                    None => std::future::pending().await,
-                }
-            };
-            let cursor_check_at = self.cursor_check_at;
-            let cursor_check = async {
-                match cursor_check_at {
-                    Some(at) => sleep_until(at).await,
-                    None => std::future::pending().await,
-                }
-            };
             tokio::select! {
-                () = cursor_check => self.check_cursor(),
-                () = relock => {
+                () = until(self.cursor_check_at) => self.check_cursor(),
+                () = until(self.relock_at) => {
                     self.relock_at = None;
                     if self.lock_taken {
                         tile_platform::set_lock_disabled(true);
                     }
                 }
-                () = heal => {
+                () = until(self.heal_at) => {
                     self.heal_at = None;
                     self.heal_borders();
                 }
@@ -418,18 +393,8 @@ impl Daemon {
                 Some(event) = rx.drags.recv() => self.on_drag(event),
                 Some(event) = rx.tray.recv() => self.on_tray(event),
                 Some(event) = rx.launcher.recv() => match event {
-                    // A Store app's id has a `!`. `shell:AppsFolder` can't start one without
-                    // Explorer, so it is started through the activation manager.
-                    LauncherEvent::Launch(id) if id.contains('!') => launch::activate(&id),
-                    LauncherEvent::Launch(id) => {
-                        launch::exec(&format!("\"shell:AppsFolder\\{id}\""));
-                    }
-                    LauncherEvent::LaunchAsAdmin(id) if id.contains('!') => {
-                        launch::activate_as_admin(&id);
-                    }
-                    LauncherEvent::LaunchAsAdmin(id) => {
-                        tile_platform::run_as_admin(&format!("shell:AppsFolder\\{id}"));
-                    }
+                    LauncherEvent::Launch(id) => launch::start_app(&id, false),
+                    LauncherEvent::LaunchAsAdmin(id) => launch::start_app(&id, true),
                     LauncherEvent::Run(line) => launch::exec(&line),
                     LauncherEvent::Dispatch(command) => self.run_command(command),
                     LauncherEvent::Tray { key, click, at } => {
@@ -442,11 +407,11 @@ impl Daemon {
                 Some(incoming) = rx.ipc.recv() => self.on_ipc(incoming),
                 Some(()) = rx.config.recv() => reload_at = Some(Instant::now() + RELOAD_DEBOUNCE),
                 Some(Notice::Panic) = rx.remap.recv() => self.stop_remap(REMAP_PANIC),
-                () = reload => {
+                () = until(reload_at) => {
                     reload_at = None;
                     self.reload();
                 }
-                () = animations => {
+                () = until(animation_end) => {
                     let now = std::time::Instant::now();
                     for tracked in self.tracked.values_mut() {
                         if tracked.tween.as_ref().is_some_and(|t| t.animation.end() <= now) {
