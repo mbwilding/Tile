@@ -1,21 +1,11 @@
 //! Reading the system for the launcher's system items and carrying out their actions.
 
-use crate::system::{
-    Action, AudioDevice, Battery, BluetoothDevice, Network, Radio, Status, Volume, WifiNetwork,
-    format_clock,
-};
+use crate::system::{Action, AudioDevice, RadioKind, Status, format_clock};
 use tile_sys::{
     devices::{self as sys, Flow},
     wifi,
 };
 use winsafe::{self as w, co};
-
-fn radio_kind(radio: Radio) -> sys::RadioKind {
-    match radio {
-        Radio::Wifi => sys::RadioKind::Wifi,
-        Radio::Bluetooth => sys::RadioKind::Bluetooth,
-    }
-}
 
 /// The local time and date, like `10:42 pm, Saturday 31 October 2026`.
 fn clock() -> String {
@@ -79,50 +69,21 @@ fn devices(flow: Flow) -> Vec<AudioDevice> {
     out
 }
 
-fn volume_of(v: sys::Volume) -> Volume {
-    Volume {
-        percent: v.percent,
-        muted: v.muted,
-    }
-}
-
 /// Reads the audio, battery, network and radios. Some calls wait on Windows, so call this off
 /// the UI thread.
 pub fn status() -> Status {
-    let bluetooth = sys::radio(sys::RadioKind::Bluetooth);
+    let bluetooth = sys::radio(RadioKind::Bluetooth);
     Status {
-        volume: sys::volume(Flow::Output).map(volume_of),
-        mic: sys::volume(Flow::Input).map(volume_of),
+        volume: sys::volume(Flow::Output),
+        mic: sys::volume(Flow::Input),
         outputs: devices(Flow::Output),
         inputs: devices(Flow::Input),
-        battery: sys::battery().map(|b| Battery {
-            percent: b.percent,
-            charging: b.charging,
-            plugged_in: b.plugged_in,
-            minutes_left: b.minutes_left,
-        }),
-        network: sys::network().map(|n| Network {
-            name: n.name,
-            internet: n.internet,
-        }),
-        wifi: sys::radio(sys::RadioKind::Wifi),
-        wifi_networks: wifi::networks()
-            .into_iter()
-            .map(|n| WifiNetwork {
-                profile: n.profile,
-                name: n.ssid,
-                signal: n.signal,
-                connected: n.connected,
-            })
-            .collect(),
+        battery: sys::battery(),
+        network: sys::network(),
+        wifi: sys::radio(RadioKind::Wifi),
+        wifi_networks: wifi::networks(),
         bluetooth_devices: if bluetooth.is_some() {
             sys::paired_bluetooth()
-                .into_iter()
-                .map(|d| BluetoothDevice {
-                    name: d.name,
-                    connected: d.connected,
-                })
-                .collect()
         } else {
             Vec::new()
         },
@@ -141,7 +102,7 @@ pub fn apply(action: &Action) -> bool {
         Action::SetMicVolume(percent) => sys::set_volume(Flow::Input, *percent),
         Action::MuteMic(muted) => sys::set_muted(Flow::Input, *muted),
         Action::SwitchDevice(id) => sys::set_default_device(id),
-        Action::SetRadio(radio, on) => sys::set_radio(radio_kind(*radio), *on),
+        Action::SetRadio(radio, on) => sys::set_radio(*radio, *on),
         Action::WifiConnect(profile) => wifi::connect(profile),
         Action::WifiDisconnect => wifi::disconnect(),
         Action::Open(_) | Action::Power(_) => false,
