@@ -10,7 +10,7 @@ tile-core.workspace = true
 interprocess.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["rt", "sync", "io-util"] }
+tokio = { workspace = true, features = ["rt", "sync", "io-util", "time"] }
 tracing.workspace = true
 widestring.workspace = true
 

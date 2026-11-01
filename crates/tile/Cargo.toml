@@ -28,7 +28,6 @@ tokio = { workspace = true, features = ["rt", "macros", "sync", "time", "signal"
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
-interprocess.workspace = true
 # Registry, UAC and Task Scheduler, for `install` (the workspace entry enables much more).
 winsafe = { version = "0.0.29", default-features = false, features = ["advapi", "shell", "taskschd"] }
 

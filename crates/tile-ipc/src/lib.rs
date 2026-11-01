@@ -5,13 +5,12 @@
 
 use std::io;
 
+pub mod install;
 pub mod launcher;
+mod pipe;
 
 use interprocess::{
-    local_socket::{
-        GenericNamespaced, ListenerOptions, Name, ToNsName,
-        tokio::{Listener, Stream, prelude::*},
-    },
+    local_socket::tokio::{Listener, Stream, prelude::*},
     os::windows::{local_socket::ListenerOptionsExt, security_descriptor::SecurityDescriptor},
 };
 use serde::{Deserialize, Serialize};
@@ -20,59 +19,104 @@ use tile_core::{
     state::{MonitorSnapshot, WindowSnapshot, WorkspaceSnapshot},
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncWriteExt, BufReader},
     sync::mpsc,
 };
 
+/// The daemon's pipe, `\\.\pipe\tile.sock`.
 pub const SOCKET_NAME: &str = "tile.sock";
 
+/// What a client asks the daemon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     /// Run a dispatcher, e.g. `workspace 3`.
     Dispatch {
+        /// The dispatcher and its arguments, as written in a bind.
         command: String,
     },
+    /// Answer with what the daemon knows about `what`.
     Query {
+        /// What to describe.
         what: Query,
     },
     /// Stream [`Event`]s until the client disconnects.
     Subscribe,
 }
 
+/// What a [`Request::Query`] asks about.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Query {
+    /// Every monitor, answered with [`Response::Monitors`].
     Monitors,
+    /// Every workspace, answered with [`Response::Workspaces`].
     Workspaces,
+    /// Every managed window, answered with [`Response::Windows`].
     Windows,
+    /// The focused window, answered with [`Response::ActiveWindow`].
     ActiveWindow,
 }
 
+/// A line the daemon sends back.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
+    /// The request was carried out.
     Ok,
-    Error { message: String },
-    Monitors { monitors: Vec<MonitorSnapshot> },
-    Workspaces { workspaces: Vec<WorkspaceSnapshot> },
-    Windows { windows: Vec<WindowSnapshot> },
-    ActiveWindow { window: Option<WindowSnapshot> },
-    Event { event: Event },
+    /// The request failed.
+    Error {
+        /// Why, for a person to read.
+        message: String,
+    },
+    /// The answer to [`Query::Monitors`].
+    Monitors {
+        /// Every monitor.
+        monitors: Vec<MonitorSnapshot>,
+    },
+    /// The answer to [`Query::Workspaces`].
+    Workspaces {
+        /// Every workspace.
+        workspaces: Vec<WorkspaceSnapshot>,
+    },
+    /// The answer to [`Query::Windows`].
+    Windows {
+        /// Every managed window.
+        windows: Vec<WindowSnapshot>,
+    },
+    /// The answer to [`Query::ActiveWindow`].
+    ActiveWindow {
+        /// The focused window, if Tile manages it.
+        window: Option<WindowSnapshot>,
+    },
+    /// Something happened, for a [`Request::Subscribe`] client.
+    Event {
+        /// What happened.
+        event: Event,
+    },
 }
 
+/// Something that happened, streamed to subscribers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Event {
+    /// The focused monitor shows another workspace.
     Workspace {
+        /// The workspace now shown.
         id: u8,
     },
+    /// Focus moved to another window.
     ActiveWindow {
+        /// Its handle, or `None` when nothing is focused.
         id: Option<isize>,
+        /// Its title.
         title: Option<String>,
+        /// The file name of its program.
         exe: Option<String>,
     },
+    /// The focused workspace's layout changed.
     Layout {
+        /// The layout now in use.
         layout: LayoutKind,
     },
 }
@@ -81,20 +125,15 @@ pub enum Event {
 /// Dropping `reply` closes the client connection.
 #[derive(Debug)]
 pub struct Incoming {
+    /// What the client asked.
     pub request: Request,
+    /// Sends a [`Response`] line to the client.
     pub reply: mpsc::UnboundedSender<Response>,
-}
-
-fn socket_name() -> io::Result<Name<'static>> {
-    SOCKET_NAME.to_ns_name::<GenericNamespaced>()
 }
 
 /// Whether a daemon is already listening.
 pub async fn is_running() -> bool {
-    match socket_name() {
-        Ok(name) => Stream::connect(name).await.is_ok(),
-        Err(_) => false,
-    }
+    pipe::is_listening(SOCKET_NAME).await
 }
 
 /// The daemon side of the pipe. Must be created inside a Tokio runtime.
@@ -104,7 +143,7 @@ impl Server {
     /// Creates the pipe. With `user_sid`, only that user (and SYSTEM and Administrators) can
     /// connect, including from a normal, non-elevated process when Tile runs elevated.
     pub fn bind(user_sid: Option<&str>) -> io::Result<Self> {
-        let mut options = ListenerOptions::new().name(socket_name()?);
+        let mut options = pipe::listener(SOCKET_NAME)?;
         if let Some(sid) = user_sid {
             options = options.security_descriptor(user_only(sid)?);
         }
@@ -145,10 +184,10 @@ async fn serve(listener: Listener, tx: mpsc::UnboundedSender<Incoming>) {
 }
 
 async fn handle(conn: Stream, tx: mpsc::UnboundedSender<Incoming>) -> io::Result<()> {
-    let mut reader = BufReader::new(&conn);
-    let mut writer = &conn;
-    let mut line = String::new();
-    reader.read_line(&mut line).await?;
+    // An `is_running` probe hangs up without sending anything.
+    let Some(line) = pipe::read_text(&mut BufReader::new(&conn)).await? else {
+        return Ok(());
+    };
     let (reply, mut replies) = mpsc::unbounded_channel();
     match serde_json::from_str::<Request>(&line) {
         Ok(request) => {
@@ -163,11 +202,9 @@ async fn handle(conn: Stream, tx: mpsc::UnboundedSender<Incoming>) -> io::Result
         }
     }
     while let Some(response) = replies.recv().await {
-        let mut json = serde_json::to_string(&response).map_err(io::Error::other)?;
-        json.push('\n');
-        writer.write_all(json.as_bytes()).await?;
+        pipe::write_line(&conn, &response).await?;
     }
-    writer.flush().await
+    (&conn).flush().await
 }
 
 /// A connection to the daemon.
@@ -176,11 +213,10 @@ pub struct Client {
 }
 
 impl Client {
+    /// Connects to the daemon and sends `request`, for [`Client::next`] to read the answers.
     pub async fn send(request: &Request) -> io::Result<Self> {
-        let conn = Stream::connect(socket_name()?).await?;
-        let mut json = serde_json::to_string(request).map_err(io::Error::other)?;
-        json.push('\n');
-        (&conn).write_all(json.as_bytes()).await?;
+        let conn = pipe::connect(SOCKET_NAME).await?;
+        pipe::write_line(&conn, request).await?;
         Ok(Self {
             reader: BufReader::new(conn),
         })
@@ -188,10 +224,9 @@ impl Client {
 
     /// The next response, or `None` once the daemon closes the connection.
     pub async fn next(&mut self) -> io::Result<Option<Response>> {
-        let mut line = String::new();
-        if self.reader.read_line(&mut line).await? == 0 {
+        let Some(line) = pipe::read_text(&mut self.reader).await? else {
             return Ok(None);
-        }
+        };
         serde_json::from_str(&line)
             .map(Some)
             .map_err(io::Error::other)
