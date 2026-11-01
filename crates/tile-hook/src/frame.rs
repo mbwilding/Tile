@@ -13,7 +13,7 @@
 
 use std::{
     cell::OnceCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::c_void,
     mem::ManuallyDrop,
     ptr,
@@ -47,10 +47,11 @@ use windows_sys::Win32::{
         },
     },
     UI::WindowsAndMessaging::{
-        CreateWindowExW, DispatchMessageW, EnumWindows, GetClassNameW, GetClientRect, GetParent,
-        GetSystemMetrics, GetWindowThreadProcessId, IsWindow, MsgWaitForMultipleObjects, PM_REMOVE,
-        PeekMessageW, PostMessageW, QS_ALLINPUT, SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SWP_NOACTIVATE,
-        SWP_NOZORDER, SetWindowPos, ShowWindow, TranslateMessage, WM_CLOSE,
+        CreateWindowExW, DispatchMessageW, EnumChildWindows, EnumWindows, GetClassNameW,
+        GetClientRect, GetParent, GetSystemMetrics, GetWindowTextW, GetWindowThreadProcessId,
+        IsWindow, MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW, PostMessageW, QS_ALLINPUT,
+        SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+        SetWindowTextW, ShowWindow, TranslateMessage, WM_CLOSE,
     },
 };
 
@@ -98,6 +99,14 @@ const SHELL_HOSTS: [&str; 8] = [
 
 /// How many scans try to frame one app window before giving up on it.
 const MAX_TRIES: u8 = 20;
+/// How often empty frames are looked for.
+const SWEEP_EVERY: u32 = 33;
+/// How many sweeps in a row a frame must be empty before it is destroyed.
+const EMPTY_SWEEPS: u8 = 3;
+/// `IApplicationFrame`.
+const FRAME: GUID = GUID::from_u128(0x1437_15D9_A015_40EA_B695_D5CC_267E_36EE);
+/// `IApplicationFrameManager::GetFrameArray(IObjectArray**)`.
+const GET_FRAME_ARRAY_SLOT: usize = 6;
 /// How often windows are checked for a new app to frame.
 const SCAN_EVERY: u32 = 1;
 /// How many ticks after framing an app is kept from staying frozen.
@@ -291,6 +300,8 @@ struct Frame {
     frame: HWND,
     app: HWND,
     size: (i32, i32),
+    /// The app's title as last copied to the frame.
+    title: Vec<u16>,
 }
 
 struct Framer {
@@ -304,6 +315,8 @@ struct Framer {
     frames: Vec<Frame>,
     /// How many times each app window was tried, so one that keeps failing is given up on.
     tried: HashMap<usize, u8>,
+    /// How many sweeps in a row each frame has held no app.
+    empty: HashMap<usize, u8>,
 }
 
 fn run() -> Result<(), String> {
@@ -322,6 +335,9 @@ fn run() -> Result<(), String> {
         pump();
         if tick.is_multiple_of(SCAN_EVERY) {
             framer.scan();
+        }
+        if tick.is_multiple_of(SWEEP_EVERY) {
+            framer.sweep_empty();
         }
         framer.follow();
         tick = tick.wrapping_add(1);
@@ -387,6 +403,7 @@ unsafe fn take_shell() -> Result<Framer, String> {
         statics: None,
         frames: Vec::new(),
         tried: HashMap::new(),
+        empty: HashMap::new(),
     })
 }
 
@@ -426,6 +443,95 @@ impl Framer {
         first
     }
 
+    /// The frame manager, made (and listened to) the first time it is needed.
+    fn manager(&mut self) -> Result<IUnknown, String> {
+        if let Some(manager) = &self.manager {
+            return Ok(manager.clone());
+        }
+        let mut raw = ptr::null_mut();
+        // SAFETY: asks `ApplicationFrameHost` for the frame manager directly; the GUIDs are live
+        // constants and `raw` a live out pointer.
+        let hr = unsafe {
+            CoCreateInstance(
+                (&HOST_CLASS as *const GUID).cast(),
+                ptr::null_mut(),
+                CLSCTX_LOCAL_SERVER,
+                (&FRAME_MANAGER as *const GUID).cast(),
+                &raw mut raw,
+            )
+        };
+        check(hr, "starting ApplicationFrameHost")?;
+        // SAFETY: `CoCreateInstance` returned an owned reference to the manager.
+        let manager = unsafe { IUnknown::from_raw(raw) };
+        self.manager = Some(manager.clone());
+        self.listen(&manager);
+        Ok(manager)
+    }
+
+    /// Destroys frames that hold no app and aren't being made: ones a previous helper left
+    /// behind, or the frame host's own spares. Left alone they show as empty blue windows.
+    fn sweep_empty(&mut self) {
+        if self.manager.is_none() && !top_level_windows().into_iter().any(is_frame) {
+            return;
+        }
+        let Ok(manager) = self.manager() else {
+            return;
+        };
+        let mut array = ptr::null_mut();
+        // SAFETY: `GetFrameArray` is slot 6 of the manager; `array` is a live out pointer.
+        let hr = unsafe {
+            let get: Create = std::mem::transmute(slot(manager.as_raw(), GET_FRAME_ARRAY_SLOT));
+            get(manager.as_raw(), &raw mut array)
+        };
+        if hr < 0 || array.is_null() {
+            return;
+        }
+        // SAFETY: the array is an owned `IObjectArray`, whose `GetCount` is slot 3 and `GetAt`
+        // slot 4; every pointer passed is a live local.
+        let found = unsafe {
+            let array = IUnknown::from_raw(array);
+            let count: extern "system" fn(*mut c_void, *mut u32) -> i32 =
+                std::mem::transmute(slot(array.as_raw(), 3));
+            let at: extern "system" fn(*mut c_void, u32, *const GUID, *mut *mut c_void) -> i32 =
+                std::mem::transmute(slot(array.as_raw(), 4));
+            let mut n = 0u32;
+            count(array.as_raw(), &raw mut n);
+            let mut found = Vec::new();
+            for i in 0..n {
+                let mut raw = ptr::null_mut();
+                if at(array.as_raw(), i, &FRAME, &raw mut raw) >= 0 && !raw.is_null() {
+                    found.push(IUnknown::from_raw(raw));
+                }
+            }
+            found
+        };
+        let mut seen = HashSet::new();
+        for frame in found {
+            let mut window: HWND = ptr::null_mut();
+            // SAFETY: `GetFrameWindow` is slot 3 of `IApplicationFrame`; both pointers are live.
+            let ok = unsafe {
+                let get: GetWindow =
+                    std::mem::transmute(slot(frame.as_raw(), GET_FRAME_WINDOW_SLOT));
+                get(frame.as_raw(), &raw mut window) >= 0 && !window.is_null()
+            };
+            if !ok || self.frames.iter().any(|f| f.frame == window) || holds_app(window) {
+                continue;
+            }
+            seen.insert(window as usize);
+            let sweeps = self.empty.entry(window as usize).or_insert(0);
+            *sweeps += 1;
+            if *sweeps >= EMPTY_SWEEPS {
+                // SAFETY: `DestroyFrame` is slot 5 of the manager; both objects are alive.
+                unsafe {
+                    let destroy: Destroy =
+                        std::mem::transmute(slot(manager.as_raw(), DESTROY_FRAME_SLOT));
+                    destroy(manager.as_raw(), frame.as_raw());
+                }
+            }
+        }
+        self.empty.retain(|window, _| seen.contains(window));
+    }
+
     /// Asks the frame host to report each frame's commands, such as close, to this process.
     fn listen(&mut self, manager: &IUnknown) {
         let handler = match Events::make() {
@@ -451,56 +557,37 @@ impl Framer {
     }
 
     fn try_frame(&mut self, app: HWND, id: &str, package: String) -> Result<Frame, String> {
-        let manager = match &self.manager {
-            Some(manager) => manager.clone(),
-            None => {
-                let mut raw = ptr::null_mut();
-                // SAFETY: asks `ApplicationFrameHost` for the frame manager directly; the GUIDs
-                // are live constants and `raw` a live out pointer.
-                let hr = unsafe {
-                    CoCreateInstance(
-                        (&HOST_CLASS as *const GUID).cast(),
-                        ptr::null_mut(),
-                        CLSCTX_LOCAL_SERVER,
-                        (&FRAME_MANAGER as *const GUID).cast(),
-                        &raw mut raw,
-                    )
-                };
-                check(hr, "starting ApplicationFrameHost")?;
-                // SAFETY: `CoCreateInstance` returned an owned reference to the manager.
-                let manager = unsafe { IUnknown::from_raw(raw) };
-                self.manager = Some(manager.clone());
-                self.listen(&manager);
-                manager
-            }
-        };
+        let manager = self.manager()?;
         let id: Vec<u16> = id.encode_utf16().chain([0]).collect();
         let mut raw = ptr::null_mut();
         let mut window: HWND = ptr::null_mut();
         // SAFETY: the vtable slots and argument lists are those of Windows 11 build 26100;
         // `manager` is alive and `frame` is a live out pointer.
-        let (frame, ok) = unsafe {
+        let frame = unsafe {
             let create: Create = std::mem::transmute(slot(manager.as_raw(), CREATE_FRAME_SLOT));
             check(create(manager.as_raw(), &raw mut raw), "creating the frame")?;
-            let frame = IUnknown::from_raw(raw);
+            IUnknown::from_raw(raw)
+        };
+        let mut orphan = Orphan {
+            manager: &manager,
+            frame: &frame,
+            armed: true,
+        };
+        // SAFETY: as above; `raw` is the frame just made.
+        unsafe {
             let set_id: SetId = std::mem::transmute(slot(raw, SET_APPLICATION_ID_SLOT));
             check(set_id(raw, id.as_ptr(), 1), "naming the frame")?;
             let present: SetWindow = std::mem::transmute(slot(raw, SET_PRESENTED_WINDOW_SLOT));
             check(present(raw, app), "putting the app in the frame")?;
             let get: GetWindow = std::mem::transmute(slot(raw, GET_FRAME_WINDOW_SLOT));
             check(get(raw, &raw mut window), "finding the frame's window")?;
-            (frame, !window.is_null())
-        };
-        if !ok {
+        }
+        if window.is_null() {
             return Err("the frame has no window".into());
         }
-        (self.enable)(&raw const self.key, 1);
-        for hwnd in [window, app] {
-            let clear = 0i32;
-            // SAFETY: `clear` outlives the call and is the 4 bytes DWMWA_CLOAK takes.
-            unsafe { DwmSetWindowAttribute(hwnd, DWMWA_CLOAK as _, (&raw const clear).cast(), 4) };
-        }
-        (self.enable)(&raw const self.key, 0);
+        // Everything is in place before the cloak lifts, which is when Tile hears of the window:
+        // its title, and a size and place for it that Tile then replaces with a tile.
+        let title = set_title(window, app);
         let (width, height) = initial_size();
         // SAFETY: `window` is the frame's, which this process just made.
         unsafe {
@@ -515,6 +602,15 @@ impl Framer {
             );
             ShowWindow(window, SW_SHOW);
         }
+        (self.enable)(&raw const self.key, 1);
+        for hwnd in [window, app] {
+            let clear = 0i32;
+            // SAFETY: `clear` outlives the call and is the 4 bytes DWMWA_CLOAK takes.
+            unsafe { DwmSetWindowAttribute(hwnd, DWMWA_CLOAK as _, (&raw const clear).cast(), 4) };
+        }
+        (self.enable)(&raw const self.key, 0);
+        orphan.armed = false;
+        drop(orphan);
         Ok(Frame {
             closing: None,
             frame: window,
@@ -524,6 +620,7 @@ impl Framer {
             package,
             resumes: RESUME_FOR,
             size: (0, 0),
+            title,
         })
     }
 
@@ -579,6 +676,7 @@ impl Framer {
             if f.closing.is_some_and(|asked| asked.elapsed() > CLOSE_GRACE) {
                 end_process(f.app);
             }
+            copy_title(f);
             let mut client = RECT {
                 left: 0,
                 top: 0,
@@ -620,6 +718,52 @@ fn resume(package: &str) {
         let thaw: SetPackage = std::mem::transmute(slot(raw, 6));
         thaw(raw, name.as_ptr());
         drop(settings);
+    }
+}
+
+/// Gives `frame` the title of the app window `app`, which is what Windows (and Tile) use to tell
+/// windows apart and to decide which to manage. Returns the title, empty if the app has none yet.
+fn set_title(frame: HWND, app: HWND) -> Vec<u16> {
+    let mut buffer = [0u16; 256];
+    // SAFETY: `buffer` has room for the length given and `app` is a live window.
+    let length = unsafe { GetWindowTextW(app, buffer.as_mut_ptr(), buffer.len() as i32) };
+    let mut title = buffer[..length.max(0) as usize].to_vec();
+    if !title.is_empty() {
+        title.push(0);
+        // SAFETY: `title` is NUL-terminated and `frame` is a live window.
+        unsafe { SetWindowTextW(frame, title.as_ptr()) };
+        title.pop();
+    }
+    title
+}
+
+/// Copies the app's title to its frame again when it has changed.
+fn copy_title(f: &mut Frame) {
+    let mut buffer = [0u16; 256];
+    // SAFETY: `buffer` has room for the length given and `f.app` is a live window.
+    let length = unsafe { GetWindowTextW(f.app, buffer.as_mut_ptr(), buffer.len() as i32) };
+    if length > 0 && buffer[..length as usize] != f.title[..] {
+        f.title = set_title(f.frame, f.app);
+    }
+}
+
+/// A frame that isn't in use yet, destroyed again if making it fails part way.
+struct Orphan<'a> {
+    manager: &'a IUnknown,
+    frame: &'a IUnknown,
+    armed: bool,
+}
+
+impl Drop for Orphan<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            // SAFETY: `DestroyFrame` is slot 5 of the manager; both objects are alive.
+            unsafe {
+                let destroy: Destroy =
+                    std::mem::transmute(slot(self.manager.as_raw(), DESTROY_FRAME_SLOT));
+                destroy(self.manager.as_raw(), self.frame.as_raw());
+            }
+        }
     }
 }
 
@@ -736,6 +880,36 @@ fn wait(time: Duration) {
     unsafe {
         MsgWaitForMultipleObjects(0, ptr::null(), 0, time.as_millis() as u32, QS_ALLINPUT);
     }
+}
+
+/// Whether `window` is a Store app frame.
+fn is_frame(window: HWND) -> bool {
+    let mut class = [0u16; 64];
+    // SAFETY: `class` has room for the length given.
+    let length = unsafe { GetClassNameW(window, class.as_mut_ptr(), class.len() as i32) };
+    String::from_utf16_lossy(&class[..length.max(0) as usize]) == "ApplicationFrameWindow"
+}
+
+/// Whether `frame` has a Store app's window inside it.
+fn holds_app(frame: HWND) -> bool {
+    unsafe extern "system" fn look(window: HWND, found: LPARAM) -> i32 {
+        let mut class = [0u16; 64];
+        // SAFETY: `class` has room for the length given; `found` is the flag passed below.
+        unsafe {
+            let length = GetClassNameW(window, class.as_mut_ptr(), class.len() as i32);
+            if String::from_utf16_lossy(&class[..length.max(0) as usize])
+                == "Windows.UI.Core.CoreWindow"
+            {
+                *(found as *mut bool) = true;
+                return 0;
+            }
+        }
+        1
+    }
+    let mut found = false;
+    // SAFETY: `look` only touches the flag behind the pointer.
+    unsafe { EnumChildWindows(frame, Some(look), (&raw mut found) as LPARAM) };
+    found
 }
 
 fn top_level_windows() -> Vec<HWND> {

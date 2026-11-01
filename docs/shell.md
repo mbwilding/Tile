@@ -107,7 +107,10 @@ which asks the app to close (and ends it if it hasn't after three seconds); the 
 
 Without Explorer nothing tells a Store app how big its window is, so one would lay itself out for
 the whole monitor and never follow its frame. The same process therefore sends each app its
-frame's size, through the shell's window management service, whenever it changes.
+frame's size, through the shell's window management service, whenever it changes. The frame also
+gets its app's title, which is what lets Tile manage and tile it like any other window, and
+frames with no app in them (left by an earlier helper, or the frame host's spares) are destroyed so
+they don't show up as empty blue windows.
 
 Known limit: some images that come from the shell are missing, such as the device picture on
 Settings' System page.
