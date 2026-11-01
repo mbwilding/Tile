@@ -980,7 +980,6 @@ dependencies = [
  "clap",
  "dirs",
  "embed-manifest",
- "interprocess",
  "serde",
  "serde_json",
  "tile-config",

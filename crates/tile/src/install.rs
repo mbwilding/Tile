@@ -23,15 +23,11 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use interprocess::local_socket::{
-    GenericNamespaced, ListenerOptions, ToNsName,
-    tokio::{Stream, prelude::*},
-};
 use tile_ipc::{
     Client, Request,
+    install::{self as pipes, Report, ReportListener},
     launcher::{self, LaunchRequest},
 };
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use winsafe::{self as w, co, prelude::*};
 
 /// How long a running Tile or launcher may take to exit.
@@ -45,8 +41,7 @@ const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LAUNCHER_RUN_VALUE: &str = "Tile launcher";
 /// The `Run` value earlier, non-elevated installs used for Tile itself.
 const OLD_RUN_VALUE: &str = "Tile";
-/// The pipe and scheduled task of Key, the standalone remapper Tile absorbed.
-const KEY_SOCKET: &str = "key.sock";
+/// The scheduled task of Key, the standalone remapper Tile absorbed.
 const KEY_TASK: &str = "Key";
 const ENV_KEY: &str = "Environment";
 const PATH_VALUE: &str = "Path";
@@ -170,10 +165,8 @@ fn start_explorer() -> io::Result<()> {
 /// Runs `step` in a `tile` started through UAC and waits for its report: a note to show
 /// on success, or the error.
 async fn run_elevated(step: &Step) -> anyhow::Result<String> {
-    let report = format!("tile-install-{}.sock", std::process::id());
-    let listener = ListenerOptions::new()
-        .name(report.as_str().to_ns_name::<GenericNamespaced>()?)
-        .create_tokio()?;
+    let listener = ReportListener::bind()?;
+    let report = listener.name();
     let exe = std::env::current_exe()?;
     let mut parameters = format!(
         "--headless \"{}\" elevated --report \"{report}\"",
@@ -201,29 +194,23 @@ async fn run_elevated(step: &Step) -> anyhow::Result<String> {
         Err(e) => bail!("failed to start the admin step: {e}"),
         Ok(()) => {}
     }
-    let conn = tokio::time::timeout(ELEVATED_TIMEOUT, listener.accept())
-        .await
-        .context("the admin step didn't report back")??;
-    let mut line = String::new();
-    BufReader::new(&conn).read_line(&mut line).await?;
-    match line.trim_end().split_once(':') {
-        Some(("ok", note)) => Ok(note.to_owned()),
-        Some(("error", message)) => bail!("{message}"),
-        _ => bail!("the admin step failed"),
+    match listener.receive(ELEVATED_TIMEOUT).await {
+        Ok(Report::Done { note }) => Ok(note),
+        Ok(Report::Failed { message }) => bail!("{message}"),
+        Err(e) if e.kind() == io::ErrorKind::TimedOut => bail!("the admin step didn't report back"),
+        Err(e) => bail!("the admin step failed: {e}"),
     }
 }
 
 /// `tile elevated`: does `step` (we run as administrator) and reports to `report`.
 pub async fn elevated(step: Step, report: &str) -> anyhow::Result<()> {
-    let line = match run_step(&step) {
-        Ok(note) => format!("ok:{note}\n"),
-        Err(e) => format!("error:{e:#}\n"),
+    let outcome = match run_step(&step) {
+        Ok(note) => Report::Done { note },
+        Err(e) => Report::Failed {
+            message: format!("{e:#}"),
+        },
     };
-    let conn = Stream::connect(report.to_ns_name::<GenericNamespaced>()?).await?;
-    (&conn).write_all(line.as_bytes()).await?;
-    // The write finishes in the background: exiting now could cancel it, so wait for the
-    // installer to read the report and hang up.
-    let _ = (&conn).read_to_end(&mut Vec::new()).await;
+    pipes::send_report(report, &outcome).await?;
     Ok(())
 }
 
@@ -403,22 +390,13 @@ async fn stop_launcher() -> anyhow::Result<()> {
     wait_until_stopped(launcher::is_running, "launcher").await
 }
 
-async fn key_running() -> bool {
-    match KEY_SOCKET.to_ns_name::<GenericNamespaced>() {
-        Ok(name) => Stream::connect(name).await.is_ok(),
-        Err(_) => false,
-    }
-}
-
-/// Asks a running Key to exit (its pipe takes an `exit` line) and waits until it has.
+/// Asks a running Key to exit and waits until it has.
 async fn stop_key() -> anyhow::Result<()> {
-    if !key_running().await {
+    if !pipes::key_running().await {
         return Ok(());
     }
-    let conn = Stream::connect(KEY_SOCKET.to_ns_name::<GenericNamespaced>()?).await?;
-    (&conn).write_all(b"exit\n").await?;
-    BufReader::new(&conn).read_line(&mut String::new()).await?;
-    wait_until_stopped(key_running, "Key").await?;
+    pipes::stop_key().await?;
+    wait_until_stopped(pipes::key_running, "Key").await?;
     println!("Stopped the running Key: Tile remaps keys now.");
     Ok(())
 }
