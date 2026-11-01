@@ -1,33 +1,14 @@
 //! The launcher's system items: the audio devices and their volume, network, Wi-Fi, Bluetooth,
-//! battery, clock and power actions that Explorer's taskbar would otherwise offer. This builds the rows from a
-//! snapshot of the system and searches them; reading and changing the system is the platform's.
+//! battery, clock and power actions that Explorer's taskbar would otherwise offer. This builds
+//! the rows from a snapshot of the system and searches them; reading and changing the system is
+//! `tile-sys`'s.
+
+pub use tile_sys::{
+    devices::{Battery, Network, PairedDevice, RadioKind, Volume},
+    wifi::Network as WifiNetwork,
+};
 
 use crate::search::fuzzy;
-
-/// The volume of the default output or input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Volume {
-    /// 0 to 100.
-    pub percent: u8,
-    pub muted: bool,
-}
-
-/// The battery of a laptop or tablet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Battery {
-    pub percent: u8,
-    pub charging: bool,
-    pub plugged_in: bool,
-    /// On battery power: the estimated minutes left.
-    pub minutes_left: Option<u32>,
-}
-
-/// The network connection.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Network {
-    pub name: Option<String>,
-    pub internet: bool,
-}
 
 /// An audio output or input device that is plugged in and enabled.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,32 +21,17 @@ pub struct AudioDevice {
     pub default: bool,
 }
 
-/// A saved Wi-Fi network that is in range.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WifiNetwork {
-    /// The saved profile's name, which connecting goes by.
-    pub profile: String,
-    /// The name of the network.
-    pub name: String,
-    /// 0 to 100.
-    pub signal: u8,
-    pub connected: bool,
-}
-
-/// A paired Bluetooth device.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BluetoothDevice {
-    pub name: String,
-    pub connected: bool,
-}
-
 /// A group of system rows, which the launcher shows on their own when its bar's button for the
 /// group is picked, like the taskbar's quick settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Group {
+    /// The speakers or headphones: their volume and which is in use.
     Output,
+    /// The microphone: its volume and which is in use.
     Input,
+    /// The network, the Wi-Fi radio and saved networks.
     Wifi,
+    /// The Bluetooth radio and paired devices.
     Bluetooth,
     /// Not part of a panel: found by searching.
     Other,
@@ -101,8 +67,8 @@ impl Group {
         Some(match self {
             Self::Output => Action::Mute(on),
             Self::Input => Action::MuteMic(on),
-            Self::Wifi => Action::SetRadio(Radio::Wifi, !on),
-            Self::Bluetooth => Action::SetRadio(Radio::Bluetooth, !on),
+            Self::Wifi => Action::SetRadio(RadioKind::Wifi, !on),
+            Self::Bluetooth => Action::SetRadio(RadioKind::Bluetooth, !on),
             Self::Other => return None,
         })
     }
@@ -123,28 +89,29 @@ impl Status {
                     v.muted = *muted;
                 }
             }
-            Action::SetRadio(Radio::Wifi, on) => self.wifi = self.wifi.map(|_| *on),
-            Action::SetRadio(Radio::Bluetooth, on) => self.bluetooth = self.bluetooth.map(|_| *on),
+            Action::SetRadio(RadioKind::Wifi, on) => self.wifi = self.wifi.map(|_| *on),
+            Action::SetRadio(RadioKind::Bluetooth, on) => {
+                self.bluetooth = self.bluetooth.map(|_| *on);
+            }
             _ => {}
         }
     }
 }
 
-/// A radio that can be switched.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Radio {
-    Wifi,
-    Bluetooth,
-}
-
 /// Ending the session or putting the machine away.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Power {
+    /// Lock the screen.
     Lock,
+    /// Show the sign-in screen, leaving this session running.
     SwitchUser,
+    /// Suspend the machine.
     Sleep,
+    /// End the session.
     SignOut,
+    /// Restart the machine.
     Restart,
+    /// Turn the machine off.
     ShutDown,
 }
 
@@ -171,18 +138,25 @@ impl Power {
 /// What picking a system row does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
+    /// Set the output's volume, 0 to 100, unmuting it.
     SetVolume(u8),
+    /// Mute (`true`) or unmute the output.
     Mute(bool),
+    /// Set the microphone's volume, 0 to 100, unmuting it.
     SetMicVolume(u8),
+    /// Mute (`true`) or unmute the microphone.
     MuteMic(bool),
     /// Make the device with this endpoint id the one in use, output or input.
     SwitchDevice(String),
-    SetRadio(Radio, bool),
+    /// Turn a radio on (`true`) or off.
+    SetRadio(RadioKind, bool),
     /// Connect to the saved Wi-Fi network with this profile name.
     WifiConnect(String),
+    /// Disconnect from the Wi-Fi network.
     WifiDisconnect,
     /// Open a Settings page (an `ms-settings:` URI).
     Open(&'static str),
+    /// End the session or put the machine away.
     Power(Power),
 }
 
@@ -190,16 +164,25 @@ pub enum Action {
 /// Bluetooth) has no rows.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Status {
+    /// The default output's volume.
     pub volume: Option<Volume>,
     /// The default input's volume.
     pub mic: Option<Volume>,
+    /// The output devices, with the one in use marked.
     pub outputs: Vec<AudioDevice>,
+    /// The input devices, with the one in use marked.
     pub inputs: Vec<AudioDevice>,
+    /// The saved Wi-Fi networks in range.
     pub wifi_networks: Vec<WifiNetwork>,
-    pub bluetooth_devices: Vec<BluetoothDevice>,
+    /// The paired Bluetooth devices.
+    pub bluetooth_devices: Vec<PairedDevice>,
+    /// The battery, on a machine that has one.
     pub battery: Option<Battery>,
+    /// The network connection.
     pub network: Option<Network>,
+    /// Whether the Wi-Fi radio is on, if there is one.
     pub wifi: Option<bool>,
+    /// Whether the Bluetooth radio is on, if there is one.
     pub bluetooth: Option<bool>,
     /// The time and date, ready to show.
     pub clock: Option<String>,
@@ -208,10 +191,13 @@ pub struct Status {
 /// A row: what it is called, what it says underneath, and what it does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
+    /// What the row says.
     pub title: String,
+    /// What it says underneath, often what Enter does.
     pub subtitle: String,
     /// Other words that find it.
     pub keywords: &'static str,
+    /// What picking it does.
     pub action: Action,
     /// The panel it belongs to.
     pub group: Group,
@@ -242,10 +228,74 @@ impl Entry {
 
 const VOLUME_STEP: u8 = 10;
 
+/// What tells the output's volume rows from the microphone's.
+struct VolumeRows {
+    /// `Volume` or `Microphone`.
+    name: &'static str,
+    /// The keywords of the mute, up and down rows.
+    keywords: [&'static str; 3],
+    mute: fn(bool) -> Action,
+    set: fn(u8) -> Action,
+    group: Group,
+}
+
+const OUTPUT_ROWS: VolumeRows = VolumeRows {
+    name: "Volume",
+    keywords: [
+        "sound audio speakers mute unmute",
+        "louder sound audio",
+        "quieter sound audio",
+    ],
+    mute: Action::Mute,
+    set: Action::SetVolume,
+    group: Group::Output,
+};
+
+const INPUT_ROWS: VolumeRows = VolumeRows {
+    name: "Microphone",
+    keywords: [
+        "mic input audio mute unmute",
+        "mic input louder",
+        "mic input quieter",
+    ],
+    mute: Action::MuteMic,
+    set: Action::SetMicVolume,
+    group: Group::Input,
+};
+
+/// The mute, up and down rows of a volume.
+fn volume_entries(v: Volume, rows: &VolumeRows) -> [Entry; 3] {
+    let name = rows.name;
+    let (title, hint) = if v.muted {
+        (format!("{name}: muted"), "Enter to unmute")
+    } else {
+        (format!("{name}: {}%", v.percent), "Enter to mute")
+    };
+    let up = v.percent.saturating_add(VOLUME_STEP).min(100);
+    let down = v.percent.saturating_sub(VOLUME_STEP);
+    let [mute_words, up_words, down_words] = rows.keywords;
+    [
+        entry(&title, hint, mute_words, (rows.mute)(!v.muted)),
+        entry(
+            &format!("{name} up"),
+            format!("To {up}%"),
+            up_words,
+            (rows.set)(up),
+        ),
+        entry(
+            &format!("{name} down"),
+            format!("To {down}%"),
+            down_words,
+            (rows.set)(down),
+        ),
+    ]
+    .map(|e| e.in_group(rows.group))
+}
+
 fn radio_entry(
     title: &str,
     keywords: &'static str,
-    radio: Radio,
+    radio: RadioKind,
     on: Option<bool>,
 ) -> Option<Entry> {
     let on = on?;
@@ -293,38 +343,7 @@ fn device_entry(kind: &str, device: &AudioDevice, keywords: &'static str) -> Ent
 pub fn entries(status: &Status) -> Vec<Entry> {
     let mut out = Vec::new();
     if let Some(v) = status.volume {
-        let (title, hint) = if v.muted {
-            ("Volume: muted".to_owned(), "Enter to unmute")
-        } else {
-            (format!("Volume: {}%", v.percent), "Enter to mute")
-        };
-        out.push(
-            entry(
-                &title,
-                hint,
-                "sound audio speakers mute unmute",
-                Action::Mute(!v.muted),
-            )
-            .in_group(Group::Output),
-        );
-        out.push(
-            entry(
-                "Volume up",
-                format!("To {}%", v.percent.saturating_add(VOLUME_STEP).min(100)),
-                "louder sound audio",
-                Action::SetVolume(v.percent.saturating_add(VOLUME_STEP).min(100)),
-            )
-            .in_group(Group::Output),
-        );
-        out.push(
-            entry(
-                "Volume down",
-                format!("To {}%", v.percent.saturating_sub(VOLUME_STEP)),
-                "quieter sound audio",
-                Action::SetVolume(v.percent.saturating_sub(VOLUME_STEP)),
-            )
-            .in_group(Group::Output),
-        );
+        out.extend(volume_entries(v, &OUTPUT_ROWS));
     }
     for device in &status.outputs {
         out.push(
@@ -333,38 +352,7 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         );
     }
     if let Some(m) = status.mic {
-        let (title, hint) = if m.muted {
-            ("Microphone: muted".to_owned(), "Enter to unmute")
-        } else {
-            (format!("Microphone: {}%", m.percent), "Enter to mute")
-        };
-        out.push(
-            entry(
-                &title,
-                hint,
-                "mic input audio mute unmute",
-                Action::MuteMic(!m.muted),
-            )
-            .in_group(Group::Input),
-        );
-        out.push(
-            entry(
-                "Microphone up",
-                format!("To {}%", m.percent.saturating_add(VOLUME_STEP).min(100)),
-                "mic input louder",
-                Action::SetMicVolume(m.percent.saturating_add(VOLUME_STEP).min(100)),
-            )
-            .in_group(Group::Input),
-        );
-        out.push(
-            entry(
-                "Microphone down",
-                format!("To {}%", m.percent.saturating_sub(VOLUME_STEP)),
-                "mic input quieter",
-                Action::SetMicVolume(m.percent.saturating_sub(VOLUME_STEP)),
-            )
-            .in_group(Group::Input),
-        );
+        out.extend(volume_entries(m, &INPUT_ROWS));
     }
     for device in &status.inputs {
         out.push(device_entry("Input", device, "microphone mic audio").in_group(Group::Input));
@@ -391,8 +379,13 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         );
     }
     out.extend(
-        radio_entry("Wi-Fi", "wifi wireless network", Radio::Wifi, status.wifi)
-            .map(|e| e.in_group(Group::Wifi)),
+        radio_entry(
+            "Wi-Fi",
+            "wifi wireless network",
+            RadioKind::Wifi,
+            status.wifi,
+        )
+        .map(|e| e.in_group(Group::Wifi)),
     );
     for network in &status.wifi_networks {
         let (subtitle, action) = if network.connected {
@@ -411,7 +404,7 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         };
         out.push(
             entry(
-                &format!("Wi-Fi: {}", network.name),
+                &format!("Wi-Fi: {}", network.ssid),
                 subtitle,
                 "wifi wi-fi wireless network connect",
                 action,
@@ -434,7 +427,7 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         radio_entry(
             "Bluetooth",
             "wireless devices",
-            Radio::Bluetooth,
+            RadioKind::Bluetooth,
             status.bluetooth,
         )
         .map(|e| e.in_group(Group::Bluetooth)),
@@ -514,10 +507,31 @@ fn volume_request(query: &str) -> Option<(bool, u8)> {
     (percent <= 100).then_some((input, percent))
 }
 
+/// The `rows` that match `query` (already trimmed), best first; all of them, in order, for an
+/// empty query. A match on the title counts for more than one on the keywords.
+fn rank_entries(query: &str, rows: impl IntoIterator<Item = Entry>) -> Vec<Entry> {
+    if query.is_empty() {
+        return rows.into_iter().collect();
+    }
+    let mut scored: Vec<(f64, Entry)> = rows
+        .into_iter()
+        .filter_map(|e| {
+            let by_title = fuzzy(query, &e.title);
+            let by_keywords = fuzzy(query, e.keywords).map(|s| s * 0.5);
+            by_title
+                .into_iter()
+                .chain(by_keywords)
+                .max_by(f64::total_cmp)
+                .map(|score| (score, e))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    scored.into_iter().map(|(_, e)| e).collect()
+}
+
 /// The rows for `status` that match `query`, best first. An empty query matches them all.
 pub fn find(query: &str, status: &Status) -> Vec<Entry> {
     let query = query.trim();
-    let mut all = entries(status);
     let mut out = Vec::new();
     match volume_request(query) {
         Some((false, percent)) if status.volume.is_some() => out.push(entry(
@@ -534,48 +548,15 @@ pub fn find(query: &str, status: &Status) -> Vec<Entry> {
         )),
         _ => {}
     }
-    if query.is_empty() {
-        out.append(&mut all);
-        return out;
-    }
-    let mut scored: Vec<(f64, Entry)> = all
-        .into_iter()
-        .filter_map(|e| {
-            let by_title = fuzzy(query, &e.title);
-            let by_keywords = fuzzy(query, e.keywords).map(|s| s * 0.5);
-            by_title
-                .into_iter()
-                .chain(by_keywords)
-                .max_by(f64::total_cmp)
-                .map(|score| (score, e))
-        })
-        .collect();
-    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
-    out.extend(scored.into_iter().map(|(_, e)| e));
+    out.extend(rank_entries(query, entries(status)));
     out
 }
 
 /// The rows of one panel that match `query`, best first; all of them, in order, for an empty
 /// query.
 pub fn find_group(group: Group, query: &str, status: &Status) -> Vec<Entry> {
-    let query = query.trim();
     let rows = entries(status).into_iter().filter(|e| e.group == group);
-    if query.is_empty() {
-        return rows.collect();
-    }
-    let mut scored: Vec<(f64, Entry)> = rows
-        .filter_map(|e| {
-            let by_title = fuzzy(query, &e.title);
-            let by_keywords = fuzzy(query, e.keywords).map(|s| s * 0.5);
-            by_title
-                .into_iter()
-                .chain(by_keywords)
-                .max_by(f64::total_cmp)
-                .map(|score| (score, e))
-        })
-        .collect();
-    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
-    scored.into_iter().map(|(_, e)| e).collect()
+    rank_entries(query.trim(), rows)
 }
 
 const WEEKDAYS: [&str; 7] = [
@@ -602,6 +583,16 @@ const MONTHS: [&str; 12] = [
     "December",
 ];
 
+/// `hour` (0 to 23) on a 12 hour clock, and `am` or `pm`.
+const fn hour12(hour: u16) -> (u16, &'static str) {
+    match hour {
+        0 => (12, "am"),
+        1..=11 => (hour, "am"),
+        12 => (12, "pm"),
+        _ => (hour - 12, "pm"),
+    }
+}
+
 /// `10:42 pm, Saturday 31 October 2026`. `weekday` counts from Sunday = 0, `month` from 1.
 pub fn format_clock(
     year: u16,
@@ -611,28 +602,15 @@ pub fn format_clock(
     hour: u16,
     minute: u16,
 ) -> String {
-    let (hour12, suffix) = match hour {
-        0 => (12, "am"),
-        1..=11 => (hour, "am"),
-        12 => (12, "pm"),
-        _ => (hour - 12, "pm"),
-    };
-    format!(
-        "{hour12}:{minute:02} {suffix}, {} {day} {} {year}",
-        WEEKDAYS[usize::from(weekday) % 7],
-        MONTHS[usize::from(month.saturating_sub(1)) % 12],
-    )
+    let (hour, suffix) = hour12(hour);
+    let date = format_date(year, month, day, weekday);
+    format!("{hour}:{minute:02} {suffix}, {date}")
 }
 
 /// `10:42:07 pm`.
 pub fn format_time(hour: u16, minute: u16, second: u16) -> String {
-    let (hour12, suffix) = match hour {
-        0 => (12, "am"),
-        1..=11 => (hour, "am"),
-        12 => (12, "pm"),
-        _ => (hour - 12, "pm"),
-    };
-    format!("{hour12}:{minute:02}:{second:02} {suffix}")
+    let (hour, suffix) = hour12(hour);
+    format!("{hour}:{minute:02}:{second:02} {suffix}")
 }
 
 /// `Saturday 31 October 2026`. `weekday` counts from Sunday = 0, `month` from 1.
@@ -684,20 +662,20 @@ mod tests {
                 "Mic (RME Babyface Pro)",
                 true,
             )],
-            bluetooth_devices: vec![BluetoothDevice {
+            bluetooth_devices: vec![PairedDevice {
                 name: "WH-1000XM5".into(),
                 connected: true,
             }],
             wifi_networks: vec![
                 WifiNetwork {
                     profile: "Home".into(),
-                    name: "Home".into(),
+                    ssid: "Home".into(),
                     signal: 80,
                     connected: true,
                 },
                 WifiNetwork {
                     profile: "Cafe".into(),
-                    name: "Cafe wifi".into(),
+                    ssid: "Cafe wifi".into(),
                     signal: 40,
                     connected: false,
                 },
@@ -878,9 +856,9 @@ mod tests {
     #[test]
     fn toggles_flip_the_current_state() {
         let rows = find("bluetooth", &status());
-        assert_eq!(rows[0].action, Action::SetRadio(Radio::Bluetooth, true));
+        assert_eq!(rows[0].action, Action::SetRadio(RadioKind::Bluetooth, true));
         let rows = find("wi-fi", &status());
-        assert_eq!(rows[0].action, Action::SetRadio(Radio::Wifi, false));
+        assert_eq!(rows[0].action, Action::SetRadio(RadioKind::Wifi, false));
         // Both the speakers and the microphone have a mute row.
         let rows = find("mute", &status());
         assert!(rows.iter().any(|e| e.action == Action::Mute(true)));
