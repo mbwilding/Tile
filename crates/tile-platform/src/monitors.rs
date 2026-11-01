@@ -1,7 +1,8 @@
 use tile_core::{MonitorId, MonitorInfo, Rect};
 use winsafe::{self as w, prelude::*};
 
-pub(crate) const fn rect(r: w::RECT) -> Rect {
+/// A Win32 rectangle as a [`Rect`].
+pub const fn rect(r: w::RECT) -> Rect {
     Rect::from_ltrb(r.left, r.top, r.right, r.bottom)
 }
 

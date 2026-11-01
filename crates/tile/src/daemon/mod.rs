@@ -23,10 +23,10 @@ use tile_config::Loaded;
 use tile_core::{Command, LayoutKind, MonitorInfo, Rect, WindowId};
 use tile_hook::notify::{Host, Registry};
 use tile_ipc::{Incoming, Response, Server};
+use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
-    Animation, Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Launcher,
-    LauncherEvent, LauncherSettings, Mover, Tray, TrayEvent, WinDrag, WinEvent, WinEventHooks,
-    Windows,
+    Animation, Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Mover,
+    Tray, TrayEvent, WinDrag, WinEvent, WinEventHooks, Windows,
     desktops::{self as vd, DesktopChange},
     foreground,
 };

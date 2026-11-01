@@ -1,0 +1,21 @@
+[package]
+name = "tile-launcher"
+description = "The app launcher: its search, calculator and system items, and its window"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tile-core.workspace = true
+tile-config.workspace = true
+tile-hook.workspace = true
+tile-platform.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt", "sync"] }
+tracing.workspace = true
+winsafe.workspace = true
+
+[lints]
+workspace = true

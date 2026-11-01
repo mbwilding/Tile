@@ -10,6 +10,7 @@ tile-core.workspace = true
 tile-config.workspace = true
 tile-hook.workspace = true
 tile-ipc.workspace = true
+tile-launcher.workspace = true
 tile-platform.workspace = true
 tile-remap.workspace = true
 anyhow.workspace = true

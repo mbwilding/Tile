@@ -24,6 +24,7 @@ tile-core = { path = "crates/tile-core" }
 tile-hook = { path = "crates/tile-hook" }
 tile-config = { path = "crates/tile-config" }
 tile-ipc = { path = "crates/tile-ipc" }
+tile-launcher = { path = "crates/tile-launcher" }
 tile-platform = { path = "crates/tile-platform" }
 tile-remap = { path = "crates/tile-remap" }
 

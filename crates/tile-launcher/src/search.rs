@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Command, command::DISPATCHERS};
+use tile_core::{Command, command::DISPATCHERS};
 
 /// An app the launcher can start.
 #[derive(Debug, Clone, PartialEq, Eq)]

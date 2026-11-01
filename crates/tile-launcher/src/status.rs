@@ -1,6 +1,6 @@
 //! Reading the system for the launcher's system items and carrying out their actions.
 
-use tile_core::system::{
+use crate::system::{
     Action, AudioDevice, Battery, BluetoothDevice, Network, Radio, Status, Volume, WifiNetwork,
     format_clock,
 };

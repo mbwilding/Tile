@@ -18,7 +18,7 @@ use tile_config::{IndicatorPosition, IndicatorStyle, WorkspaceIndicator as Confi
 use tile_core::Rect;
 use winsafe::{self as w, co, guard::DeleteObjectGuard, gui, prelude::*};
 
-use crate::launcher::{colorref, corner_preference, wake};
+use crate::gui::{colorref, corner_preference, wake};
 
 const FADE_TIMER: usize = 1;
 const FRAME_MS: u32 = 15;

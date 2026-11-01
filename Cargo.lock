@@ -987,6 +987,7 @@ dependencies = [
  "tile-core",
  "tile-hook",
  "tile-ipc",
+ "tile-launcher",
  "tile-platform",
  "tile-remap",
  "tokio",
@@ -1042,11 +1043,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "tile-platform"
+name = "tile-launcher"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "serde",
  "serde_json",
+ "tile-config",
+ "tile-core",
+ "tile-hook",
+ "tile-platform",
+ "tokio",
+ "tracing",
+ "winsafe",
+]
+
+[[package]]
+name = "tile-platform"
+version = "0.1.0"
+dependencies = [
  "tile-config",
  "tile-core",
  "tile-hook",

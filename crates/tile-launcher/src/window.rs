@@ -18,18 +18,22 @@ use std::{
 };
 
 use regex::RegexSet;
-use tile_config::{Color, Corners, Launcher as Config, LauncherStyle, SearchPosition};
-use tile_core::{
-    Command, Rect, calc,
-    input::Input,
-    search::{self, App, CommandEntry, RankOptions, Usage},
-    system::{self, Action, Group, Power, format_date, format_time},
-};
+use tile_config::{Color, Launcher as Config, LauncherStyle, SearchPosition};
+use tile_core::{Command, Rect};
 use tile_hook::notify::{Click, IconImage, ItemKey, Registry, TrayItem};
+use tile_platform::{
+    colorref, corner_preference, enumerate, focus_hwnd, is_shell_window, monitors, rect, wake,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use winsafe::{self as w, co, guard::DeleteObjectGuard, gui, prelude::*};
 
-use crate::monitors::rect;
+use crate::{
+    calc,
+    input::Input,
+    search::{self, App, CommandEntry, RankOptions, Usage},
+    status,
+    system::{self, Action, Group, Power, format_date, format_time},
+};
 
 /// What the launcher asks the daemon to do.
 #[derive(Debug, Clone, PartialEq)]
@@ -158,14 +162,6 @@ impl Launcher {
     }
 }
 
-/// Has the window in `hwnd` (once made) read its requests.
-pub(crate) fn wake(hwnd: &AtomicIsize) {
-    let hwnd = hwnd.load(Ordering::Acquire);
-    if hwnd != 0 {
-        tile_hook::post_app(hwnd, 0);
-    }
-}
-
 /// Everything Start lists, by name. Runs COM on the calling thread.
 fn list_apps() -> Vec<App> {
     let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
@@ -196,10 +192,6 @@ fn list_apps() -> Vec<App> {
     apps.sort_by_cached_key(|a| (a.name.to_lowercase(), a.id.clone()));
     apps.dedup();
     apps
-}
-
-pub(crate) const fn colorref(c: Color) -> w::COLORREF {
-    w::COLORREF::from_rgb(c.r, c.g, c.b)
 }
 
 /// `a` moved `amount` (0-255) of the way towards `b`.
@@ -353,14 +345,14 @@ const MENU_POLL_MS: u32 = 250;
 
 /// The process that owns the window `raw`.
 fn pid_of(raw: isize) -> Option<u32> {
-    crate::windows::enumerate(|h| h.ptr() as isize == raw)
+    enumerate(|h| h.ptr() as isize == raw)
         .first()
         .map(|h| h.GetWindowThreadProcessId().1)
 }
 
 /// The windows of the process `pid` that are showing.
 fn visible_windows(pid: u32) -> HashSet<isize> {
-    crate::windows::enumerate(|h| h.GetWindowThreadProcessId().1 == pid && h.IsWindowVisible())
+    enumerate(|h| h.GetWindowThreadProcessId().1 == pid && h.IsWindowVisible())
         .iter()
         .map(|h| h.ptr() as isize)
         .collect()
@@ -372,7 +364,7 @@ fn visible_windows(pid: u32) -> HashSet<isize> {
 /// the pointer: above it, or below if there isn't room, kept on that monitor.
 fn move_corner_popups(pid: u32, baseline: &HashSet<isize>, at: (i32, i32)) {
     let caption = co::WS::CAPTION.raw() as isize;
-    let candidates = crate::windows::enumerate(|h| {
+    let candidates = enumerate(|h| {
         h.GetWindowThreadProcessId().1 == pid
             && h.IsWindowVisible()
             && !baseline.contains(&(h.ptr() as isize))
@@ -381,7 +373,7 @@ fn move_corner_popups(pid: u32, baseline: &HashSet<isize>, at: (i32, i32)) {
     if candidates.is_empty() {
         return;
     }
-    let monitors = crate::monitors::monitors();
+    let monitors = monitors();
     for hwnd in candidates {
         let Ok(r) = hwnd.GetWindowRect() else {
             continue;
@@ -971,7 +963,7 @@ fn open_area(preferred: Option<Rect>) -> Option<Rect> {
     // Windows may leave focus on a window of another monitor.
     let focused = || {
         w::HWND::GetForegroundWindow()
-            .filter(|hwnd| !crate::is_shell_window(hwnd.ptr() as isize))
+            .filter(|hwnd| !is_shell_window(hwnd.ptr() as isize))
             .and_then(|hwnd| work_area(hwnd.MonitorFromWindow(co::MONITOR::DEFAULTTONEAREST)))
     };
     preferred.or_else(focused).or_else(|| {
@@ -980,14 +972,6 @@ fn open_area(preferred: Option<Rect>) -> Option<Rect> {
             co::MONITOR::DEFAULTTONEAREST,
         ))
     })
-}
-
-pub(crate) const fn corner_preference(corners: Corners) -> co::DWMWCP {
-    match corners {
-        Corners::Round => co::DWMWCP::ROUND,
-        Corners::Small => co::DWMWCP::ROUNDSMALL,
-        Corners::Square => co::DWMWCP::DONOTROUND,
-    }
 }
 
 fn style_window(hwnd: &w::HWND, settings: &LauncherSettings) {
@@ -1088,7 +1072,7 @@ fn run(
             let spawned = thread::Builder::new()
                 .name("launcher system".into())
                 .spawn(move || {
-                    let status = crate::system::status();
+                    let status = status::status();
                     reading.store(false, Ordering::Release);
                     let _ = tx.send(Request::System(status));
                     wake(&hwnd_slot);
@@ -1193,7 +1177,7 @@ fn run(
             let _ = hwnd.UpdateWindow();
             // The bar's clock shows seconds.
             let _ = hwnd.SetTimer(CLOCK_TIMER, 1000, None);
-            if !crate::windows::focus_hwnd(hwnd) {
+            if !focus_hwnd(hwnd) {
                 tracing::debug!("the launcher didn't get focus");
             }
             refresh();
@@ -1323,7 +1307,7 @@ fn run(
                 let _ = hwnd.KillTimer(MENU_TIMER);
                 return Ok(());
             }
-            let open = !crate::windows::enumerate(|h| {
+            let open = !enumerate(|h| {
                 h.IsWindowVisible() && h.GetClassName().is_ok_and(|c| c == "#32768")
             })
             .is_empty();
@@ -1341,12 +1325,12 @@ fn run(
                 f != *hwnd
                     && f.IsWindowVisible()
                     && f.GetWindowText().is_ok_and(|t| !t.is_empty())
-                    && !crate::is_shell_window(f.ptr() as isize)
+                    && !is_shell_window(f.ptr() as isize)
             });
             if elsewhere {
                 hide();
             } else {
-                crate::windows::focus_hwnd(hwnd);
+                focus_hwnd(hwnd);
                 let _ = hwnd.InvalidateRect(None, false);
             }
             Ok(())

@@ -137,7 +137,8 @@ fn focus_attached(hwnd: &w::HWND) -> bool {
     focused
 }
 
-pub(crate) fn focus_hwnd(hwnd: &w::HWND) -> bool {
+/// Brings `hwnd` to the foreground, restoring it if minimised. `false` if Windows refused.
+pub fn focus_hwnd(hwnd: &w::HWND) -> bool {
     if hwnd.IsIconic() {
         let _ = hwnd.ShowWindowAsync(co::SW::RESTORE);
     }
@@ -206,7 +207,8 @@ pub fn close_foreground() {
 }
 
 /// Enumerates top-level windows, keeping the handles `keep` selects.
-pub(crate) fn enumerate(mut keep: impl FnMut(&w::HWND) -> bool) -> Vec<w::HWND> {
+/// The top-level windows for which `keep` returns true.
+pub fn enumerate(mut keep: impl FnMut(&w::HWND) -> bool) -> Vec<w::HWND> {
     let mut out = Vec::new();
     let result = w::EnumWindows(|hwnd: w::HWND| {
         if keep(&hwnd) {

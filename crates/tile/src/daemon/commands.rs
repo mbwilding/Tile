@@ -1,10 +1,8 @@
 //! Running dispatchers and launcher actions.
 
 use std::path::Path;
-use tile_core::{
-    Command, Effect, MonitorInfo, Rect, WindowId,
-    system::{Action, Power},
-};
+use tile_core::{Command, Effect, MonitorInfo, Rect, WindowId};
+use tile_launcher::system::{Action, Power};
 use tile_platform::{close_foreground, cursor_pos, desktops as vd, focus_exe, set_cursor_pos};
 
 use super::Daemon;
@@ -15,7 +13,7 @@ impl Daemon {
     pub(super) fn run_system(&mut self, action: Action) {
         if action == Action::Power(Power::Lock) {
             self.run_command(Command::Lock);
-        } else if let Some(line) = tile_platform::system_command_line(&action) {
+        } else if let Some(line) = tile_launcher::system_command_line(&action) {
             launch::exec(&line);
         } else {
             let what = format!("{action:?}");
@@ -23,7 +21,7 @@ impl Daemon {
             let spawned = std::thread::Builder::new()
                 .name("system action".into())
                 .spawn(move || {
-                    if !tile_platform::apply_system_action(&action) {
+                    if !tile_launcher::apply_system_action(&action) {
                         tracing::warn!("couldn't do {failed}");
                     }
                 });
