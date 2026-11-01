@@ -174,6 +174,20 @@ then fades out. It never takes focus and clicks go through it.
 | `background` | `theme.accent` | Its colour. |
 | `foreground` | `theme.accent_foreground` | The number's colour. |
 
+### `notifications`
+
+Popups for Windows toast notifications, read through `UserNotificationListener`. See
+[Windows integration](windows-integration.md#notifications).
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Show a popup for each new notification. |
+| `position` | `bottom_right` | Where it sits on the monitor's work area: `center`, `top`, `top_left`, `top_right`, `bottom`, `bottom_left`, `bottom_right`, `left` or `right`. |
+| `gap` | `16` | Pixels from the edges it sits against, at 100% scaling. Unused for `center`. |
+| `width` | `340` | Width in pixels at 100% scaling. It grows tall enough for the text. |
+| `duration_ms` | `5000` | How long it stays shown before it fades out. |
+| `fade_ms` | `400` | How long it then takes to fade out. `0` hides it at once. |
+
 ### `binds`
 
 Keybinds, as `<keys>: <dispatcher>`. They add to the [default binds](keybinds.md#default-keys):
@@ -315,6 +329,14 @@ workspace_indicator:
   opacity: 0.95                 # 0.1 to 1.0
   # background: "#89b4fa"       # unset follows theme.accent
   # foreground: "#1e1e2e"       # unset follows theme.accent_foreground
+
+notifications:
+  enabled: false                # show a popup for each new Windows toast notification
+  position: bottom_right        # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
+  gap: 16                       # px from the edges, unused for center
+  width: 340                    # px at 100% scaling
+  duration_ms: 5000             # fully shown
+  fade_ms: 400                  # then fades out
 
 binds: {}                       # added to the default binds; see keybinds.md
 

@@ -131,6 +131,7 @@ impl Daemon {
                     .set_settings(indicator_settings(&self.loaded));
                 self.install_binds();
                 self.update_remap();
+                self.update_notifications();
                 self.update_cursor();
                 self.sync_shell();
                 match (self.tiling, self.loaded.config.general.tiling) {
