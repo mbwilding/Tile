@@ -11,7 +11,6 @@ use std::{
 use tile_config::{Keybind, Modifiers};
 use tile_input::{Decision, Handler, Input, RawKey};
 use tokio::sync::mpsc;
-use win_hotkeys::VKey;
 use winsafe::{self as w, co};
 
 /// An unassigned virtual key: tapping it while Win is down stops Win's release opening Start.
@@ -208,31 +207,20 @@ impl Hotkeys {
     }
 
     /// Replaces the bind table. The `bool` marks binds that also work while paused.
-    /// Returns a message for every bind whose key isn't recognised.
-    pub fn set_binds(&self, binds: &[(Keybind, bool)]) -> Vec<String> {
-        let mut errors = Vec::new();
+    pub fn set_binds(&self, binds: &[(Keybind, bool)]) {
         let table = binds
             .iter()
             .enumerate()
-            .filter_map(
-                |(index, (bind, always))| match VKey::from_keyname(&bind.key) {
-                    Ok(key) => Some(Binding {
-                        vk: key.to_vk_code(),
-                        modifiers: bind.modifiers,
-                        index,
-                        always: *always,
-                    }),
-                    Err(e) => {
-                        errors.push(format!("bind `{bind}`: {e}"));
-                        None
-                    }
-                },
-            )
+            .map(|(index, (bind, always))| Binding {
+                vk: bind.vk,
+                modifiers: bind.modifiers,
+                index,
+                always: *always,
+            })
             .collect();
         if let Ok(mut t) = self.table.write() {
             *t = table;
         }
-        errors
     }
 
     pub fn set_paused(&self, paused: bool) {

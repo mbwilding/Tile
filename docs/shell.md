@@ -90,16 +90,19 @@ error 0x80040900 (or "class not registered" or a "File system error").
 
 When Windows starts Tile as the shell (`Tile.exe --shell`, the copy that runs with your normal
 rights), that process answers instead. It creates the same component Explorer does, the shell's
-`UwpWindowLifecycleManager`, on a CoreMessaging session of its own. Nothing else of Explorer runs.
+`Windows.Internal.Shell.UwpWindowLifecycleManagement.UwpWindowLifecycleManager`, on a
+CoreMessaging session of its own: it makes the session with `CoreUICreateEx`, calls the
+manager's static `Create` from the session's thread (which opens it with `CoreUIOpenExisting`),
+then runs the session. Nothing else of Explorer runs.
 This is on whenever Tile is your sign-in shell, and it stands aside if
 Explorer owns the taskbar.
 
 A Store app's window starts hidden by the shell and has no title bar, so the same process also
 finds each new one, asks `ApplicationFrameHost` for a frame (the window with the title bar and
 close button), puts the app in it, lifts the hiding, keeps the app the size of its frame and keeps
-Windows from freezing the app while it has no visible window. Lifting the hiding needs access
-Windows only gives the shell window's owner, so the process registers a hidden window as the shell
-window. It also registers a stand-in for the `ImmersiveShell` class, which Store apps ask for, that
+Windows from freezing the app while it has no visible window. Lifting the hiding needs the Immersive App
+Management key Windows only gives the shell window's owner, so the process registers a hidden
+window as the shell window. It also registers a stand-in for the `ImmersiveShell` class, which Store apps ask for, that
 gives them no services.
 
 The frame host reports the close button, `Alt+F4` and the system menu's Close to this process,
@@ -107,7 +110,8 @@ which asks the app to close (and ends it if it hasn't after three seconds); the 
 
 Without Explorer nothing tells a Store app how big its window is, so one would lay itself out for
 the whole monitor and never follow its frame. The same process therefore sends each app its
-frame's size, through the shell's window management service, whenever it changes. The frame also
+frame's size whenever it changes, with `UniversalAppModelInProc`'s `SetBounds` and
+`SetVisibleBounds`, which only answer the shell process. The frame also
 gets its app's title, which is what lets Tile manage and tile it like any other window, and
 frames with no app in them (left by an earlier helper, or the frame host's spares) are destroyed so
 they don't show up as empty blue windows.

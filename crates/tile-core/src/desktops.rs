@@ -1,14 +1,19 @@
+//! One tiling [`State`] per virtual desktop.
+
 use std::collections::HashMap;
 
-use tile_core::{
+use crate::{
     Effect, LayoutKind, LayoutSettings, ManageOptions, MonitorInfo, State, WindowId, WindowInfo,
 };
-use tile_platform::desktops::DesktopId;
+
+/// A virtual desktop, identified by its GUID.
+pub type DesktopId = u128;
 
 /// One tiling [`State`] (workspaces + layouts) per native virtual desktop.
 ///
 /// Windows on other desktops are cloaked by the shell, not closed, so they stay managed by
 /// their desktop's state and keep their place in its layouts.
+#[derive(Debug)]
 pub struct Desktops {
     states: HashMap<DesktopId, State>,
     current: DesktopId,
@@ -18,13 +23,8 @@ pub struct Desktops {
     monitors: Vec<MonitorInfo>,
 }
 
-/// Effects from a background desktop must never steal focus.
-fn background(mut effects: Vec<Effect>) -> Vec<Effect> {
-    effects.retain(|e| !matches!(e, Effect::Focus(_)));
-    effects
-}
-
 impl Desktops {
+    /// Starts on `current`, with no windows or monitors yet.
     pub fn new(current: DesktopId, settings: LayoutSettings, layout: LayoutKind) -> Self {
         let mut states = HashMap::new();
         states.insert(current, State::new(settings.clone(), layout));
@@ -38,8 +38,14 @@ impl Desktops {
         }
     }
 
+    /// The desktop being shown.
     pub const fn current_id(&self) -> DesktopId {
         self.current
+    }
+
+    /// Whether `id` is managed by the desktop being shown.
+    pub fn is_current(&self, id: WindowId) -> bool {
+        self.owner(id) == Some(self.current)
     }
 
     fn state_mut(&mut self, desktop: DesktopId) -> &mut State {
@@ -51,23 +57,37 @@ impl Desktops {
         })
     }
 
+    /// `effects` from `desktop`'s state, without focus changes unless it is the one shown:
+    /// a background desktop must never steal focus.
+    fn scope_to(&self, desktop: DesktopId, mut effects: Vec<Effect>) -> Vec<Effect> {
+        if desktop != self.current {
+            effects.retain(|e| !matches!(e, Effect::Focus(_)));
+        }
+        effects
+    }
+
+    /// The state of the desktop being shown.
     pub fn current(&mut self) -> &mut State {
         self.state_mut(self.current)
     }
 
+    /// The state of the desktop being shown, read only.
     pub fn current_ref(&self) -> &State {
         // The current desktop's state is created on construction and on every switch.
         &self.states[&self.current]
     }
 
+    /// The desktop that manages `id`.
     pub fn owner(&self, id: WindowId) -> Option<DesktopId> {
         self.owner.get(&id).copied()
     }
 
+    /// Whether any desktop manages `id`.
     pub fn is_managed(&self, id: WindowId) -> bool {
         self.owner.contains_key(&id)
     }
 
+    /// Every managed window, on every desktop.
     pub fn managed(&self) -> Vec<WindowId> {
         self.owner.keys().copied().collect()
     }
@@ -81,10 +101,12 @@ impl Desktops {
         self.states.get(&self.owner(id)?)
     }
 
+    /// Whether `id` is on a workspace that isn't shown.
     pub fn is_hidden(&self, id: WindowId) -> bool {
         self.owner_ref(id).is_some_and(|s| s.is_hidden(id))
     }
 
+    /// Whether `id` floats.
     pub fn is_floating(&self, id: WindowId) -> bool {
         self.owner_ref(id).is_some_and(|s| s.is_floating(id))
     }
@@ -99,13 +121,10 @@ impl Desktops {
             return Vec::new();
         };
         let effects = f(self.state_mut(desktop));
-        if desktop == self.current {
-            effects
-        } else {
-            background(effects)
-        }
+        self.scope_to(desktop, effects)
     }
 
+    /// Manages a window that opened on `desktop`.
     pub fn open(
         &mut self,
         desktop: DesktopId,
@@ -115,44 +134,39 @@ impl Desktops {
     ) -> Vec<Effect> {
         self.owner.insert(id, desktop);
         let effects = self.state_mut(desktop).window_opened(id, info, opts);
-        if desktop == self.current {
-            effects
-        } else {
-            background(effects)
-        }
+        self.scope_to(desktop, effects)
     }
 
+    /// Forgets a window that closed.
     pub fn close(&mut self, id: WindowId) -> Vec<Effect> {
         let effects = self.with_owner(id, |s| s.window_closed(id));
         self.owner.remove(&id);
         effects
     }
 
+    /// Shows `desktop`'s state, as the user switched to it.
     pub fn switch_to(&mut self, desktop: DesktopId) -> Vec<Effect> {
         self.current = desktop;
         self.current().sync()
     }
 
     fn for_all(&mut self, mut f: impl FnMut(&mut State) -> Vec<Effect>) -> Vec<Effect> {
-        let current = self.current;
-        self.states
-            .iter_mut()
-            .flat_map(|(desktop, state)| {
-                let effects = f(state);
-                if *desktop == current {
-                    effects
-                } else {
-                    background(effects)
-                }
-            })
-            .collect()
+        let mut effects = Vec::new();
+        let desktops: Vec<DesktopId> = self.states.keys().copied().collect();
+        for desktop in desktops {
+            let changed = f(self.state_mut(desktop));
+            effects.extend(self.scope_to(desktop, changed));
+        }
+        effects
     }
 
+    /// Updates the monitors on every desktop.
     pub fn set_monitors(&mut self, monitors: Vec<MonitorInfo>) -> Vec<Effect> {
         self.monitors.clone_from(&monitors);
         self.for_all(|s| s.set_monitors(monitors.clone()))
     }
 
+    /// Updates the layout settings and default layout on every desktop.
     pub fn set_settings(&mut self, settings: LayoutSettings, layout: LayoutKind) -> Vec<Effect> {
         self.settings = settings.clone();
         self.layout = layout;
@@ -162,9 +176,8 @@ impl Desktops {
 
 #[cfg(test)]
 mod tests {
-    use tile_core::{MonitorId, geometry::Rect};
-
     use super::*;
+    use crate::{Command, MonitorId, geometry::Rect};
 
     const ONE: DesktopId = 1;
     const TWO: DesktopId = 2;
@@ -201,6 +214,7 @@ mod tests {
         assert_eq!(d.owner(W), Some(ONE));
         assert_eq!(d.owner(X), Some(TWO));
         assert!(d.is_managed(W) && d.is_managed(X));
+        assert!(d.is_current(W) && !d.is_current(X));
         assert_eq!(d.managed().len(), 2);
         assert_eq!(d.current_id(), ONE);
     }
@@ -263,7 +277,7 @@ mod tests {
     fn hidden_windows_are_collected_from_every_desktop() {
         let mut d = desktops();
         open(&mut d, ONE, W);
-        d.current().apply(&tile_core::Command::Workspace(2));
+        d.current().apply(&Command::Workspace(2));
         assert_eq!(d.hidden(), vec![W]);
         assert!(d.is_hidden(W));
     }

@@ -30,7 +30,7 @@ pub enum Notice {
     Panic,
 }
 
-/// keyd's emergency exit: Backspace, Escape and Enter held together (physical keys).
+/// The emergency exit: Backspace, Escape and Enter held together (physical keys).
 const PANIC: [Key; 3] = [Key::BACKSPACE, Key::ESC, Key::ENTER];
 
 /// The Shift Windows fakes around numpad keys while Num Lock is on (`E0 2A` / `E0 36`).

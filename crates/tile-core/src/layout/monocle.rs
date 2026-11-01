@@ -1,4 +1,4 @@
-use super::{Layout, LayoutSettings, Tile};
+use super::{Layout, LayoutSettings, Tile, WindowList};
 use crate::{
     WindowId,
     geometry::{Direction, Rect},
@@ -7,7 +7,7 @@ use crate::{
 /// Every window fills the workspace; focus cycles through them.
 #[derive(Debug, Clone, Default)]
 pub struct Monocle {
-    windows: Vec<WindowId>,
+    windows: WindowList,
 }
 
 impl Layout for Monocle {
@@ -18,42 +18,42 @@ impl Layout for Monocle {
         _area: Rect,
         _s: &LayoutSettings,
     ) {
-        self.windows.push(id);
+        self.windows.0.push(id);
     }
 
     fn remove(&mut self, id: WindowId) {
-        self.windows.retain(|w| *w != id);
+        self.windows.remove(id);
     }
 
     fn windows(&self) -> Vec<WindowId> {
-        self.windows.clone()
+        self.windows.0.clone()
     }
 
-    fn arrange(&mut self, area: Rect, _focused: Option<WindowId>, s: &LayoutSettings) -> Vec<Tile> {
-        let rect = area.shrink(s.gaps_out);
+    fn arrange(
+        &mut self,
+        area: Rect,
+        _focused: Option<WindowId>,
+        _s: &LayoutSettings,
+    ) -> Vec<Tile> {
         self.windows
+            .0
             .iter()
             .map(|id| Tile {
                 id: *id,
-                rect,
+                rect: area,
                 visible: true,
             })
             .collect()
     }
 
     fn swap(&mut self, a: WindowId, b: WindowId) {
-        let pa = self.windows.iter().position(|w| *w == a);
-        let pb = self.windows.iter().position(|w| *w == b);
-        if let (Some(pa), Some(pb)) = (pa, pb) {
-            self.windows.swap(pa, pb);
-        }
+        self.windows.swap(a, b);
     }
 
-    fn resize(&mut self, _id: WindowId, _dx: i32, _dy: i32, _area: Rect, _s: &LayoutSettings) {}
-
     fn neighbor(&self, id: WindowId, dir: Direction, _tiles: &[Tile]) -> Option<WindowId> {
-        let len = self.windows.len();
-        let pos = self.windows.iter().position(|w| *w == id)?;
+        let windows = &self.windows.0;
+        let len = windows.len();
+        let pos = self.windows.position(id)?;
         if len < 2 {
             return None;
         }
@@ -62,7 +62,7 @@ impl Layout for Monocle {
         } else {
             (pos + 1) % len
         };
-        Some(self.windows[next])
+        Some(windows[next])
     }
 }
 
@@ -84,10 +84,10 @@ mod tests {
     }
 
     #[test]
-    fn every_window_fills_the_area_inside_the_outer_gap() {
+    fn every_window_fills_the_area() {
         let (mut m, s) = filled(&[A, B]);
-        let tiles = m.arrange(Rect::new(0, 0, 1000, 800), None, &s);
-        let expected = Rect::new(0, 0, 1000, 800).shrink(s.gaps_out);
+        let expected = Rect::new(0, 0, 1000, 800);
+        let tiles = m.arrange(expected, None, &s);
         assert_eq!(tiles.len(), 2);
         assert!(tiles.iter().all(|t| t.rect == expected && t.visible));
     }

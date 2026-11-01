@@ -44,11 +44,28 @@ a different bind.
 ## Writing a key
 
 A key is `"<modifiers>+<key>"`. Modifiers are `super` (or `win`), `shift`, `ctrl` and `alt`; a
-bind fires only when exactly those modifiers are held. Keys are letters, digits, `f1`..`f24`,
-`left`/`right`/`up`/`down`, `space`, `tab`, `enter`, `esc`, `backspace`, `delete`, `insert`,
-`home`, `end`, `pageup`, `pagedown`, `print`, `comma`, `period`, `minus`, `equal`, `semicolon`,
-`slash`, `grave`, `bracketleft`, `bracketright`, `backslash`, `apostrophe`, or any Windows
-virtual-key name such as `OEM_102`.
+bind fires only when exactly those modifiers are held. A key name Tile doesn't know is a config
+error, reported when the config loads.
+
+### Key names
+
+Binds and the [key remapper](key-remapping.md#key-names) share one list of names, so a name that
+works in one works in the other. Case doesn't matter in binds.
+
+| Keys | Names |
+| --- | --- |
+| Letters and digits | `a`…`z`, `0`…`9` |
+| Function keys | `f1`…`f24` |
+| Arrows and editing | `left`, `right`, `up`, `down`, `home`, `end`, `pageup` (`pgup`), `pagedown` (`pgdn`), `insert` (`ins`), `delete` (`del`) |
+| Whitespace and control | `space`, `tab`, `enter` (`return`), `esc` (`escape`), `backspace`, `capslock`, `print` (`printscreen`, `sysrq`), `scrolllock`, `numlock`, `pause`, `menu` (`compose`, `apps`) |
+| Punctuation | `comma` (`,`), `period` (`dot`, `.`), `minus` (`-`), `equal` (`plus`, `=`), `semicolon` (`;`), `slash` (`/`), `grave` (`backtick`, `` ` ``), `bracketleft` (`leftbrace`, `[`), `bracketright` (`rightbrace`, `]`), `backslash` (`\`), `apostrophe` (`quote`, `'`), `102nd` (the extra key left of `z` on ISO keyboards) |
+| Modifier keys | `leftshift`, `rightshift`, `leftcontrol`, `rightcontrol`, `leftalt`, `rightalt`, `leftmeta` (`lwin`), `rightmeta` (`rwin`) |
+| Keypad | `kp0`…`kp9`, `kpdot`, `kpplus`, `kpminus`, `kpasterisk`, `kpslash` |
+| Media | `mute`, `volumeup`, `volumedown`, `playpause`, `stopcd`, `nextsong`, `previoussong` |
+
+Windows' virtual-key names work too, with or without `VK_` (`OEM_102`, `NUMPAD0`, `PRIOR`,
+`BROWSER_BACK`, `LAUNCH_MAIL`), and so does a raw virtual-key code such as `0x29`. Keypad Enter
+(`kpenter`) can only be remapped, not bound: Windows gives it the same virtual key as Enter.
 
 Win+L needs `override_win_l` (see [Windows integration](windows-integration.md)); without it,
 binds on it are skipped.

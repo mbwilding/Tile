@@ -18,7 +18,6 @@ tokio = { workspace = true, features = ["rt", "sync"] }
 tracing.workspace = true
 tray-icon.workspace = true
 uiautomation.workspace = true
-win-hotkeys.workspace = true
 windows = { workspace = true, features = ["Win32_Foundation"] }
 wineventhook.workspace = true
 winsafe.workspace = true

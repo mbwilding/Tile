@@ -7,32 +7,51 @@ use crate::{geometry::Direction, layout::LayoutKind};
 /// An action, written like `workspace 3`. Shared by keybinds, IPC and the `tile` command line.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Command {
+    /// Start a program from a command line, a new instance every time.
     Exec(String),
     /// Focus a window of the command's program, or run the command if there is none.
     FocusOrExec(String),
+    /// Close the focused window, like Alt+F4.
     KillActive,
+    /// Float the focused window, or tile it again.
     ToggleFloating,
+    /// Make the focused window fill its monitor, or stop.
     Fullscreen,
+    /// Focus the nearest window that way, or the next monitor at the edge.
     MoveFocus(Direction),
+    /// Move the focused window that way, to the next monitor at the edge.
     MoveWindow(Direction),
     /// Grow (or shrink, if negative) the active window by pixels.
     ResizeActive(i32, i32),
+    /// Swap the focused window with the main one (or the main one with the next).
     SwapWithMaster,
     /// Focus the next / previous window of the workspace, in layout order.
     CycleNext,
+    /// See [`CycleNext`](Self::CycleNext).
     CyclePrev,
+    /// Dwindle: flip the direction of the focused window's split.
     ToggleSplit,
+    /// Switch the focused monitor (or every monitor, when synced) to this workspace.
     Workspace(u8),
+    /// Move the focused window to this workspace and follow it.
     MoveToWorkspace(u8),
+    /// Move the focused window to this workspace and stay.
     MoveToWorkspaceSilent(u8),
+    /// Focus the next monitor that way.
     FocusMonitor(Direction),
+    /// Set the workspace's layout.
     Layout(LayoutKind),
+    /// Step the workspace through the layouts.
     CycleLayout,
     /// Scrolling layout: set the focused column's width as a fraction of the monitor.
     ScrollerProportion(f32),
+    /// Scrolling layout: step the focused column through the width presets.
     CycleProportion,
+    /// Scrolling layout: move the focused window into the column that way.
     ConsumeWindow(Direction),
+    /// Scrolling layout: move the focused window into a column of its own.
     ExpelWindow,
+    /// Scrolling layout: centre the focused column.
     CenterColumn,
     /// Switch native virtual desktop.
     Desktop(DesktopTarget),
@@ -44,7 +63,9 @@ pub enum Command {
     Lock,
     /// Open (or close) the app launcher.
     Launcher,
+    /// Reload the config.
     Reload,
+    /// Pause both tiling and remapping, or resume both.
     TogglePause,
     /// Pause or resume the window manager, like the tray's Tile item.
     ToggleTile,
@@ -54,14 +75,18 @@ pub enum Command {
     ToggleShell,
     /// Switch logging on or off, like the tray's Log item.
     ToggleLog,
+    /// Quit Tile.
     Exit,
 }
 
 /// A native virtual desktop: zero-based index, or relative to the current one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DesktopTarget {
+    /// The desktop at this zero-based index.
     Index(u32),
+    /// The one after the current desktop.
     Next,
+    /// The one before the current desktop.
     Previous,
 }
 
@@ -149,14 +174,19 @@ impl Command {
     }
 }
 
+/// Why a command didn't parse.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum ParseError {
+    /// Nothing was written.
     #[error("empty command")]
     Empty,
+    /// No dispatcher has this name.
     #[error("unknown dispatcher `{0}`")]
     Unknown(String),
+    /// The dispatcher needs an argument; the second field lists what it accepts.
     #[error("`{0}` expects an argument: {1}")]
     MissingArg(String, &'static str),
+    /// The argument isn't one the dispatcher accepts; the third field lists what it does.
     #[error("invalid argument `{1}` for `{0}`: expected {2}")]
     BadArg(String, String, &'static str),
 }

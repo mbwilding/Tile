@@ -3,14 +3,14 @@ use std::collections::HashMap;
 use crate::{Key, Mods};
 
 /// Index of a layer in [`Config::layers`].
-pub type LayerId = usize;
+pub(crate) type LayerId = usize;
 
 /// The `[main]` layer, always present.
-pub const MAIN: LayerId = 0;
+pub(crate) const MAIN: LayerId = 0;
 
 /// A key plus the modifiers to hold while it's pressed, e.g. `C-left`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Chord {
+pub(crate) struct Chord {
     pub mods: Mods,
     pub key: Key,
 }
@@ -26,7 +26,7 @@ impl Chord {
 
 /// What a key does when pressed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Action {
+pub(crate) enum Action {
     /// Nothing.
     Noop,
     /// Sends a key (with modifiers) for as long as the key is held.
@@ -46,7 +46,7 @@ pub enum Action {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Layer {
+pub(crate) struct Layer {
     pub name: String,
     /// Applied to keys this layer doesn't bind while it's active (`[name:C]`).
     pub mods: Mods,
@@ -70,13 +70,15 @@ impl Layer {
     }
 }
 
+/// Compiled remap layers, ready for an [`Engine`](crate::Engine). Built by
+/// [`Config::compile`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
-    /// `main` first, then keyd's built-in modifier layers, then the config's own.
-    pub layers: Vec<Layer>,
+    /// `main` first, then the built-in modifier layers, then the config's own.
+    pub(crate) layers: Vec<Layer>,
     /// Tap a dummy key before releasing an Alt or Win that nothing else was pressed with, so
-    /// it doesn't open a menu or Start (keyd's modifier guard).
-    pub modifier_guard: bool,
+    /// it doesn't open a menu or Start (the modifier guard).
+    pub(crate) modifier_guard: bool,
 }
 
 impl Default for Config {
@@ -101,7 +103,12 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn layer(&self, name: &str) -> Option<LayerId> {
+    pub(crate) fn layer(&self, name: &str) -> Option<LayerId> {
         self.layers.iter().position(|l| l.name == name)
+    }
+
+    /// No layer binds a key, so the remapper changes nothing.
+    pub fn is_empty(&self) -> bool {
+        self.layers.iter().all(|l| l.binds.is_empty())
     }
 }
