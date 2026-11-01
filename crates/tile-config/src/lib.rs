@@ -270,8 +270,19 @@ pub fn create_if_missing(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Saves the tray switches into `tray:` of the config file, leaving the rest of it as it is.
-pub fn write_tray(path: &Path, tray: &Tray) -> io::Result<()> {
+/// Saves the tray switches that differ between `before` and `after` into `tray:` of the config
+/// file, leaving the rest of it, the other switches included, as it is. That keeps the file's
+/// switches even when it doesn't load and `before` holds the defaults.
+pub fn write_tray(path: &Path, before: &Tray, after: &Tray) -> io::Result<()> {
+    let changed: Vec<_> = tray_pairs(after)
+        .into_iter()
+        .zip(tray_pairs(before))
+        .filter(|(new, old)| new != old)
+        .map(|(new, _)| new)
+        .collect();
+    if changed.is_empty() {
+        return Ok(());
+    }
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) if e.kind() == io::ErrorKind::NotFound => String::from(NEW_FILE_HEADER),
@@ -280,7 +291,7 @@ pub fn write_tray(path: &Path, tray: &Tray) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(path, set_bools(&text, "tray", &tray_pairs(tray)))
+    fs::write(path, set_bools(&text, "tray", &changed))
 }
 
 #[cfg(test)]
@@ -355,8 +366,33 @@ mod tests {
             tile: true,
             ..Tray::default()
         };
-        write_tray(&path, &tray).unwrap();
+        write_tray(&path, &Tray::default(), &tray).unwrap();
         assert_eq!(Loaded::load(&path).unwrap().config.tray, tray);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn writing_a_switch_leaves_the_others_as_the_file_has_them() {
+        let dir = std::env::temp_dir().join(format!("tile-config-tray-{}", std::process::id()));
+        let path = dir.join("config.yml");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            &path,
+            "general:\n  tilin: true\ntray:\n  tile: true\n  log: true\n",
+        )
+        .unwrap();
+        let before = Tray::default();
+        let after = Tray {
+            remap: true,
+            ..before.clone()
+        };
+        write_tray(&path, &before, &after).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("  tile: true\n  log: true\n  remap: true"),
+            "{text}"
+        );
+        assert!(text.contains("tilin"), "{text}");
         let _ = fs::remove_dir_all(dir);
     }
 

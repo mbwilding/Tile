@@ -14,7 +14,7 @@ use tracing_subscriber::{
     EnvFilter, Layer, filter::filter_fn, fmt, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{paths, settings};
+use crate::paths;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
 
@@ -44,10 +44,10 @@ impl io::Write for LazyFile {
     }
 }
 
-/// Sets up logging to `name`. `filter` (from `--log`) also switches logging on.
-pub fn init(name: &str, filter: Option<&str>) -> WorkerGuard {
-    let enabled =
-        filter.is_some() || std::env::var_os("RUST_LOG").is_some() || settings::load().log;
+/// Sets up logging to `name`, on if the tray's switch `switched_on` says so. `filter` (from
+/// `--log`) also switches logging on.
+pub fn init(name: &str, filter: Option<&str>, switched_on: bool) -> WorkerGuard {
+    let enabled = filter.is_some() || std::env::var_os("RUST_LOG").is_some() || switched_on;
     ENABLED.store(enabled, Ordering::Relaxed);
     let (file, guard) = tracing_appender::non_blocking(LazyFile {
         name: name.to_string(),
@@ -72,7 +72,7 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::Relaxed)
 }
 
-/// Switches logging to the file on or off, and remembers that for the next start.
+/// Switches logging to the file on or off.
 pub fn set_enabled(on: bool) {
     if !on {
         tracing::info!("logging off");
@@ -81,5 +81,4 @@ pub fn set_enabled(on: bool) {
     if on {
         tracing::info!("logging on");
     }
-    settings::update(|s| s.log = on);
 }

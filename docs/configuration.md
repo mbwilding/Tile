@@ -68,7 +68,8 @@ by default; set one there to override the theme for just that part.
 ### `tray`
 
 The tray menu's switches. Tile writes these itself when you change one, and reads them at
-startup, so you rarely need to edit them.
+startup, so you rarely need to edit them. It writes only the switch you changed, so a config
+with an error keeps the switches it has.
 
 | Key | Default | Meaning |
 | --- | --- | --- |

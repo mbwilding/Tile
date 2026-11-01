@@ -1,34 +1,23 @@
-//! The tray's switches (Tile, Remap, logging), kept in the config's `tray` section so
+//! The tray's switches (Tile, Remap, Shell, logging), kept in the config's `tray` section so
 //! they survive a restart.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::OnceLock,
-};
+use std::path::Path;
 
 pub use tile_config::Tray as Settings;
-use tile_config::{Loaded, default_path, write_tray};
+use tile_config::{Loaded, write_tray};
 
-static CONFIG: OnceLock<PathBuf> = OnceLock::new();
-
-/// Says which config file holds the switches, when it isn't the default one.
-pub fn init(path: &Path) {
-    let _ = CONFIG.set(path.to_path_buf());
+/// The switches in the config file at `path`, or the defaults if it doesn't load.
+pub fn load(path: &Path) -> Settings {
+    Loaded::load_or_default(path).map_or_else(|_| Settings::default(), |l| l.config.tray)
 }
 
-fn file() -> PathBuf {
-    CONFIG.get().cloned().unwrap_or_else(default_path)
-}
-
-pub fn load() -> Settings {
-    Loaded::load_or_default(&file()).map_or_else(|_| Settings::default(), |l| l.config.tray)
-}
-
-/// Loads the switches, applies `change` and writes them back to the config file.
-pub fn update(change: impl FnOnce(&mut Settings)) {
-    let mut settings = load();
-    change(&mut settings);
-    if let Err(e) = write_tray(&file(), &settings) {
+/// Applies `change` to `settings` and saves the switches it changed to the config file at
+/// `path`. Only those are written, so the file keeps its other switches even when it doesn't
+/// load and `settings` are the defaults.
+pub fn update(path: &Path, settings: &mut Settings, change: impl FnOnce(&mut Settings)) {
+    let before = settings.clone();
+    change(settings);
+    if let Err(e) = write_tray(path, &before, settings) {
         tracing::warn!("failed to save settings: {e}");
     }
 }
