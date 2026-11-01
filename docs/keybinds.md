@@ -54,7 +54,7 @@ binds on it are skipped.
 
 ## Dispatchers
 
-A `binds` value is `<dispatcher> [arguments]`. `tilectl dispatch` runs the same ones.
+A `binds` value is `<dispatcher> [arguments]`. `tile dispatch` runs the same ones.
 
 | Dispatcher | Action |
 | --- | --- |

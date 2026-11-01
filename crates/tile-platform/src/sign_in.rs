@@ -30,6 +30,29 @@ pub fn installed_exe() -> PathBuf {
         .join("tile.exe")
 }
 
+/// Windows' console host, which can run a console program with no window at all.
+pub fn conhost() -> PathBuf {
+    std::env::var_os("SystemRoot")
+        .map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from)
+        .join("System32")
+        .join("conhost.exe")
+}
+
+/// The command line that runs `exe` with `args` and no console window, for places that start a
+/// console program without a way to hide it (the `Run` key, the sign-in shell).
+pub fn headless_command(exe: &Path, args: &str) -> String {
+    let command = format!(
+        "\"{}\" --headless \"{}\"",
+        conhost().display(),
+        exe.display()
+    );
+    if args.is_empty() {
+        command
+    } else {
+        format!("{command} {args}")
+    }
+}
+
 fn dword(key: &str, name: &str) -> Option<u32> {
     match w::HKEY::CURRENT_USER.RegGetValue(Some(key), Some(name), co::RRF::RT_REG_DWORD) {
         Ok(w::RegistryValue::Dword(v)) => Some(v),
@@ -79,7 +102,7 @@ pub fn set_shell(exe: Option<&Path>) -> Result<(), String> {
                 .RegSetKeyValue(
                     Some(WINLOGON_KEY),
                     Some(SHELL_VALUE),
-                    w::RegistryValue::Sz(format!("\"{}\" --shell", exe.display())),
+                    w::RegistryValue::Sz(headless_command(exe, "--shell")),
                 )
                 .map_err(|e| format!("failed to set the shell: {e}"))
         }
@@ -106,5 +129,27 @@ pub fn set_shell(exe: Option<&Path>) -> Result<(), String> {
             }
             Ok(())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn headless_commands_run_the_program_through_conhost() {
+        let exe = Path::new(r"C:\Program Files\Tile\tile.exe");
+        let command = headless_command(exe, "--launcher");
+        assert!(command.starts_with('"'));
+        assert!(
+            command
+                .contains(r#"conhost.exe" --headless "C:\Program Files\Tile\tile.exe" --launcher"#)
+        );
+        assert!(headless_command(exe, "").ends_with(r#"tile.exe""#));
+    }
+
+    #[test]
+    fn conhost_lives_in_system32() {
+        assert!(conhost().ends_with(r"System32\conhost.exe"));
     }
 }

@@ -26,7 +26,7 @@ There is no reload item: Tile reloads the config whenever the file is saved. Whe
 has errors, Tile keeps running on the last config that loaded, the tray icon's top left tile
 turns red, its tooltip shows the error, and a **Config error** item at the top of the menu opens
 the config. Saving a fixed file clears it. A broken config at startup does the same, running on
-the built-in defaults. `tilectl check` prints the full error.
+the built-in defaults. `tile check` prints the full error.
 
 Pausing Tile hands every window back as it was: shown, with its title bar and border. Resuming
 starts again from the windows that are open.
@@ -149,8 +149,8 @@ Tile hides windows on inactive workspaces, removes title bars, sets the Win+L po
 the system cursors to hide the pointer. It records these in `restore.json` and undoes them on
 exit, pause, turning tiling off and on panic. A watchdog process (`tile.exe --watchdog <pid>`)
 undoes them if Tile is killed, and the next start cleans up anything left over. Closing the
-terminal Tile was started from can kill the watchdog too; a debug build, which has a console,
-cleans up itself when that console closes.
+terminal Tile was started from can kill the watchdog too, so Tile cleans up itself when that
+console closes.
 
 Held keys are released on exit, pause, reload, and when the session locks or unlocks.
 

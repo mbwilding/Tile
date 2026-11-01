@@ -28,7 +28,7 @@ Everything has documentation, and docs are updated in the same change as the cod
   listed. `cargo test -p tile-config --test examples` checks it and that every example loads.
 - Keybinds, dispatchers and key names go in `docs/keybinds.md` (and the default bind table must
   match `DEFAULT_BINDS`); layouts in `docs/layouts.md`; rules in `docs/window-rules.md`;
-  remapping in `docs/key-remapping.md`; `tilectl` in `docs/tilectl.md`; anything touching how
+  remapping in `docs/key-remapping.md`; the `tile` command line in `docs/cli.md`; anything touching how
   Tile interacts with Windows in `docs/windows-integration.md`.
 - `README.md` stays an overview and quickstart that links to `docs/`. Don't grow it with
   reference material; add that to a docs page and link it.

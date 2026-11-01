@@ -1,8 +1,7 @@
-// Release builds run without a console window; debug builds keep it for logs.
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+mod cli;
 mod daemon;
 mod desktops;
+mod install;
 mod launch;
 mod logging;
 mod paths;
@@ -14,10 +13,13 @@ use std::path::PathBuf;
 use clap::Parser;
 use tile_config::Loaded;
 
-/// A dynamic tiling window manager and keyd-style key remapper for Windows.
+/// A dynamic tiling window manager and keyd-style key remapper for Windows. Without a command
+/// it runs the window manager; the commands control one that is running.
 #[derive(Parser)]
 #[command(version, about)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<cli::Cmd>,
     /// Config file to use instead of %APPDATA%\Tile\config.yml.
     #[arg(long, short)]
     config: Option<PathBuf>,
@@ -52,6 +54,14 @@ fn watchdog(pid: u32) {
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    if let Some(command) = args.command {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        return runtime.block_on(cli::run(command));
+    }
+    // Started without a terminal (sign-in, a task, Explorer), there is no console to keep.
+    tile_hook::detach_console();
     if let Some(pid) = args.watchdog {
         watchdog(pid);
         return Ok(());
@@ -90,7 +100,7 @@ fn main() -> anyhow::Result<()> {
         tracing::error!("Tile is already running");
         anyhow::bail!("Tile is already running");
     };
-    // The watchdog can go down with a closing terminal; debug builds clean up themselves too.
+    // The watchdog can go down with a closing terminal, so a Tile run from one cleans up itself too.
     tile_hook::on_console_close(|| paths::load_restore().apply());
 
     // Never leave windows hidden or without title bars, even if we crash.

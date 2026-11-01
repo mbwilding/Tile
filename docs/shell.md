@@ -18,7 +18,7 @@ What Explorer would otherwise provide is covered like this:
 ## Turning it on
 
 ```powershell
-tilectl install          # the shell has to live somewhere that stays
+tile install          # the shell has to live somewhere that stays
 ```
 
 Then tick **Shell** in the tray menu, run the `toggleshell` dispatcher, or set `shell: true`
@@ -59,7 +59,7 @@ own `--launcher` entry, because the shell instance already does that job. It hap
 sign-in session, so restarting Tile doesn't start everything twice. `shell.run_startup: false`
 turns it off.
 
-**Admin rights.** `tilectl install` runs Tile as administrator through a sign-in task. As the
+**Admin rights.** `tile install` runs Tile as administrator through a sign-in task. As the
 shell, Windows also starts `tile.exe --shell` with your normal rights. That copy serves as the
 helper that starts programs without admin rights and waits for the elevated Tile. If the sign-in
 task never starts Tile within 30 seconds, the helper runs Tile itself, without admin rights, and

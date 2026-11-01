@@ -101,7 +101,7 @@ pub fn open(path: &Path) {
 /// How long `tile --shell` waits for the sign-in task to start Tile.
 const SHELL_WAIT: Duration = Duration::from_secs(30);
 
-/// Whether `tilectl install` registered the sign-in task, which starts Tile elevated.
+/// Whether `tile install` registered the sign-in task, which starts Tile elevated.
 pub fn sign_in_task_exists() -> bool {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     std::process::Command::new("schtasks")

@@ -558,7 +558,7 @@ impl Daemon {
         } else if exe.exists() {
             tile_platform::set_sign_in_shell(Some(&exe))
         } else {
-            Err("Tile isn't installed (run `tilectl install`)".to_owned())
+            Err("Tile isn't installed (run `tile install`)".to_owned())
         };
         if let Err(e) = result {
             tracing::warn!("couldn't change the sign-in shell, so Explorer still starts: {e}");
@@ -733,7 +733,7 @@ impl Daemon {
                 if !tile_platform::is_elevated() {
                     tracing::warn!(
                         "not running as administrator: keys typed into admin windows aren't \
-                         remapped (`tilectl install` sets Tile up to run elevated)"
+                         remapped (`tile install` sets Tile up to run elevated)"
                     );
                 }
                 tracing::info!("remapping started");

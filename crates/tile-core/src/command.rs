@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{geometry::Direction, layout::LayoutKind};
 
-/// An action, written like `workspace 3`. Shared by keybinds, IPC and `tilectl`.
+/// An action, written like `workspace 3`. Shared by keybinds, IPC and the `tile` command line.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Command {
     Exec(String),

@@ -15,7 +15,7 @@ binds:
   super+r: launcher
 ```
 
-`tilectl dispatch launcher` opens it too. It works with tiling off or paused. Pressing the bind
+`tile dispatch launcher` opens it too. It works with tiling off or paused. Pressing the bind
 again closes it.
 
 This is not the `tile.exe --launcher` helper that starts programs with your normal rights; the

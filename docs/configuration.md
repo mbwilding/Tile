@@ -1,11 +1,11 @@
 # Configuration
 
-Tile reads `%APPDATA%\Tile\config.yml`, or `config.yaml` if that is the one there (`tilectl
+Tile reads `%APPDATA%\Tile\config.yml`, or `config.yaml` if that is the one there (`tile
 config` prints the path). Tile runs on its built-in defaults, so the file only needs the settings
 you want to change. On first run it creates `config.yml` holding just `tray`, the tray's
 switches, which Tile saves there whenever you change them. Add a section and key to change
 anything else; the [default config](#the-default-config) below lists them all to copy from. Saved changes apply immediately,
-and `tilectl check [file]` reports what is wrong with a config. A bad config is not applied; the
+and `tile check [file]` reports what is wrong with a config. A bad config is not applied; the
 previous one is kept, and the tray icon turns red until the file is fixed (see
 [the tray](windows-integration.md#the-tray)).
 

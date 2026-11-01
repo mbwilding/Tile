@@ -28,15 +28,15 @@ menu is suppressed), so no separate hotkey program is needed.
 - Key remapping in keyd's terms: layers, modifier layers, `overload()`, `overloadt()` and key
   sequences
 - YAML config, applied live on save, with window rules
-- `tilectl`: dispatch commands, query state as JSON, subscribe to events, check the config,
-  install/uninstall
+- Commands in `tile` itself: dispatch, query state as JSON, subscribe to events, check the
+  config, install/uninstall
 - Tray icon with switches for the window manager (Tile), the key remapper (Remap) and shell mode (Shell)
 - Everything Tile changes is undone when it stops, including on a crash or a hard kill
 
 ## Quickstart
 
 ```powershell
-cargo release   # build tile.exe and tilectl.exe
+cargo release   # build tile.exe
 cargo deploy    # install and start Tile (one UAC prompt)
 ```
 
@@ -55,24 +55,24 @@ Tile starts tiling straight away. Tick **Remap** in the tray icon to remap keys,
 
 All the keys are in [Keybinds](docs/keybinds.md).
 
-`tilectl install` sets Tile up to run as administrator, so it can manage admin windows too,
+`tile install` sets Tile up to run as administrator, so it can manage admin windows too,
 without a UAC prompt at sign-in:
 
-- It copies both programs to `C:\Program Files\Tile`, where only admins can change them.
+- It copies `tile.exe` to `C:\Program Files\Tile`, where only admins can change them.
 - A scheduled task starts Tile elevated when you sign in. It runs on battery, is never stopped
   for running too long and runs at normal priority.
 - A launcher (`tile.exe --launcher`) starts with your normal rights from your `Run` key. Programs
   Tile starts, from `exec` binds or the tray, go through it, so they don't run as
   administrator.
-- `C:\Program Files\Tile` goes on your user `PATH`, for `tilectl` in terminals started after your
+- `C:\Program Files\Tile` goes on your user `PATH`, for `tile` in terminals started after your
   next sign-in.
 
 It replaces a running Tile and asks for admin rights once. It also stops and removes the
 standalone Key remapper (`C:\Program Files\Key`, its sign-in task and `PATH` entry) if that is
 installed, since Tile remaps keys itself now; Key's config in `%APPDATA%\Key` is left alone. To
-update, run `cargo release` and `cargo deploy` again (or `tilectl install` from the checkout: the
-installed `tilectl` installs the build in `.\target\release`). Running programs never block an
-update, since the old files are moved aside and deleted on the next install. `tilectl uninstall`
+update, run `cargo release` and `cargo deploy` again (or `tile install` from the checkout: the
+installed `tile` installs the build in `.\target\release`). Running programs never block an
+update, since the old files are moved aside and deleted on the next install. `tile uninstall`
 stops Tile and undoes all of that, keeping your config and logs.
 
 To try a build without installing:
@@ -82,8 +82,8 @@ cargo run --release                  # runs tile.exe
 .\target\release\tile.exe -c my.yml  # with another config file
 ```
 
-Only one Tile runs at a time. Release builds have no console, so stop one with `Win+Shift+E`, the
-tray icon or `tilectl dispatch exit`; Ctrl-C in the terminal only stops `cargo`. Closing the
+Only one Tile runs at a time. Run from a terminal, Tile stays in the foreground: stop it with
+Ctrl-C, `Win+Shift+E`, the tray icon or `tile dispatch exit`. Closing the
 terminal can leave windows hidden and the pointer blank until Tile next starts (see
 [Windows integration](docs/windows-integration.md#undoing-changes)).
 
@@ -106,6 +106,6 @@ config to copy and paste, and [`examples/`](examples) has complete configs to st
 | [Key remapping](docs/key-remapping.md) | keyd-style layers, overloads and their limits |
 | [Launcher](docs/launcher.md) | The app launcher: searching, keys, launch history |
 | [Shell mode](docs/shell.md) | Replace Explorer's taskbar: tray icons and system items in the launcher |
-| [tilectl](docs/tilectl.md) | The command-line tool and the IPC pipe |
+| [Command line](docs/cli.md) | The `tile` commands, console behaviour and the IPC pipe |
 | [Windows integration](docs/windows-integration.md) | Tray, files, Win+L, admin windows, what gets undone |
 | [Development](docs/development.md) | Crates, building, testing and the documentation rules |

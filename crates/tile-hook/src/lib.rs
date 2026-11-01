@@ -33,7 +33,8 @@ use windows_sys::Win32::{
     },
     System::{
         Console::{
-            CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT, SetConsoleCtrlHandler,
+            CTRL_CLOSE_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT, FreeConsole,
+            GetConsoleProcessList, SetConsoleCtrlHandler,
         },
         LibraryLoader::GetModuleHandleW,
         RemoteDesktop::{
@@ -368,6 +369,20 @@ pub fn single_instance(name: &str) -> Option<Instance> {
     }
     let instance = Instance(handle);
     (!existed).then_some(instance)
+}
+
+/// Lets go of the console if this process is the only one on it: started by Explorer, a task or
+/// a Run entry, it would otherwise keep an empty console window open. Started from a terminal
+/// it shares the console with the shell, so it stays attached and its output stays visible.
+pub fn detach_console() {
+    let mut owners = 0u32;
+    // SAFETY: `owners` is a valid buffer for the one process id we ask for; the call only
+    // reports how many processes share the console.
+    let count = unsafe { GetConsoleProcessList(&raw mut owners, 1) };
+    if count == 1 {
+        // SAFETY: no arguments; only detaches this process from its console.
+        unsafe { FreeConsole() };
+    }
 }
 
 static ON_CONSOLE_CLOSE: OnceLock<fn()> = OnceLock::new();

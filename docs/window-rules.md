@@ -21,7 +21,7 @@ rules:
 | `decorations: true` | force the title bar on or off, overriding `general.decorations` |
 | `ignore: true` | leave the window alone entirely |
 
-`tilectl query windows` shows the `exe`, `class` and `title` of every managed window. The default
+`tile query windows` shows the `exe`, `class` and `title` of every managed window. The default
 rules float standard dialogs and ignore shell windows, PowerToys and ShareX. Dialogs and
 fixed-size windows float even without a rule.
 

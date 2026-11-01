@@ -1,22 +1,17 @@
-mod install;
+//! The command-line side of `tile`: talking to a running Tile, checking a config and installing.
 
 use std::path::PathBuf;
 
 use anyhow::{Context, bail};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Subcommand, ValueEnum};
 use tile_ipc::{Client, Event, Query, Request, Response};
 
-/// Control Tile, the tiling window manager and key remapper.
-#[derive(Parser)]
-#[command(version, about)]
-struct Args {
-    #[command(subcommand)]
-    command: Cmd,
-}
+use crate::install;
 
+/// What `tile` does instead of running the window manager.
 #[derive(Subcommand)]
-enum Cmd {
-    /// Run a dispatcher, e.g. `tilectl dispatch workspace 3`.
+pub enum Cmd {
+    /// Run a dispatcher, e.g. `tile dispatch workspace 3`.
     Dispatch {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
@@ -37,8 +32,8 @@ enum Cmd {
     /// Print the config file's path.
     Config,
     /// Install Tile: copy it to C:\Program Files\Tile, run it as administrator at sign-in (so
-    /// it manages admin windows and remaps keys in them), put `tilectl` on your PATH and start
-    /// it now. Run again after a rebuild to update.
+    /// it manages admin windows and remaps keys in them), put `tile` on your PATH and start it
+    /// now. Run again after a rebuild to update.
     Install,
     /// Stop Tile and undo `install`. Your config and logs are kept.
     Uninstall,
@@ -54,7 +49,7 @@ enum Cmd {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-enum What {
+pub enum What {
     Monitors,
     Workspaces,
     Windows,
@@ -142,10 +137,9 @@ fn check(file: Option<PathBuf>) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
-    let (request, json) = match args.command {
+/// Runs `command`: a request to the running Tile, or one of the commands that work without it.
+pub async fn run(command: Cmd) -> anyhow::Result<()> {
+    let (request, json) = match command {
         Cmd::Dispatch { command } => (
             Request::Dispatch {
                 command: command.join(" "),

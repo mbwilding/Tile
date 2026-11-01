@@ -1,6 +1,6 @@
 [package]
 name = "tile-ipc"
-description = "Named-pipe IPC protocol between the Tile daemon and tilectl"
+description = "Named-pipe IPC protocol between the Tile daemon and `tile`'s commands"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,14 +1,17 @@
-//! `tilectl install` / `uninstall`.
+//! `tile install` / `uninstall`.
 //!
 //! Tile is installed to `C:\Program Files\Tile` and started at sign-in by a scheduled task that
 //! runs it elevated, so it can manage admin windows without a UAC prompt at every sign-in. The
 //! programs it starts go through the launcher (`tile.exe --launcher`, started by the user's
-//! `Run` key), so they run as the normal user. `tilectl` goes on the user's `PATH`.
+//! `Run` key), so they run as the normal user. `tile` goes on the user's `PATH`.
+//!
+//! `tile.exe` is a console program. What starts it at sign-in goes through
+//! `conhost.exe --headless`, so no console window ever appears.
 //!
 //! Key, the remapper that is now part of Tile, is stopped and its install removed, so keys
 //! aren't remapped twice.
 //!
-//! The admin part runs in a second `tilectl` started through UAC ([`elevated`]), which reports
+//! The admin part runs in a second `tile` started through UAC ([`elevated`]), which reports
 //! back over a named pipe.
 
 use std::{
@@ -53,8 +56,8 @@ const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
 const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// The programs `install` copies.
-const EXES: [&str; 2] = ["tile.exe", "tilectl.exe"];
+/// The program `install` copies.
+const EXE: &str = "tile.exe";
 
 /// The admin part of `install` / `uninstall`.
 #[derive(Debug, Clone, clap::Subcommand)]
@@ -90,24 +93,22 @@ fn key_install_dir() -> PathBuf {
     install_dir().with_file_name("Key")
 }
 
-/// The folder holding the build to install: this `tilectl.exe`'s own, or for the installed
-/// `tilectl`, `target\release` under the current folder (a Tile checkout).
+/// The folder holding the build to install: this `tile.exe`'s own, or for the installed
+/// `tile`, `target\release` under the current folder (a Tile checkout).
 fn build_dir(dir: &Path) -> anyhow::Result<PathBuf> {
     let exe = std::env::current_exe()?;
-    let own = exe.parent().context("no folder for tilectl.exe")?;
+    let own = exe.parent().context("no folder for tile.exe")?;
     let source = if own == dir {
         std::env::current_dir()?.join("target").join("release")
     } else {
         own.to_owned()
     };
-    for name in EXES {
-        if !source.join(name).exists() {
-            bail!(
-                "no build to install: {} not found. Run `cargo build --release --workspace` in a Tile \
-                 checkout, then `tilectl install` from there",
-                source.join(name).display()
-            );
-        }
+    if !source.join(EXE).exists() {
+        bail!(
+            "no build to install: {} not found. Run `cargo build --release` in a Tile checkout, \
+             then `tile install` from there",
+            source.join(EXE).display()
+        );
     }
     Ok(source)
 }
@@ -128,14 +129,14 @@ pub async fn install() -> anyhow::Result<()> {
     let tile = dir.join("tile.exe");
     set_run(
         LAUNCHER_RUN_VALUE,
-        Some(&format!("\"{}\" --launcher", tile.display())),
+        Some(&tile_platform::headless_command(&tile, "--launcher")),
     )
     .context("failed to register the launcher to start at sign-in")?;
     set_on_path(&dir, true)?;
     remove_old_install();
     start_detached(&tile, &["--launcher"]).context("failed to start the launcher")?;
     println!("Installed. {note}");
-    println!("`tilectl` is on your PATH in terminals started after your next sign-in.");
+    println!("`tile` is on your PATH in terminals started after your next sign-in.");
     Ok(())
 }
 
@@ -153,7 +154,7 @@ pub async fn uninstall() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Runs `step` in a `tilectl` started through UAC and waits for its report: a note to show
+/// Runs `step` in a `tile` started through UAC and waits for its report: a note to show
 /// on success, or the error.
 async fn run_elevated(step: &Step) -> anyhow::Result<String> {
     let report = format!("tile-install-{}.sock", std::process::id());
@@ -161,7 +162,10 @@ async fn run_elevated(step: &Step) -> anyhow::Result<String> {
         .name(report.as_str().to_ns_name::<GenericNamespaced>()?)
         .create_tokio()?;
     let exe = std::env::current_exe()?;
-    let mut parameters = format!("elevated --report \"{report}\"");
+    let mut parameters = format!(
+        "--headless \"{}\" elevated --report \"{report}\"",
+        exe.display()
+    );
     match step {
         Step::Install { source, user } => {
             parameters += &format!(
@@ -174,7 +178,7 @@ async fn run_elevated(step: &Step) -> anyhow::Result<String> {
     // Returns once the prompt is answered.
     let started = w::ShellExecuteEx(&w::SHELLEXECUTEINFO {
         verb: Some("runas"),
-        file: &exe.to_string_lossy(),
+        file: &tile_platform::conhost().to_string_lossy(),
         parameters: Some(&parameters),
         show: co::SW::HIDE,
         ..Default::default()
@@ -196,7 +200,7 @@ async fn run_elevated(step: &Step) -> anyhow::Result<String> {
     }
 }
 
-/// `tilectl elevated`: does `step` (we run as administrator) and reports to `report`.
+/// `tile elevated`: does `step` (we run as administrator) and reports to `report`.
 pub async fn elevated(step: Step, report: &str) -> anyhow::Result<()> {
     let line = match run_step(&step) {
         Ok(note) => format!("ok:{note}\n"),
@@ -245,23 +249,21 @@ fn copy_programs(source: &Path, dir: &Path) -> anyhow::Result<()> {
             let _ = fs::remove_file(path);
         }
     }
-    for name in EXES {
-        let target = dir.join(name);
-        if target.exists() {
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos();
-            fs::rename(&target, target.with_extension(format!("{nanos}.old")))
-                .with_context(|| format!("failed to move {} aside", target.display()))?;
-        }
-        fs::copy(source.join(name), &target)
-            .with_context(|| format!("failed to copy to {}", target.display()))?;
+    let target = dir.join(EXE);
+    if target.exists() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        fs::rename(&target, target.with_extension(format!("{nanos}.old")))
+            .with_context(|| format!("failed to move {} aside", target.display()))?;
     }
+    fs::copy(source.join(EXE), &target)
+        .with_context(|| format!("failed to copy to {}", target.display()))?;
     Ok(())
 }
 
-/// Removes `dir`. A running `tilectl.exe` in it can't be deleted yet, so `cmd` finishes the job
+/// Removes `dir`. A running `tile.exe` in it can't be deleted yet, so `cmd` finishes the job
 /// once it has exited.
 fn remove_programs(dir: &Path) -> anyhow::Result<()> {
     match fs::remove_dir_all(dir) {
@@ -314,7 +316,8 @@ fn register_task(exe: &Path, user: &str) -> anyhow::Result<()> {
         .get_Actions()?
         .Create(co::TASK_ACTION_TYPE::EXEC)?
         .QueryInterface::<w::IExecAction>()?;
-    action.put_Path(&exe.to_string_lossy())?;
+    action.put_Path(&tile_platform::conhost().to_string_lossy())?;
+    action.put_Arguments(&format!("--headless \"{}\"", exe.display()))?;
     folder.RegisterTaskDefinition(
         Some(TASK),
         &task,
@@ -336,7 +339,7 @@ fn delete_task(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `DOMAIN\user` of whoever runs `tilectl`: the task must run as them, even when the UAC
+/// `DOMAIN\user` of whoever runs `tile`: the task must run as them, even when the UAC
 /// prompt is answered with another account's credentials.
 fn current_user() -> anyhow::Result<String> {
     let user = std::env::var("USERNAME").context("USERNAME isn't set")?;
@@ -374,7 +377,13 @@ async fn stop_launcher() -> anyhow::Result<()> {
     }
     // It can hang while exiting; Tile is already stopped, so what's left is the launcher.
     let _ = Command::new("taskkill")
-        .args(["/f", "/im", "tile.exe"])
+        .args([
+            "/f",
+            "/im",
+            "tile.exe",
+            "/fi",
+            &format!("PID ne {}", std::process::id()),
+        ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();

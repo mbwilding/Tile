@@ -980,6 +980,7 @@ dependencies = [
  "clap",
  "dirs",
  "embed-manifest",
+ "interprocess",
  "serde",
  "serde_json",
  "tile-config",
@@ -992,6 +993,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "winsafe",
 ]
 
 [[package]]
@@ -1062,22 +1064,6 @@ dependencies = [
 [[package]]
 name = "tile-remap"
 version = "0.1.0"
-
-[[package]]
-name = "tilectl"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "dirs",
- "interprocess",
- "serde_json",
- "tile-config",
- "tile-core",
- "tile-ipc",
- "tokio",
- "winsafe",
-]
 
 [[package]]
 name = "time"

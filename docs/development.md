@@ -14,9 +14,9 @@ Aliases in `.cargo/config.toml`:
 
 | Alias | Runs | Does |
 | --- | --- | --- |
-| `cargo release` | `cargo build --release --workspace` | builds `tile.exe` and `tilectl.exe` in release |
-| `cargo deploy` | `cargo run --release -p tilectl -- install` | installs the build from `cargo release` |
-| `cargo deploy-dev` | `cargo run -p tilectl -- install` | installs the debug build from `cargo build --workspace` |
+| `cargo release` | `cargo build --release --workspace` | builds `tile.exe` in release |
+| `cargo deploy` | `cargo run --release -p tile -- install` | installs the build from `cargo release` |
+| `cargo deploy-dev` | `cargo run -p tile -- install` | installs the debug build from `cargo build --workspace` |
 
 ## Project layout
 
@@ -28,8 +28,7 @@ Aliases in `.cargo/config.toml`:
 | `tile-hook` | The low-level keyboard and mouse hooks, `SendInput`, shell icons, the notification area host (`Shell_TrayWnd`), volume, battery, network and radios and other raw calls: the only `unsafe` |
 | `tile-platform` | Win32: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the launcher window, the sign-in programs, virtual desktops |
 | `tile-ipc` | Named-pipe JSON protocol |
-| `tile` | The daemon (`tile.exe`) |
-| `tilectl` | The command-line tool (`tilectl.exe`), including install/uninstall |
+| `tile` | The program (`tile.exe`): the daemon, the command line and install/uninstall |
 
 All `unsafe` lives in `tile-hook`, each block with a `// SAFETY:` comment; every other crate has
 `unsafe_code = "forbid"`. The rest of Win32 goes through safe wrappers:
@@ -52,7 +51,7 @@ Every pull request runs the `CI` workflow: `yamllint --strict .` (rules in `.yam
 ## Releasing
 
 Every push to `main` that changes more than docs and examples runs the `Release` workflow, which tests, builds
-and publishes a GitHub release holding `tile.zip`, which has `tile.exe` and `tilectl.exe`. No
+and publishes a GitHub release holding `tile.zip`, which has `tile.exe`. No
 tag is pushed: the version is the major and minor from `Cargo.toml`, with the workflow run number
 as the patch (`0.1.7`), and the release creates its own tag. To release by hand, run it from the
 Actions tab or with `gh workflow run release.yml`. Bump the major or minor in `Cargo.toml` for a

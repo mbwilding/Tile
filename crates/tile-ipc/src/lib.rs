@@ -119,7 +119,7 @@ impl Server {
 
 /// Full access for SYSTEM, Administrators and the user `sid`. An elevated process's pipe is
 /// labelled high integrity by default, which shuts out normal processes; the medium label
-/// lets the user's non-elevated `tilectl` in.
+/// lets the user's non-elevated `tile` in.
 fn user_only(sid: &str) -> io::Result<SecurityDescriptor> {
     let sddl = format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{sid})S:(ML;;NW;;;ME)");
     let sddl = widestring::U16CString::from_str(sddl).map_err(io::Error::other)?;
