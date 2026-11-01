@@ -13,6 +13,7 @@ fn is_word(c: char) -> bool {
 }
 
 impl Input {
+    /// The whole text.
     pub fn text(&self) -> &str {
         &self.text
     }
@@ -28,10 +29,12 @@ impl Input {
         self.caret = self.text.len();
     }
 
+    /// Empties the text.
     pub fn clear(&mut self) {
         self.set(String::new());
     }
 
+    /// Types c at the caret.
     pub fn insert(&mut self, c: char) {
         self.text.insert(self.caret, c);
         self.caret += c.len_utf8();
@@ -86,10 +89,12 @@ impl Input {
         self.prev(self.caret).map(|p| self.caret = p).is_some()
     }
 
+    /// Moves the caret a character right. Returns whether it moved.
     pub fn right(&mut self) -> bool {
         self.next(self.caret).map(|n| self.caret = n).is_some()
     }
 
+    /// Moves the caret to the start of the word before it. Returns whether it moved.
     pub fn word_left(&mut self) -> bool {
         let to = self.word_start(self.caret);
         let moved = to != self.caret;
@@ -97,6 +102,7 @@ impl Input {
         moved
     }
 
+    /// Moves the caret to the end of the word after it. Returns whether it moved.
     pub fn word_right(&mut self) -> bool {
         let to = self.word_end(self.caret);
         let moved = to != self.caret;
@@ -104,12 +110,14 @@ impl Input {
         moved
     }
 
+    /// Moves the caret to the start. Returns whether it moved.
     pub fn home(&mut self) -> bool {
         let moved = self.caret != 0;
         self.caret = 0;
         moved
     }
 
+    /// Moves the caret to the end. Returns whether it moved.
     pub fn end(&mut self) -> bool {
         let moved = self.caret != self.text.len();
         self.caret = self.text.len();

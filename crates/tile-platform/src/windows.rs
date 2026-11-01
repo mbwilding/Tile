@@ -5,10 +5,12 @@ use tile_core::{Rect, WindowId, WindowInfo};
 use uiautomation::{UIAutomation, patterns::UIWindowPattern, types::Handle};
 use winsafe::{
     self as w, co,
-    prelude::{Handle as _, shell_IShellItem2 as _},
+    prelude::{
+        Handle as _, shell_IEnumShellItems as _, shell_IShellItem as _, shell_IShellItem2 as _,
+    },
 };
 
-use crate::{monitors::rect, mover::Insets};
+use crate::{gui::init_com, monitors::rect, mover::Insets};
 
 /// A window that passed the manageability checks.
 #[derive(Debug, Clone)]
@@ -195,13 +197,56 @@ fn apps_folder_target(parsing_name: &str) -> Option<String> {
     std::path::Path::new(&path).is_file().then_some(path)
 }
 
+/// An app Start lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct App {
+    /// What Start shows, like `Windows Terminal`.
+    pub name: String,
+    /// The `shell:AppsFolder` id: an AppUserModelID or a path.
+    pub id: String,
+}
+
+/// The items of `shell:AppsFolder` with a name and an id. Needs COM on the calling thread.
+fn apps_folder() -> w::HrResult<Vec<App>> {
+    let folder: w::IShellItem =
+        w::SHCreateItemFromParsingName("shell:AppsFolder", None::<&w::IBindCtx>)?;
+    let items: w::IEnumShellItems =
+        folder.BindToHandler(None::<&w::IBindCtx>, &co::BHID::EnumItems)?;
+    let mut apps = Vec::new();
+    for item in items.iter() {
+        let item = item?;
+        let (Ok(name), Ok(id)) = (
+            item.GetDisplayName(co::SIGDN::NORMALDISPLAY),
+            item.GetDisplayName(co::SIGDN::PARENTRELATIVEPARSING),
+        ) else {
+            continue;
+        };
+        if !name.trim().is_empty() && !id.is_empty() {
+            apps.push(App { name, id });
+        }
+    }
+    Ok(apps)
+}
+
+/// Everything Start lists, by name, without duplicates. Runs COM on the calling thread.
+pub fn list_apps() -> Vec<App> {
+    let _com = init_com();
+    let mut apps = apps_folder().unwrap_or_else(|e| {
+        tracing::warn!("couldn't list apps: {e}");
+        Vec::new()
+    });
+    apps.sort_by_cached_key(|a| (a.name.to_lowercase(), a.id.clone()));
+    apps.dedup();
+    apps
+}
+
 /// Starts a file, folder or `shell:` path as administrator, asking for consent unless Tile
 /// already runs elevated. Returns at once; a failure is logged.
 pub fn run_as_admin(target: &str) {
     let target = target.to_owned();
     // ShellExecute wants a single-threaded COM apartment of its own.
     std::thread::spawn(move || {
-        let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
+        let _com = init_com();
         let target = if target.starts_with("shell:AppsFolder") {
             apps_folder_target(&target).unwrap_or(target)
         } else {
@@ -583,13 +628,11 @@ pub fn mouse_button_down() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use winsafe::prelude::{shell_IEnumShellItems as _, shell_IShellItem as _};
-
     use super::*;
 
     #[test]
     fn an_unknown_app_has_no_target_file() {
-        let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
+        let _com = init_com();
         assert_eq!(
             apps_folder_target(r"shell:AppsFolder\Tile.NoSuchApp!App"),
             None
@@ -598,18 +641,11 @@ mod tests {
 
     #[test]
     fn a_desktop_app_resolves_to_a_real_file() {
-        let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
-        let folder: w::IShellItem =
-            w::SHCreateItemFromParsingName("shell:AppsFolder", None::<&w::IBindCtx>).unwrap();
-        let items: w::IEnumShellItems = folder
-            .BindToHandler(None::<&w::IBindCtx>, &co::BHID::EnumItems)
-            .unwrap();
-        let resolved = items
-            .iter()
-            .flatten()
-            .filter_map(|item| item.GetDisplayName(co::SIGDN::PARENTRELATIVEPARSING).ok())
-            .filter_map(|id| apps_folder_target(&format!(r"shell:AppsFolder\{id}")))
-            .next();
+        let _com = init_com();
+        let resolved = apps_folder()
+            .unwrap()
+            .into_iter()
+            .find_map(|app| apps_folder_target(&format!(r"shell:AppsFolder\{}", app.id)));
         if let Some(path) = resolved {
             assert!(std::path::Path::new(&path).is_file());
         }
