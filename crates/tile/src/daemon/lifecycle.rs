@@ -4,7 +4,6 @@ use super::{Daemon, fresh_desktops, indicator_settings, launcher_settings};
 use crate::{
     logging,
     remap::{self, Remap},
-    settings,
 };
 use tile_config::Loaded;
 
@@ -163,8 +162,10 @@ impl Daemon {
     }
 
     pub(super) fn toggle_logging(&mut self) {
-        logging::set_enabled(!logging::enabled());
-        self.tray.set_logging(logging::enabled());
+        let on = !logging::enabled();
+        logging::set_enabled(on);
+        self.save_switches(|s| s.log = on);
+        self.tray.set_logging(on);
     }
 
     /// `togglepause`: pauses the window manager and the remapper, or resumes both if both are
@@ -178,7 +179,7 @@ impl Daemon {
     pub(super) fn set_remap_paused(&mut self, paused: bool) {
         self.remap_paused = paused;
         self.tray.set_remap_paused(paused);
-        settings::update(|s| s.remap = !paused);
+        self.save_switches(|s| s.remap = !paused);
         if let Some(remap) = &self.remap {
             remap.send(remap::Command::Pause(paused));
         }
@@ -190,7 +191,7 @@ impl Daemon {
         self.paused = paused;
         self.hotkeys.set_paused(paused || !self.tiling);
         self.tray.set_tile_paused(paused);
-        settings::update(|s| s.tile = !paused);
+        self.save_switches(|s| s.tile = !paused);
         self.update_cursor();
         tracing::info!("tiling {}", if paused { "paused" } else { "resumed" });
         if !self.tiling {

@@ -7,7 +7,7 @@ use tile_shell::{
 };
 
 use super::Daemon;
-use crate::{launch, settings};
+use crate::launch;
 
 impl Daemon {
     /// Removes the black windows, so the desktop shows again, and leaves UAC prompts to the
@@ -25,7 +25,7 @@ impl Daemon {
     /// The tray's Shell item: flips the saved switch, which then applies like a config edit.
     pub(super) fn toggle_shell(&mut self) {
         let on = !self.shell_on;
-        settings::update(|s| s.shell = on);
+        self.save_switches(|s| s.shell = on);
         self.apply_shell(on);
     }
 

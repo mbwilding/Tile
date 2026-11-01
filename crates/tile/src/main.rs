@@ -70,9 +70,9 @@ fn main() -> anyhow::Result<()> {
         .config
         .clone()
         .unwrap_or_else(tile_config::default_path);
-    settings::init(&config_path);
+    let log_switch = settings::load(&config_path).log;
     if args.launcher {
-        let _guard = logging::init("launcher.log", args.log.as_deref());
+        let _guard = logging::init("launcher.log", args.log.as_deref(), log_switch);
         log_panics();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -85,6 +85,7 @@ fn main() -> anyhow::Result<()> {
     let _guard = logging::init(
         if helper { "launcher.log" } else { "tile.log" },
         args.log.as_deref(),
+        log_switch,
     );
     if helper {
         log_panics();
