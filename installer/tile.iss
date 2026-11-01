@@ -9,7 +9,12 @@
   #define SourceExe "..\target\release\tile.exe"
 #endif
 
+#ifndef IconFile
+  #define IconFile "..	argetelease	ile.ico"
+#endif
+
 [Setup]
+SetupIconFile={#IconFile}
 AppId={{6B2F7C0E-4D0B-4E55-9B53-6C1A5E8C2A41}
 AppName=Tile
 AppVersion={#AppVersion}

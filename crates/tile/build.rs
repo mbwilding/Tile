@@ -18,6 +18,11 @@ fn main() {
         let res = out.join("tile-icon.res");
         std::fs::write(&res, icon_resource()).expect("unable to write the icon resource");
         println!("cargo:rustc-link-arg-bins={}", res.display());
+        // Beside the built exe, for the installer to use as its own icon.
+        if let Some(profile) = out.ancestors().nth(3) {
+            std::fs::write(profile.join("tile.ico"), icon_file())
+                .expect("unable to write the icon file");
+        }
     }
     // CI sets TILE_VERSION to the release version; local builds use the crate's.
     let version = std::env::var("TILE_VERSION")
@@ -54,6 +59,27 @@ fn icon_resource() -> Vec<u8> {
     }
     record(&mut res, 14, GROUP_ID, &group);
     res
+}
+
+/// The same icon as a standalone `.ico` file.
+fn icon_file() -> Vec<u8> {
+    let images: Vec<Vec<u8>> = SIZES.into_iter().map(dib).collect();
+    let mut ico = vec![0, 0, 1, 0];
+    ico.extend_from_slice(&(SIZES.len() as u16).to_le_bytes());
+    let mut offset = 6 + 16 * SIZES.len() as u32;
+    for (size, image) in SIZES.into_iter().zip(&images) {
+        let dim = if size >= 256 { 0 } else { size as u8 };
+        ico.extend_from_slice(&[dim, dim, 0, 0]);
+        ico.extend_from_slice(&1u16.to_le_bytes());
+        ico.extend_from_slice(&32u16.to_le_bytes());
+        ico.extend_from_slice(&(image.len() as u32).to_le_bytes());
+        ico.extend_from_slice(&offset.to_le_bytes());
+        offset += image.len() as u32;
+    }
+    for image in images {
+        ico.extend_from_slice(&image);
+    }
+    ico
 }
 
 /// An icon image in DIB form: 32-bit bottom-up BGRA, then the (all clear) AND mask.
