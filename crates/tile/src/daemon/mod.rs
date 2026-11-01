@@ -38,7 +38,7 @@ use tokio::{
     time::{Instant, MissedTickBehavior, interval, sleep_until},
 };
 
-use self::tracked::Tracked;
+use self::{lock::WinL, tracked::Tracked};
 use crate::{
     launch, logging,
     paths::{self, Restore},
@@ -140,12 +140,8 @@ struct Daemon {
     subscribers: Vec<UnboundedSender<Response>>,
     published: Published,
     saved_restore: Restore,
-    /// We set the policy that disables Win+L (and must remove it again).
-    lock_taken: bool,
-    /// We already asked (UAC) for permission to manage the Win+L policy this run.
-    lock_grant_requested: bool,
-    /// After the `lock` dispatcher lifted the Win+L policy: when to re-apply it.
-    relock_at: Option<Instant>,
+    /// The Win+L takeover.
+    win_l: WinL,
     /// Shortly after a focus change: re-check borders apps may have repainted on activation.
     heal_at: Option<Instant>,
     /// Re-entrancy guard for re-syncing focus after Windows refused a focus change.
@@ -310,9 +306,7 @@ pub async fn run(
         subscribers: Vec::new(),
         published: Published::default(),
         saved_restore: Restore::default(),
-        lock_taken: false,
-        lock_grant_requested: false,
-        relock_at: None,
+        win_l: WinL::default(),
         heal_at: None,
         resyncing_focus: false,
         defocused_at: None,
@@ -394,12 +388,7 @@ impl Daemon {
                 .min();
             tokio::select! {
                 () = until(self.cursor_check_at) => self.check_cursor(),
-                () = until(self.relock_at) => {
-                    self.relock_at = None;
-                    if self.lock_taken {
-                        tile_platform::set_lock_disabled(true);
-                    }
-                }
+                () = until(self.win_l.relock_at) => self.relock(),
                 () = until(self.heal_at) => {
                     self.heal_at = None;
                     self.heal_borders();
@@ -480,7 +469,7 @@ impl Daemon {
         self.stop_remap("remapping stopped");
         self.show_cursor();
         self.release_windows();
-        if self.lock_taken {
+        if self.win_l.taken {
             tile_platform::set_lock_disabled(false);
         }
         paths::save_restore(&Restore::default());

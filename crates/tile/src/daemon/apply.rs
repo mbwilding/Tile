@@ -269,7 +269,7 @@ impl Daemon {
                 .filter(|(_, t)| t.undecorated == Some(true))
                 .map(|(id, _)| id.0)
                 .collect(),
-            lock_disabled: self.lock_taken,
+            lock_disabled: self.win_l.taken,
             cursor_hidden: self.cursor_hidden.is_some(),
         };
         restore.hidden.sort_unstable();
