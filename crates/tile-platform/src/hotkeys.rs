@@ -9,7 +9,7 @@ use std::{
 };
 
 use tile_config::{Keybind, Modifiers};
-use tile_hook::{Decision, Handler, Input, RawKey};
+use tile_input::{Decision, Handler, Input, RawKey};
 use tokio::sync::mpsc;
 use win_hotkeys::VKey;
 use winsafe::{self as w, co};
@@ -113,7 +113,7 @@ impl Handler for Matcher {
             // Windows opens Start when Win goes up with no other key since it went down. Hold
             // the real release back, press a key that does nothing, then send the release, so
             // the order is guaranteed.
-            let sent = tile_hook::send(&[
+            let sent = tile_input::send(&[
                 Input::Vk {
                     vk: SILENT_VK,
                     up: false,
@@ -163,7 +163,7 @@ impl Handler for Matcher {
         };
         if mods.super_key {
             tracing::info!("bind {event:?} for vk {:#x} with {mods:?}", key.vk);
-            tile_hook::send(&[
+            tile_input::send(&[
                 Input::Vk {
                     vk: SILENT_VK,
                     up: false,
@@ -203,7 +203,7 @@ impl Hotkeys {
             tx,
             chords: HashMap::new(),
         };
-        tile_hook::spawn("hotkey hook", move || matcher)?;
+        tile_input::spawn("hotkey hook", move || matcher)?;
         Ok(hotkeys)
     }
 

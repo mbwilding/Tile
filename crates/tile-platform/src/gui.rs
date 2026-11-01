@@ -23,6 +23,6 @@ pub const fn corner_preference(corners: Corners) -> co::DWMWCP {
 pub fn wake(hwnd: &AtomicIsize) {
     let hwnd = hwnd.load(Ordering::Acquire);
     if hwnd != 0 {
-        tile_hook::post_app(hwnd, 0);
+        tile_sys::post_app(hwnd, 0);
     }
 }

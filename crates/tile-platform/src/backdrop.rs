@@ -5,9 +5,9 @@
 use crate::monitors::monitors;
 
 /// The black windows, kept to the monitors.
-pub struct Backdrop(tile_hook::backdrop::Backdrop);
+pub struct Backdrop(tile_shell::backdrop::Backdrop);
 
-fn areas() -> Vec<tile_hook::backdrop::Area> {
+fn areas() -> Vec<tile_shell::backdrop::Area> {
     monitors()
         .iter()
         .map(|m| [m.rect.x, m.rect.y, m.rect.w, m.rect.h])
@@ -17,7 +17,7 @@ fn areas() -> Vec<tile_hook::backdrop::Area> {
 impl Backdrop {
     /// Covers every monitor in black. `None` if the windows couldn't be made.
     pub fn black() -> Option<Self> {
-        tile_hook::backdrop::Backdrop::start(areas())
+        tile_shell::backdrop::Backdrop::start(areas())
             .inspect_err(|e| tracing::warn!("couldn't make the desktop black: {e}"))
             .ok()
             .map(Self)

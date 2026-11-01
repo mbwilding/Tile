@@ -21,7 +21,6 @@ use std::{
 use anyhow::{Context, bail};
 use tile_config::Loaded;
 use tile_core::{Command, LayoutKind, MonitorInfo, Rect, WindowId};
-use tile_hook::notify::{Host, Registry};
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
@@ -30,6 +29,7 @@ use tile_platform::{
     desktops::{self as vd, DesktopChange},
     foreground,
 };
+use tile_shell::notify::{Host, Registry};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     time::{Instant, MissedTickBehavior, interval, sleep_until},

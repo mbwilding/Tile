@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
         return runtime.block_on(cli::run(command));
     }
     // Started without a terminal (sign-in, a task, Explorer), there is no console to keep.
-    tile_hook::detach_console();
+    tile_sys::detach_console();
     if let Some(pid) = args.watchdog {
         watchdog(pid);
         return Ok(());
@@ -96,12 +96,12 @@ fn main() -> anyhow::Result<()> {
         }
         tracing::warn!("the sign-in task didn't start Tile; running it here");
     }
-    let Some(_instance) = tile_hook::single_instance("Tile") else {
+    let Some(_instance) = tile_sys::single_instance("Tile") else {
         tracing::error!("Tile is already running");
         anyhow::bail!("Tile is already running");
     };
     // The watchdog can go down with a closing terminal, so a Tile run from one cleans up itself too.
-    tile_hook::on_console_close(|| paths::load_restore().apply());
+    tile_sys::on_console_close(|| paths::load_restore().apply());
 
     // Never leave windows hidden or without title bars, even if we crash.
     let previous = std::panic::take_hook();

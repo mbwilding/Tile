@@ -1,7 +1,7 @@
 //! Shell mode: hosting the notification area and the sign-in shell setting.
 
-use tile_hook::notify::{Host, taskbar_exists};
 use tile_platform::Backdrop;
+use tile_shell::notify::{Host, taskbar_exists};
 
 use super::Daemon;
 use crate::{launch, settings};

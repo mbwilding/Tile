@@ -6,9 +6,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-tile-core.workspace = true
 tile-config.workspace = true
-tile-hook.workspace = true
+tile-core.workspace = true
+tile-input.workspace = true
+tile-shell.workspace = true
+tile-sys.workspace = true
 tokio = { workspace = true, features = ["rt", "sync"] }
 tracing.workspace = true
 tray-icon.workspace = true

@@ -200,7 +200,7 @@ pub fn run_as_admin(target: &str) {
 pub fn close_foreground() {
     if let Some(raw) = foreground()
         && !is_shell_window(raw)
-        && !tile_hook::post_close(raw)
+        && !tile_sys::post_close(raw)
     {
         tracing::debug!("couldn't ask {raw:#x} to close");
     }

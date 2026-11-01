@@ -11,8 +11,8 @@ cargo clippy --workspace --all-targets
 cargo test --workspace
 ```
 
-All three must be clean. `unsafe` is allowed only in `tile-hook`, each block with a `// SAFETY:`
-comment.
+All three must be clean. `unsafe` is allowed only in `tile-input`, `tile-shell` and `tile-sys`,
+each block with a `// SAFETY:` comment.
 
 ## Documentation
 

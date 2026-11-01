@@ -985,11 +985,13 @@ dependencies = [
  "serde_json",
  "tile-config",
  "tile-core",
- "tile-hook",
+ "tile-input",
  "tile-ipc",
  "tile-launcher",
  "tile-platform",
  "tile-remap",
+ "tile-shell",
+ "tile-sys",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -1020,12 +1022,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "tile-hook"
+name = "tile-input"
 version = "0.1.0"
 dependencies = [
- "tracing",
- "windows 0.58.0",
- "windows-core 0.58.0",
  "windows-sys 0.61.2",
 ]
 
@@ -1051,8 +1050,9 @@ dependencies = [
  "serde_json",
  "tile-config",
  "tile-core",
- "tile-hook",
  "tile-platform",
+ "tile-shell",
+ "tile-sys",
  "tokio",
  "tracing",
  "winsafe",
@@ -1064,7 +1064,9 @@ version = "0.1.0"
 dependencies = [
  "tile-config",
  "tile-core",
- "tile-hook",
+ "tile-input",
+ "tile-shell",
+ "tile-sys",
  "tokio",
  "tracing",
  "tray-icon",
@@ -1079,6 +1081,24 @@ dependencies = [
 [[package]]
 name = "tile-remap"
 version = "0.1.0"
+
+[[package]]
+name = "tile-shell"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "windows 0.58.0",
+ "windows-core 0.58.0",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tile-sys"
+version = "0.1.0"
+dependencies = [
+ "windows 0.58.0",
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "time"

@@ -43,7 +43,7 @@ impl Restore {
             tile_platform::set_lock_disabled(false);
         }
         if self.cursor_hidden {
-            tile_hook::restore_cursors();
+            tile_input::restore_cursors();
         }
     }
 }

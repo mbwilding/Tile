@@ -4,8 +4,8 @@ use crate::system::{
     Action, AudioDevice, Battery, BluetoothDevice, Network, Radio, Status, Volume, WifiNetwork,
     format_clock,
 };
-use tile_hook::{
-    system::{self as sys, Flow},
+use tile_sys::{
+    devices::{self as sys, Flow},
     wifi,
 };
 use winsafe::{self as w, co};

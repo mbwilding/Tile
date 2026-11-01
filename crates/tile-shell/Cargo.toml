@@ -1,0 +1,45 @@
+[package]
+name = "tile-shell"
+description = "What Explorer provides, for running Tile as the Windows shell: the notification area, a backdrop and Store app frames"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tracing.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Storage_Packaging_Appx",
+    "Win32_System_Com",
+    "Win32_System_DataExchange",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+# The COM and WinRT interfaces behind the Store app handshake and the shell's service provider.
+windows = { workspace = true, features = [
+    "implement",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Com_Marshal",
+    "Win32_System_WinRT",
+    "Win32_UI_Shell",
+] }
+
+# Named by the code `windows`'s `implement` macro writes.
+windows-core = "0.58"
+
+# Not the workspace lints: this crate is where `unsafe` is allowed. Every block says why it
+# is sound in a `// SAFETY:` comment.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "warn"

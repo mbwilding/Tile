@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tile_hook::{Decision, Input, MouseEvent, MouseHandler, MouseHook};
+use tile_input::{Decision, Input, MouseEvent, MouseHandler, MouseHook};
 use tokio::sync::mpsc;
 use winsafe::{self as w, co};
 
@@ -99,7 +99,7 @@ impl Dragger {
         });
         WIN_USED.store(true, Ordering::Relaxed);
         // Stops Win's release opening the Start menu.
-        tile_hook::send(&[
+        tile_input::send(&[
             Input::Vk {
                 vk: SILENT_VK,
                 up: false,
@@ -149,7 +149,7 @@ impl WinDrag {
     pub fn start(tx: mpsc::UnboundedSender<DragEvent>) -> io::Result<Self> {
         let enabled = Arc::new(AtomicBool::new(false));
         let shared = enabled.clone();
-        let hook = tile_hook::spawn_mouse("mouse hook", move || Dragger {
+        let hook = tile_input::spawn_mouse("mouse hook", move || Dragger {
             enabled: shared,
             tx,
             grab: None,

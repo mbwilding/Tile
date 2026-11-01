@@ -195,7 +195,7 @@ fn run(
             style_window(wnd.hwnd(), &state.borrow().settings);
             hwnd_slot.store(wnd.hwnd().ptr() as isize, Ordering::Release);
             // Requests sent before the window existed.
-            tile_hook::post_app(wnd.hwnd().ptr() as isize, 0);
+            tile_sys::post_app(wnd.hwnd().ptr() as isize, 0);
             Ok(0)
         }
     });
@@ -219,7 +219,7 @@ fn run(
                 return;
             }
             let (cx, cy) = area.center();
-            let dpi = tile_hook::monitor_dpi(cx, cy);
+            let dpi = tile_shell::monitor_dpi(cx, cy);
             if dpi != s.dpi {
                 s.dpi = dpi;
                 s.font = None;

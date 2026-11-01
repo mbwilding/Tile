@@ -10,7 +10,8 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/mbwilding/tile"
 
-# `tile-hook` is the one crate that opts out of these (it holds all the `unsafe`).
+# The low-level crates (`tile-input`, `tile-shell`, `tile-sys`) opt out of these: they hold all
+# the `unsafe`.
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
@@ -20,13 +21,15 @@ all = { level = "warn", priority = -1 }
 # Latest releases, default features off; crates opt into exactly what they use
 # (tokio features are chosen per crate).
 [workspace.dependencies]
-tile-core = { path = "crates/tile-core" }
-tile-hook = { path = "crates/tile-hook" }
 tile-config = { path = "crates/tile-config" }
+tile-core = { path = "crates/tile-core" }
+tile-input = { path = "crates/tile-input" }
 tile-ipc = { path = "crates/tile-ipc" }
 tile-launcher = { path = "crates/tile-launcher" }
 tile-platform = { path = "crates/tile-platform" }
 tile-remap = { path = "crates/tile-remap" }
+tile-shell = { path = "crates/tile-shell" }
+tile-sys = { path = "crates/tile-sys" }
 
 anyhow = "1.0"
 clap = { version = "4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }

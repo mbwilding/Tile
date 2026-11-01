@@ -1,5 +1,5 @@
 //! Windows integration for Tile, built on safe wrappers:
-//! `winsafe` for Win32/DWM, `wineventhook` for window events, `tile-hook` for the
+//! `winsafe` for Win32/DWM, `wineventhook` for window events, `tile-input` for the
 //! low-level keyboard hooks, `uiautomation` for closing windows and `tray-icon` for the tray.
 
 mod backdrop;

@@ -87,7 +87,7 @@ pub fn activate(aumid: &str) {
 fn activate_now(aumid: &str) {
     let aumid = aumid.to_owned();
     std::thread::spawn(move || {
-        if let Err(e) = tile_hook::uwp::activate(&aumid) {
+        if let Err(e) = tile_shell::uwp::activate(&aumid) {
             tracing::warn!("{e}");
         }
     });
@@ -124,7 +124,7 @@ pub async fn serve_for_tile() -> anyhow::Result<bool> {
     let server = LaunchServer::bind()?;
     tracing::info!("launcher started, waiting for Tile");
     // As the shell, this process answers for Store apps the way Explorer would.
-    tile_hook::uwp::start();
+    tile_shell::uwp::start();
     let mut serving = tokio::spawn(async move {
         loop {
             match server.next().await {
@@ -167,7 +167,7 @@ pub async fn serve() -> anyhow::Result<()> {
     // Restarting Tile replaces the sign-in copy of this process with this one, so it answers for
     // Store apps whenever Tile is the shell.
     if tile_platform::is_sign_in_shell() {
-        tile_hook::uwp::start();
+        tile_shell::uwp::start();
     }
     loop {
         match server.next().await {

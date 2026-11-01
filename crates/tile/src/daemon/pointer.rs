@@ -26,7 +26,7 @@ impl Daemon {
         // Recorded first: if we die mid-way, the watchdog still restores the cursors.
         self.cursor_hidden = Some(cursor_pos());
         self.persist_restore();
-        if !tile_hook::hide_cursor() {
+        if !tile_input::hide_cursor() {
             tracing::debug!("some system cursors couldn't be hidden");
         }
         self.cursor_check_at = Some(Instant::now() + CURSOR_POLL);
@@ -68,7 +68,7 @@ impl Daemon {
             return;
         }
         self.cursor_check_at = None;
-        if !tile_hook::restore_cursors() {
+        if !tile_input::restore_cursors() {
             tracing::warn!("failed to restore the system cursors");
         }
         self.persist_restore();

@@ -6,10 +6,11 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-tile-core.workspace = true
 tile-config.workspace = true
-tile-hook.workspace = true
+tile-core.workspace = true
 tile-platform.workspace = true
+tile-shell.workspace = true
+tile-sys.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true

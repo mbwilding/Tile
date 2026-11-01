@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tile_hook::{Decision, Handler, Input, RawKey, Waker};
+use tile_input::{Decision, Handler, Input, RawKey, Waker};
 use tile_remap::{Config, Engine, Key, KeyEvent, Out};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -99,7 +99,7 @@ fn send(out: &[Out]) {
             ],
         })
         .collect();
-    let sent = tile_hook::send(&inputs);
+    let sent = tile_input::send(&inputs);
     if sent != inputs.len() {
         tracing::debug!(
             "sent {sent} of {} keys (blocked by a higher-integrity window?)",
@@ -204,7 +204,7 @@ impl Remap {
         notices: UnboundedSender<Notice>,
     ) -> io::Result<Self> {
         let (commands, command_rx) = mpsc::channel();
-        let (waker, thread) = tile_hook::spawn("remap hook", move || {
+        let (waker, thread) = tile_input::spawn("remap hook", move || {
             Remapper::new(config, paused, command_rx, notices)
         })?;
         Ok(Self {

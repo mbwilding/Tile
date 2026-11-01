@@ -271,7 +271,7 @@ fn run(tx: &mpsc::UnboundedSender<TrayEvent>, shutdown: &Arc<AtomicBool>, checks
                 Ok(built) => *state.borrow_mut() = Some(built),
                 Err(e) => tracing::error!("failed to create tray icon: {e}"),
             }
-            if !tile_hook::watch_sessions(wnd.hwnd().ptr() as isize) {
+            if !tile_sys::watch_sessions(wnd.hwnd().ptr() as isize) {
                 tracing::warn!(
                     "can't watch for the session locking; remapped keys may stick after unlocking"
                 );
@@ -292,7 +292,7 @@ fn run(tx: &mpsc::UnboundedSender<TrayEvent>, shutdown: &Arc<AtomicBool>, checks
         move || {
             if shutdown.load(Ordering::Relaxed) {
                 state.borrow_mut().take();
-                tile_hook::unwatch_sessions(wnd.hwnd().ptr() as isize);
+                tile_sys::unwatch_sessions(wnd.hwnd().ptr() as isize);
                 w::PostQuitMessage(0);
                 return Ok(());
             }

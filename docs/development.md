@@ -22,16 +22,24 @@ Aliases in `.cargo/config.toml`:
 
 | Crate | Purpose |
 | --- | --- |
-| `tile-core` | Platform-independent state, layouts, dispatchers, easing and the launcher's search (unit tested) |
+| `tile-core` | Platform-independent window manager model: state, layouts, dispatchers, geometry and easing (unit tested) |
 | `tile-remap` | The remapping engine: keyd's layers and overloads as a pure state machine (tested) |
 | `tile-config` | YAML schema, keybind parsing, window rules, remap layers, the tray switches and file watching |
-| `tile-hook` | The low-level keyboard and mouse hooks, `SendInput`, shell icons, the notification area host (`Shell_TrayWnd`), volume, battery, network and radios and other raw calls: the only `unsafe` |
-| `tile-platform` | Win32: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the launcher window, the sign-in programs, virtual desktops |
 | `tile-ipc` | Named-pipe JSON protocol |
+| `tile-launcher` | The app launcher: the search, calculator and system items (tested), and its window |
+| `tile-platform` | Win32 for the window manager: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the workspace indicator, the sign-in programs, virtual desktops |
+| `tile-input` | The low-level keyboard and mouse hooks, `SendInput` and hiding the pointer |
+| `tile-shell` | What Explorer provides, for shell mode: the notification area host (`Shell_TrayWnd`), the black backdrop, shell icons and the Store app frames |
+| `tile-sys` | Volume, battery, network, Wi-Fi and Bluetooth, the single-instance mutex, the console and window messages |
 | `tile` | The program (`tile.exe`): the daemon, the command line and install/uninstall |
 
-All `unsafe` lives in `tile-hook`, each block with a `// SAFETY:` comment; every other crate has
-`unsafe_code = "forbid"`. The rest of Win32 goes through safe wrappers:
+The crates layer upward: `tile-core`, `tile-remap` and `tile-config` know nothing of Windows;
+`tile-input`, `tile-shell` and `tile-sys` are the raw Win32 calls; `tile-platform` and
+`tile-launcher` build on them; `tile` joins everything in the daemon.
+
+All `unsafe` lives in `tile-input`, `tile-shell` and `tile-sys`, each block with a `// SAFETY:`
+comment; every other crate has `unsafe_code = "forbid"`. The rest of Win32 goes through safe
+wrappers:
 [`winsafe`](https://crates.io/crates/winsafe),
 [`wineventhook`](https://crates.io/crates/wineventhook),
 [`uiautomation`](https://crates.io/crates/uiautomation),

@@ -20,10 +20,10 @@ use std::{
 use regex::RegexSet;
 use tile_config::{Color, Launcher as Config, LauncherStyle, SearchPosition};
 use tile_core::{Command, Rect};
-use tile_hook::notify::{Click, IconImage, ItemKey, Registry, TrayItem};
 use tile_platform::{
     colorref, corner_preference, enumerate, focus_hwnd, is_shell_window, monitors, rect, wake,
 };
+use tile_shell::notify::{Click, IconImage, ItemKey, Registry, TrayItem};
 use tokio::sync::mpsc::UnboundedSender;
 use winsafe::{self as w, co, guard::DeleteObjectGuard, gui, prelude::*};
 
@@ -265,7 +265,7 @@ struct State {
     scroll: usize,
     dpi: u32,
     fonts: Option<Fonts>,
-    icons: HashMap<String, Option<tile_hook::Icon>>,
+    icons: HashMap<String, Option<tile_shell::Icon>>,
     /// Where the pointer was first seen since opening; moves from there select rows.
     mouse: Option<(i32, i32)>,
     /// The notification area's icons.
@@ -910,7 +910,7 @@ impl State {
     }
 
     /// A tray icon drawn at exactly `size` pixels.
-    fn tray_icon_at(&mut self, image: &IconImage, size: i32) -> Option<&tile_hook::Icon> {
+    fn tray_icon_at(&mut self, image: &IconImage, size: i32) -> Option<&tile_shell::Icon> {
         self.icons
             .entry(format!("hicon:{}:{size}", image.handle()))
             .or_insert_with(|| image.render(size))
@@ -918,17 +918,17 @@ impl State {
     }
 
     /// The icon of a program file, at `size` pixels.
-    fn file_icon(&mut self, path: &str, size: i32) -> Option<&tile_hook::Icon> {
+    fn file_icon(&mut self, path: &str, size: i32) -> Option<&tile_shell::Icon> {
         self.icons
             .entry(format!("file:{path}"))
-            .or_insert_with(|| tile_hook::shell_icon(path, size))
+            .or_insert_with(|| tile_shell::shell_icon(path, size))
             .as_ref()
     }
 
-    fn icon(&mut self, id: &str, size: i32) -> Option<&tile_hook::Icon> {
+    fn icon(&mut self, id: &str, size: i32) -> Option<&tile_shell::Icon> {
         self.icons
             .entry(id.to_owned())
-            .or_insert_with(|| tile_hook::shell_icon(&format!("shell:AppsFolder\\{id}"), size))
+            .or_insert_with(|| tile_shell::shell_icon(&format!("shell:AppsFolder\\{id}"), size))
             .as_ref()
     }
 }
@@ -1098,7 +1098,7 @@ fn run(
             // So the first time it opens already knows the system.
             refresh_system();
             // Requests sent before the window existed.
-            tile_hook::post_app(wnd.hwnd().ptr() as isize, 0);
+            tile_sys::post_app(wnd.hwnd().ptr() as isize, 0);
             Ok(0)
         }
     });
@@ -1125,7 +1125,7 @@ fn run(
             };
             let mut s = state.borrow_mut();
             let (cx, cy) = area.center();
-            let dpi = tile_hook::monitor_dpi(cx, cy);
+            let dpi = tile_shell::monitor_dpi(cx, cy);
             if dpi != s.dpi {
                 s.dpi = dpi;
                 s.fonts = None;
@@ -1384,7 +1384,7 @@ fn run(
                     }
                     if let LauncherEvent::Tray { key, click, at } = &event {
                         // So the app can show its window or menu in front.
-                        tile_hook::notify::allow_foreground();
+                        tile_shell::notify::allow_foreground();
                         let keep_open = *click == Click::Right;
                         watch_menu(&wnd, &mut state.borrow_mut(), key.hwnd, *at, keep_open);
                         if keep_open {
@@ -1425,7 +1425,7 @@ fn run(
             let events = s.events.clone();
             drop(s);
             // So the app can show its window or menu in front.
-            tile_hook::notify::allow_foreground();
+            tile_shell::notify::allow_foreground();
             // A right click's menu opens over the launcher, which stays until it closes.
             let keep_open = click == Click::Right;
             watch_menu(&wnd, &mut state.borrow_mut(), key.hwnd, at, keep_open);
