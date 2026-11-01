@@ -199,7 +199,7 @@ Per-window overrides. See [window rules](window-rules.md).
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `modifier_guard` | `true` | A layer's lone Alt or Win press doesn't open a menu or Start. |
-| `layers.<name>` | see below | keyd-style layers. See [key remapping](key-remapping.md). |
+| `layers.<name>` | see below | Remap layers. See [key remapping](key-remapping.md). |
 
 ## The default config
 

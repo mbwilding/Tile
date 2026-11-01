@@ -1,6 +1,6 @@
 [package]
 name = "tile-remap"
-description = "Platform-independent keyd-style key remapping engine for Tile"
+description = "Platform-independent key remapper for Tile"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

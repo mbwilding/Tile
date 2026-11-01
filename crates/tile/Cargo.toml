@@ -1,6 +1,6 @@
 [package]
 name = "tile"
-description = "A dynamic tiling window manager and keyd-style key remapper for Windows"
+description = "A dynamic tiling window manager and key remapper for Windows"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
