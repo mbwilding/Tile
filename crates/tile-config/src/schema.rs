@@ -740,7 +740,7 @@ pub struct Notifications {
     pub position: IndicatorPosition,
     /// Pixels between the popup and the edges of the work area it sits against, at 100% scaling.
     pub gap: u32,
-    /// Width in pixels at 100% scaling. It grows tall enough for the text.
+    /// Width in pixels at 100% scaling. It grows tall enough for the icon and the text.
     pub width: u32,
     /// How long it stays shown, in milliseconds, before it fades out.
     pub duration_ms: u64,
@@ -764,7 +764,7 @@ impl Default for Notifications {
             enabled: None,
             position: IndicatorPosition::TopRight,
             gap: 16,
-            width: 340,
+            width: 380,
             duration_ms: 5000,
             fade_ms: 400,
             max_visible: 3,
