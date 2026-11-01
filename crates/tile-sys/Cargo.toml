@@ -1,6 +1,6 @@
 [package]
 name = "tile-sys"
-description = "Audio, power, network and radios, the single-instance mutex, the console and window messages"
+description = "Audio, power, network and radios, the single-instance mutex, the console, processes and window messages"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_WiFi",
     "Win32_Security",
     "Win32_System_Console",
     "Win32_System_Power",
@@ -15,21 +17,22 @@ windows-sys = { workspace = true, features = [
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
 ] }
-# The COM and WinRT interfaces behind volume, network, Wi-Fi and Bluetooth.
+# The COM and WinRT interfaces behind volume, network and Bluetooth.
 windows = { workspace = true, features = [
+    "std",
     "Devices_Bluetooth",
     "Devices_Enumeration",
     "Devices_Radios",
     "Foundation_Collections",
-    "Win32_Foundation",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
-    "Win32_NetworkManagement_Ndis",
-    "Win32_NetworkManagement_WiFi",
     "Win32_Networking_NetworkListManager",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
 ] }
+windows-core.workspace = true
+winsafe.workspace = true
 
 # Not the workspace lints: this crate is where `unsafe` is allowed. Every block says why it
 # is sound in a `// SAFETY:` comment.

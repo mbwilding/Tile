@@ -10,7 +10,7 @@
 //! from a thread that belongs to a session. If an update changes any of it, [`start`] logs the
 //! failure and Store apps hang as before; nothing else is affected.
 
-use std::{ffi::c_void, ptr, thread};
+use std::{ffi::c_void, mem::ManuallyDrop, ptr, thread};
 
 use windows::{
     Win32::{
@@ -20,62 +20,72 @@ use windows::{
         },
         UI::Shell::{ACTIVATEOPTIONS, ApplicationActivationManager, IApplicationActivationManager},
     },
-    core::{GUID, HRESULT, HSTRING, IInspectable, Interface, PCWSTR},
-};
-use windows_sys::Win32::{
-    Foundation::CloseHandle,
-    System::{
-        LibraryLoader::{GetProcAddress, LoadLibraryW},
-        Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW},
+    core::{
+        HRESULT, HSTRING, IInspectable, IUnknown, IUnknown_Vtbl, Interface, OutRef, PCWSTR, Result,
+        interface,
     },
-    UI::WindowsAndMessaging::{FindWindowExW, GetWindowThreadProcessId},
 };
+use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+
+use crate::win::{context, file_name, pid_of, process_path, wide, windows_of_class};
 
 /// The shell component that completes Store app launches for `sihost`.
 const MANAGER_CLASS: &str =
     "Windows.Internal.Shell.UwpWindowLifecycleManagement.UwpWindowLifecycleManager";
-/// Its statics interface, `IUwpWindowLifecycleManagerStatics`.
-const STATICS: GUID = GUID::from_u128(0x6C69_1047_8DB8_5D6E_A382_AE35_ACDA_1DD5);
-/// The statics' methods follow `IInspectable`'s six: `get_Current`, then `Create`.
-const CREATE_SLOT: usize = 7;
-/// `Run` in the vtable of the session `CoreUICreateEx` makes.
-const RUN_SLOT: usize = 29;
 
-type Method = extern "system" fn(*mut c_void, *mut *mut c_void) -> HRESULT;
+/// `IUwpWindowLifecycleManagerStatics`. It derives from `IInspectable`, whose three methods come
+/// first.
+#[interface("6C691047-8DB8-5D6E-A382-AE35ACDA1DD5")]
+unsafe trait IUwpWindowLifecycleManagerStatics: IUnknown {
+    fn _get_iids(&self);
+    fn _get_runtime_class_name(&self);
+    fn _get_trust_level(&self);
+    fn _get_current(&self);
+    fn create(&self, manager: OutRef<IUnknown>) -> Result<()>;
+}
+
+/// The session `CoreUICreateEx` makes. Its interface id isn't known, and isn't needed: the
+/// session is only called, never asked for.
+#[interface("00000000-0000-0000-0000-000000000000")]
+unsafe trait ICoreUiSession: IUnknown {
+    fn _3(&self);
+    fn _4(&self);
+    fn _5(&self);
+    fn _6(&self);
+    fn _7(&self);
+    fn _8(&self);
+    fn _9(&self);
+    fn _10(&self);
+    fn _11(&self);
+    fn _12(&self);
+    fn _13(&self);
+    fn _14(&self);
+    fn _15(&self);
+    fn _16(&self);
+    fn _17(&self);
+    fn _18(&self);
+    fn _19(&self);
+    fn _20(&self);
+    fn _21(&self);
+    fn _22(&self);
+    fn _23(&self);
+    fn _24(&self);
+    fn _25(&self);
+    fn _26(&self);
+    fn _27(&self);
+    fn _28(&self);
+    fn run(&self) -> Result<()>;
+}
+
+/// `CoreUICreateEx(kind, session*)`, which CoreMessaging exports without a header.
+type CreateSession = unsafe extern "system" fn(u32, *mut *mut c_void) -> HRESULT;
 
 /// Whether Explorer owns a taskbar window, which makes it the shell.
 fn explorer_is_shell() -> bool {
-    let class: Vec<u16> = "Shell_TrayWnd\0".encode_utf16().collect();
-    let mut after = ptr::null_mut();
-    loop {
-        // SAFETY: `class` is NUL-terminated and outlives the call.
-        after = unsafe { FindWindowExW(ptr::null_mut(), after, class.as_ptr(), ptr::null()) };
-        if after.is_null() {
-            return false;
-        }
-        let mut pid = 0;
-        // SAFETY: `after` was just returned by the search; `pid` is a live local.
-        unsafe { GetWindowThreadProcessId(after, &raw mut pid) };
-        // SAFETY: a query-only handle that is closed again below.
-        let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
-        if process.is_null() {
-            continue;
-        }
-        let mut buffer = [0u16; 520];
-        let mut length = buffer.len() as u32;
-        // SAFETY: `buffer` has room for `length` units and `process` is open.
-        let ok =
-            unsafe { QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &raw mut length) };
-        // SAFETY: closes the handle opened above.
-        unsafe { CloseHandle(process) };
-        if ok != 0 {
-            let path = String::from_utf16_lossy(&buffer[..length as usize]);
-            let name = path.rsplit('\\').next().unwrap_or_default();
-            if name.eq_ignore_ascii_case("explorer.exe") {
-                return true;
-            }
-        }
-    }
+    windows_of_class("Shell_TrayWnd").into_iter().any(|window| {
+        process_path(pid_of(window))
+            .is_some_and(|path| file_name(&path).eq_ignore_ascii_case("explorer.exe"))
+    })
 }
 
 /// Starts the Store app support on a thread of its own, unless Explorer is the shell and already
@@ -101,69 +111,63 @@ pub fn start() {
 /// and returns its process id. `shell:AppsFolder\<id>` can't be used without Explorer: it asks
 /// for a COM class that only Explorer registers, and fails with "class not registered". Call
 /// this from a process with the user's normal rights, as Explorer's own is.
-pub fn activate(aumid: &str) -> Result<u32, String> {
-    let id: Vec<u16> = aumid.encode_utf16().chain([0]).collect();
+pub fn activate(aumid: &str) -> std::result::Result<u32, String> {
+    let id = wide(aumid);
     // SAFETY: plain COM calls; `id` is NUL-terminated and outlives the call.
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let manager: IApplicationActivationManager =
-            CoCreateInstance(&ApplicationActivationManager, None, CLSCTX_ALL)
-                .map_err(|e| format!("creating the activation manager: {e}"))?;
-        manager
-            .ActivateApplication(PCWSTR(id.as_ptr()), PCWSTR::null(), ACTIVATEOPTIONS(0))
-            .map_err(|e| format!("starting {aumid}: {e}"))
+        let manager: IApplicationActivationManager = context(
+            CoCreateInstance(&ApplicationActivationManager, None, CLSCTX_ALL),
+            "creating the activation manager",
+        )?;
+        context(
+            manager.ActivateApplication(PCWSTR(id.as_ptr()), PCWSTR::null(), ACTIVATEOPTIONS(0)),
+            &format!("starting {aumid}"),
+        )
     }
-}
-
-fn check(hr: HRESULT, what: &str) -> Result<(), String> {
-    hr.ok().map_err(|e| format!("{what}: {e}"))
 }
 
 /// Makes a CoreMessaging session, creates the lifecycle manager from its thread, then runs the
 /// session, which returns only when the process ends.
-fn host() -> Result<(), String> {
-    // SAFETY: calls CoreMessaging's `CoreUICreateEx` and the manager's static `Create` through
-    // their vtables, with the argument lists they have in Windows 11 build 26100. Every pointer
-    // passed is a live local or one the previous call returned, and the interfaces stay alive
-    // because the factory and session are kept until the function returns.
-    unsafe {
-        check(
-            RoInitialize(RO_INIT_MULTITHREADED).map_or_else(|e| e.code(), |()| HRESULT(0)),
-            "starting the runtime",
-        )?;
+fn host() -> std::result::Result<(), String> {
+    // SAFETY: takes no pointers.
+    let started = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
+    context(started, "starting the runtime")?;
 
-        let library: Vec<u16> = "CoreMessaging.dll\0".encode_utf16().collect();
+    let library = wide("CoreMessaging.dll");
+    // SAFETY: loading a system library by name and looking up an export that has this signature
+    // in Windows 11 build 26100. It is looked up rather than linked, so an update that drops it
+    // stops only this.
+    let create_session = unsafe {
         let module = LoadLibraryW(library.as_ptr());
         let export = GetProcAddress(module, c"CoreUICreateEx".as_ptr().cast())
             .ok_or("CoreMessaging has no CoreUICreateEx")?;
-        let create_session: extern "system" fn(u32, *mut *mut c_void) -> HRESULT =
-            std::mem::transmute(export);
-        let mut session: *mut c_void = ptr::null_mut();
-        check(create_session(1, &mut session), "creating the session")?;
-        if session.is_null() {
-            return Err("creating the session gave nothing".into());
-        }
-
-        let factory: IInspectable = RoGetActivationFactory(&HSTRING::from(MANAGER_CLASS))
-            .map_err(|e| format!("finding the lifecycle manager: {e}"))?;
-        let mut statics: *mut c_void = ptr::null_mut();
-        check(
-            (Interface::vtable(&factory).base.QueryInterface)(
-                factory.as_raw(),
-                &STATICS,
-                &mut statics,
-            ),
-            "asking for the manager's statics",
-        )?;
-        let statics_vtable = *statics.cast::<*const usize>();
-        let create: Method = std::mem::transmute(*statics_vtable.add(CREATE_SLOT));
-        let mut made: *mut c_void = ptr::null_mut();
-        check(create(statics, &mut made), "creating the lifecycle manager")?;
-        tracing::info!("hosting Store app launches");
-
-        let session_vtable = *session.cast::<*const usize>();
-        let run: extern "system" fn(*mut c_void) -> HRESULT =
-            std::mem::transmute(*session_vtable.add(RUN_SLOT));
-        check(run(session), "running the session")
+        std::mem::transmute::<unsafe extern "system" fn() -> isize, CreateSession>(export)
+    };
+    let mut raw = ptr::null_mut();
+    // SAFETY: `raw` is a live out pointer.
+    let made = unsafe { create_session(1, &raw mut raw) };
+    context(made.ok(), "creating the session")?;
+    if raw.is_null() {
+        return Err("creating the session gave nothing".into());
     }
+    // Never released: it is run until the process ends, and how it counts references isn't
+    // known.
+    // SAFETY: `raw` is the session just made, whose vtable has `Run` in the slot declared.
+    let session = ManuallyDrop::new(unsafe { ICoreUiSession::from_raw(raw) });
+
+    // SAFETY: plain WinRT activation.
+    let factory = unsafe { RoGetActivationFactory::<IInspectable>(&HSTRING::from(MANAGER_CLASS)) };
+    let factory = context(factory, "finding the lifecycle manager")?;
+    let statics: IUwpWindowLifecycleManagerStatics =
+        context(factory.cast(), "asking for the manager's statics")?;
+    let mut manager = None;
+    // SAFETY: `manager` is a live out slot; this thread belongs to the session.
+    let created = unsafe { statics.create(&mut manager) };
+    context(created, "creating the lifecycle manager")?;
+    tracing::info!("hosting Store app launches");
+    // The manager is kept until the session ends.
+    let _manager = manager;
+    // SAFETY: a call on the live session.
+    context(unsafe { session.run() }, "running the session")
 }

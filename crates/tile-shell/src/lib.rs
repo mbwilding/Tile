@@ -5,10 +5,12 @@
 //! Like the other low-level crates, it holds `unsafe` and exposes a safe API.
 
 pub mod backdrop;
-pub mod frame;
+mod frame;
 mod icon;
-pub mod immersive;
+mod immersive;
 pub mod notify;
+mod thread;
 pub mod uwp;
+mod win;
 
-pub use icon::{Icon, monitor_dpi, render_hicon, shell_icon};
+pub use icon::{Icon, monitor_dpi, shell_icon};

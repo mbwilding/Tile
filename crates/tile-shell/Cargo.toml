@@ -13,27 +13,25 @@ windows-sys = { workspace = true, features = [
     "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_Storage_Packaging_Appx",
-    "Win32_System_Com",
     "Win32_System_DataExchange",
     "Win32_System_Diagnostics_Debug",
     "Win32_System_LibraryLoader",
     "Win32_System_Threading",
     "Win32_UI_HiDpi",
-    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
-# The COM and WinRT interfaces behind the Store app handshake and the shell's service provider.
+# The COM and WinRT interfaces: the Store app handshake, the shell's service provider and the
+# shell's icons.
 windows = { workspace = true, features = [
-    "implement",
-    "Win32_Foundation",
+    "std",
+    "Win32_Graphics_Gdi",
     "Win32_System_Com",
     "Win32_System_Com_Marshal",
     "Win32_System_WinRT",
     "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
 ] }
-
-# Named by the code `windows`'s `implement` macro writes.
-windows-core = "0.58"
+windows-core.workspace = true
 
 # Not the workspace lints: this crate is where `unsafe` is allowed. Every block says why it
 # is sound in a `// SAFETY:` comment.

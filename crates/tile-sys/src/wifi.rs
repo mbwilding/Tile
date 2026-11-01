@@ -4,9 +4,9 @@
 
 use std::ptr;
 
-use windows::{
+use windows_sys::{
     Win32::{
-        Foundation::{HANDLE, WIN32_ERROR},
+        Foundation::{ERROR_SUCCESS, HANDLE},
         NetworkManagement::WiFi::{
             WLAN_AVAILABLE_NETWORK, WLAN_AVAILABLE_NETWORK_CONNECTED,
             WLAN_AVAILABLE_NETWORK_HAS_PROFILE, WLAN_AVAILABLE_NETWORK_LIST,
@@ -15,8 +15,10 @@ use windows::{
             WlanOpenHandle, WlanScan, dot11_BSS_type_any, wlan_connection_mode_profile,
         },
     },
-    core::{GUID, PCWSTR},
+    core::GUID,
 };
+
+use crate::wide;
 
 /// A saved network that is in range.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +29,7 @@ pub struct Network {
     pub ssid: String,
     /// 0 to 100.
     pub signal: u8,
+    /// Whether this machine is connected to it.
     pub connected: bool,
 }
 
@@ -40,18 +43,21 @@ impl Wlan {
     /// Opens the API and finds the first adapter, or `None` without Wi-Fi.
     fn open() -> Option<Self> {
         let mut version = 0;
-        let mut handle = HANDLE::default();
+        let mut handle: HANDLE = ptr::null_mut();
         // SAFETY: `version` and `handle` are live locals the call writes to.
-        if unsafe { WlanOpenHandle(2, None, &raw mut version, &raw mut handle) } != 0 {
+        if unsafe { WlanOpenHandle(2, ptr::null(), &raw mut version, &raw mut handle) }
+            != ERROR_SUCCESS
+        {
             return None;
         }
         let mut list: *mut WLAN_INTERFACE_INFO_LIST = ptr::null_mut();
         // SAFETY: `handle` is open; on success `list` is memory the API allocated, which is
         // freed below, and its first item exists when the count says so.
         let interface = unsafe {
-            let status = WlanEnumInterfaces(handle, None, &raw mut list);
-            let interface = (status == 0 && !list.is_null() && (*list).dwNumberOfItems > 0)
-                .then(|| (*list).InterfaceInfo[0].InterfaceGuid);
+            let status = WlanEnumInterfaces(handle, ptr::null(), &raw mut list);
+            let interface =
+                (status == ERROR_SUCCESS && !list.is_null() && (*list).dwNumberOfItems > 0)
+                    .then(|| (*list).InterfaceInfo[0].InterfaceGuid);
             if !list.is_null() {
                 WlanFreeMemory(list.cast());
             }
@@ -59,7 +65,7 @@ impl Wlan {
         };
         let Some(interface) = interface else {
             // SAFETY: closes the handle opened above.
-            unsafe { WlanCloseHandle(handle, None) };
+            unsafe { WlanCloseHandle(handle, ptr::null()) };
             return None;
         };
         Some(Self { handle, interface })
@@ -69,11 +75,12 @@ impl Wlan {
 impl Drop for Wlan {
     fn drop(&mut self) {
         // SAFETY: closes the handle `open` made, once.
-        unsafe { WlanCloseHandle(self.handle, None) };
+        unsafe { WlanCloseHandle(self.handle, ptr::null()) };
     }
 }
 
-fn wide(units: &[u16]) -> String {
+/// The text in `units` up to its first NUL.
+fn from_wide(units: &[u16]) -> String {
     let end = units.iter().position(|&u| u == 0).unwrap_or(units.len());
     String::from_utf16_lossy(&units[..end])
 }
@@ -89,24 +96,31 @@ pub fn networks() -> Vec<Network> {
     // SAFETY: the handle and adapter are valid; on success `list` is memory the API allocated
     // with `dwNumberOfItems` entries, read here and freed below.
     unsafe {
-        let status =
-            WlanGetAvailableNetworkList(wlan.handle, &wlan.interface, 0, None, &raw mut list);
-        if status == 0 && !list.is_null() {
+        let status = WlanGetAvailableNetworkList(
+            wlan.handle,
+            &wlan.interface,
+            0,
+            ptr::null(),
+            &raw mut list,
+        );
+        if status == ERROR_SUCCESS && !list.is_null() {
             let items = std::slice::from_raw_parts(
                 (*list).Network.as_ptr(),
                 (*list).dwNumberOfItems as usize,
             );
-            for network in items {
-                if let Some(found_network) = describe(network) {
-                    found.push(found_network);
-                }
-            }
+            found.extend(items.iter().filter_map(describe));
         }
         if !list.is_null() {
             WlanFreeMemory(list.cast());
         }
         // So the list is fresher next time; the answer arrives later.
-        let _ = WlanScan(wlan.handle, &wlan.interface, None, None, None);
+        WlanScan(
+            wlan.handle,
+            &wlan.interface,
+            ptr::null(),
+            ptr::null(),
+            ptr::null(),
+        );
     }
     found.sort_by(|a, b| {
         b.connected
@@ -125,7 +139,7 @@ fn describe(network: &WLAN_AVAILABLE_NETWORK) -> Option<Network> {
     }
     let length = (network.dot11Ssid.uSSIDLength as usize).min(32);
     Some(Network {
-        profile: wide(&network.strProfileName),
+        profile: from_wide(&network.strProfileName),
         ssid: String::from_utf8_lossy(&network.dot11Ssid.ucSSID[..length]).into_owned(),
         signal: network.wlanSignalQuality.min(100) as u8,
         connected: network.dwFlags & WLAN_AVAILABLE_NETWORK_CONNECTED != 0,
@@ -137,10 +151,10 @@ pub fn connect(profile: &str) -> bool {
     let Some(wlan) = Wlan::open() else {
         return false;
     };
-    let name: Vec<u16> = profile.encode_utf16().chain([0]).collect();
+    let name = wide(profile);
     let parameters = WLAN_CONNECTION_PARAMETERS {
         wlanConnectionMode: wlan_connection_mode_profile,
-        strProfile: PCWSTR(name.as_ptr()),
+        strProfile: name.as_ptr(),
         pDot11Ssid: ptr::null_mut(),
         pDesiredBssidList: ptr::null_mut(),
         dot11BssType: dot11_BSS_type_any,
@@ -148,8 +162,8 @@ pub fn connect(profile: &str) -> bool {
     };
     // SAFETY: the handle and adapter are valid; `parameters` points at `name`, which outlives
     // the call.
-    let status = unsafe { WlanConnect(wlan.handle, &wlan.interface, &parameters, None) };
-    WIN32_ERROR(status).is_ok()
+    let status = unsafe { WlanConnect(wlan.handle, &wlan.interface, &parameters, ptr::null()) };
+    status == ERROR_SUCCESS
 }
 
 /// Disconnects from the current Wi-Fi network.
@@ -158,6 +172,6 @@ pub fn disconnect() -> bool {
         return false;
     };
     // SAFETY: the handle and adapter are valid.
-    let status = unsafe { WlanDisconnect(wlan.handle, &wlan.interface, None) };
-    WIN32_ERROR(status).is_ok()
+    let status = unsafe { WlanDisconnect(wlan.handle, &wlan.interface, ptr::null()) };
+    status == ERROR_SUCCESS
 }
