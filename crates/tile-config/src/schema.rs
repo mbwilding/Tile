@@ -317,10 +317,10 @@ impl Default for General {
 }
 
 /// The tray's switches, saved here whenever they are changed so they survive a restart.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Tray {
-    /// Window management is on.
+    /// Window management is on. Off until switched on.
     pub tile: bool,
     /// Key remapping is on. Off until switched on.
     pub remap: bool,
@@ -329,17 +329,6 @@ pub struct Tray {
     /// Tile is the shell: it hosts the notification area when no taskbar is running, keeps the
     /// launcher bound and lists the tray icons in it.
     pub shell: bool,
-}
-
-impl Default for Tray {
-    fn default() -> Self {
-        Self {
-            tile: true,
-            remap: false,
-            log: false,
-            shell: false,
-        }
-    }
 }
 
 /// Tile as the Windows shell, in place of Explorer's taskbar. Whether it is the shell is the

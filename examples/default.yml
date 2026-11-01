@@ -31,7 +31,7 @@ theme:
 
 # The tray's switches. Tile saves these when you change them in the tray.
 tray:
-  tile: true # window manager on
+  tile: false # window manager on (starts off)
   remap: false # key remapper on (starts off)
   shell: false # Tile is the shell: hosts tray icons, keeps the launcher bound
   log: false
