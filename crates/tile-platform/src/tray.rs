@@ -1,14 +1,20 @@
+//! The tray icon and its menu, and the hidden window that hears about display and session
+//! changes.
+
 use std::{
     cell::RefCell,
     rc::Rc,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        mpsc as std_mpsc,
     },
-    thread,
 };
 
-use crate::tile_icon;
+use crate::{
+    gui::{Mailbox, WindowThread},
+    tile_icon,
+};
 use tokio::sync::mpsc;
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder,
@@ -25,9 +31,13 @@ pub enum TrayEvent {
     ToggleRemap,
     /// Make Tile the shell, or stop.
     ToggleShell,
+    /// Switch logging to a file on or off.
     ToggleLogging,
+    /// Open the config file.
     OpenConfig,
+    /// Open the log folder.
     OpenLogs,
+    /// Quit Tile.
     Quit,
     /// Monitors or the work area changed.
     DisplayChanged,
@@ -35,13 +45,20 @@ pub enum TrayEvent {
     SessionChanged,
 }
 
-const POLL_TIMER: usize = 1;
+/// What the tray thread is woken for.
+enum Request {
+    /// The check marks or the config error changed.
+    Sync,
+    /// A menu item was clicked.
+    Clicked(MenuId),
+    /// Remove the icon and end the thread.
+    Quit,
+}
 
 /// The tray icon, living on a dedicated thread with a hidden window and message loop.
 pub struct Tray {
-    shutdown: Arc<AtomicBool>,
+    thread: WindowThread<Request>,
     checks: Arc<Checks>,
-    thread: Option<thread::JoinHandle<()>>,
 }
 
 /// What the menu's check marks should show, set by the daemon.
@@ -186,38 +203,46 @@ fn build(checks: &Checks) -> Result<(TrayIcon, Items), String> {
 }
 
 impl Tray {
+    /// Starts the tray thread, which sends what happens there to `tx`. If the thread can't
+    /// start, Tile runs without a tray.
+    ///
+    /// Menu clicks reach the thread through `tray-icon`'s one process-wide handler, so start
+    /// only one tray per process.
     pub fn spawn(tx: mpsc::UnboundedSender<TrayEvent>) -> Self {
-        let shutdown = Arc::new(AtomicBool::new(false));
         let checks = Arc::new(Checks::default());
-        let (stop, state) = (shutdown.clone(), checks.clone());
-        let thread = thread::Builder::new()
-            .name("tray".into())
-            .spawn(move || run(&tx, &stop, &state))
-            .expect("spawn tray thread");
-        Self {
-            shutdown,
-            checks,
-            thread: Some(thread),
-        }
+        let state = checks.clone();
+        let thread = WindowThread::spawn("tray", move |requests, mailbox| {
+            run(&tx, &state, requests, &mailbox);
+        });
+        Self { thread, checks }
+    }
+
+    fn sync(&self) {
+        self.thread.send(Request::Sync);
     }
 
     /// Reflects the window manager's pause state in the menu.
     pub fn set_tile_paused(&self, paused: bool) {
         self.checks.tile_paused.store(paused, Ordering::Relaxed);
+        self.sync();
     }
 
     /// Reflects the key remapper's pause state in the menu.
     pub fn set_remap_paused(&self, paused: bool) {
         self.checks.remap_paused.store(paused, Ordering::Relaxed);
+        self.sync();
     }
 
     /// Reflects whether Tile is the shell in the menu.
     pub fn set_shell(&self, shell: bool) {
         self.checks.shell.store(shell, Ordering::Relaxed);
+        self.sync();
     }
 
+    /// Reflects whether logging is on in the menu.
     pub fn set_logging(&self, logging: bool) {
         self.checks.logging.store(logging, Ordering::Relaxed);
+        self.sync();
     }
 
     /// Shows that the config file has errors (and what they are) or, with `None`, that it
@@ -228,18 +253,44 @@ impl Tray {
             .config_error
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = error;
+        self.sync();
     }
 
     /// Removes the icon and stops the tray thread.
     pub fn shutdown(&mut self) {
-        self.shutdown.store(true, Ordering::Relaxed);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        self.thread.shutdown(Request::Quit);
     }
 }
 
-fn run(tx: &mpsc::UnboundedSender<TrayEvent>, shutdown: &Arc<AtomicBool>, checks: &Arc<Checks>) {
+impl Items {
+    /// The event for a click on the menu item `id`.
+    fn event(&self, id: &MenuId) -> Option<TrayEvent> {
+        Some(if id == self.tile.id() {
+            TrayEvent::ToggleTile
+        } else if id == self.remap.id() {
+            TrayEvent::ToggleRemap
+        } else if id == self.shell.id() {
+            TrayEvent::ToggleShell
+        } else if id == self.log.id() {
+            TrayEvent::ToggleLogging
+        } else if *id == self.open_config || id == self.error.id() {
+            TrayEvent::OpenConfig
+        } else if *id == self.open_logs {
+            TrayEvent::OpenLogs
+        } else if *id == self.quit {
+            TrayEvent::Quit
+        } else {
+            return None;
+        })
+    }
+}
+
+fn run(
+    tx: &mpsc::UnboundedSender<TrayEvent>,
+    checks: &Arc<Checks>,
+    requests: std_mpsc::Receiver<Request>,
+    mailbox: &Mailbox<Request>,
+) {
     let wnd = gui::WindowMain::new(gui::WindowMainOpts {
         title: "Tile",
         class_name: "tile-message-window",
@@ -247,8 +298,14 @@ fn run(tx: &mpsc::UnboundedSender<TrayEvent>, shutdown: &Arc<AtomicBool>, checks
     });
     let state: Rc<RefCell<Option<(TrayIcon, Items)>>> = Rc::new(RefCell::new(None));
 
+    MenuEvent::set_event_handler(Some({
+        let mailbox = mailbox.clone();
+        move |event: MenuEvent| mailbox.send(Request::Clicked(event.id))
+    }));
+
     wnd.on().wm_create({
-        let (wnd, state, checks) = (wnd.clone(), state.clone(), checks.clone());
+        let (wnd, state, checks, mailbox) =
+            (wnd.clone(), state.clone(), checks.clone(), mailbox.clone());
         move |_| {
             match build(&checks) {
                 Ok(built) => *state.borrow_mut() = Some(built),
@@ -259,54 +316,36 @@ fn run(tx: &mpsc::UnboundedSender<TrayEvent>, shutdown: &Arc<AtomicBool>, checks
                     "can't watch for the session locking; remapped keys may stick after unlocking"
                 );
             }
-            wnd.hwnd().SetTimer(POLL_TIMER, 100, None)?;
+            mailbox.attach(wnd.hwnd());
             Ok(0)
         }
     });
 
-    wnd.on().wm_timer(POLL_TIMER, {
-        let (wnd, state, tx, shutdown, checks) = (
-            wnd.clone(),
-            state.clone(),
-            tx.clone(),
-            shutdown.clone(),
-            checks.clone(),
-        );
-        move || {
-            if shutdown.load(Ordering::Relaxed) {
-                state.borrow_mut().take();
-                tile_sys::unwatch_sessions(wnd.hwnd().ptr() as isize);
-                w::PostQuitMessage(0);
-                return Ok(());
-            }
-            let mut state = state.borrow_mut();
-            let Some((tray, items)) = state.as_mut() else {
-                return Ok(());
-            };
-            while let Ok(event) = MenuEvent::receiver().try_recv() {
-                let mapped = if event.id == *items.tile.id() {
-                    Some(TrayEvent::ToggleTile)
-                } else if event.id == *items.remap.id() {
-                    Some(TrayEvent::ToggleRemap)
-                } else if event.id == *items.shell.id() {
-                    Some(TrayEvent::ToggleShell)
-                } else if event.id == *items.log.id() {
-                    Some(TrayEvent::ToggleLogging)
-                } else if event.id == items.open_config || event.id == *items.error.id() {
-                    Some(TrayEvent::OpenConfig)
-                } else if event.id == items.open_logs {
-                    Some(TrayEvent::OpenLogs)
-                } else if event.id == items.quit {
-                    Some(TrayEvent::Quit)
-                } else {
-                    None
-                };
-                if let Some(e) = mapped {
-                    let _ = tx.send(e);
+    wnd.on().wm(co::WM::APP, {
+        let (wnd, state, tx, checks) = (wnd.clone(), state.clone(), tx.clone(), checks.clone());
+        move |_| {
+            let mut changed = false;
+            while let Ok(request) = requests.try_recv() {
+                match request {
+                    Request::Sync => changed = true,
+                    Request::Clicked(id) => {
+                        let event = state.borrow().as_ref().and_then(|(_, i)| i.event(&id));
+                        if let Some(event) = event {
+                            let _ = tx.send(event);
+                        }
+                    }
+                    Request::Quit => {
+                        state.borrow_mut().take();
+                        tile_sys::unwatch_sessions(wnd.hwnd().ptr() as isize);
+                        w::PostQuitMessage(0);
+                        return Ok(0);
+                    }
                 }
             }
-            items.sync(tray, &checks);
-            Ok(())
+            if changed && let Some((tray, items)) = state.borrow_mut().as_mut() {
+                items.sync(tray, &checks);
+            }
+            Ok(0)
         }
     });
 
@@ -338,4 +377,5 @@ fn run(tx: &mpsc::UnboundedSender<TrayEvent>, shutdown: &Arc<AtomicBool>, checks
     if let Err(e) = wnd.run_main(Some(co::SW::HIDE)) {
         tracing::error!("tray message loop failed: {e}");
     }
+    mailbox.detach();
 }
