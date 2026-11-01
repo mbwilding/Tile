@@ -91,6 +91,10 @@ struct Framer {
     pending: Vec<HWND>,
     /// How many sweeps in a row each frame has held no app.
     empty: HashMap<usize, u8>,
+    /// App windows already hidden when the framer started: Windows keeps apps like Settings
+    /// running in the background, and showing those would open them unasked. They are framed once
+    /// they take focus.
+    dormant: HashSet<usize>,
 }
 
 /// Frames app windows as window events report them, and keeps the frames in step with their
@@ -107,7 +111,7 @@ fn run() -> Result<(), String> {
     if let Err(e) = crate::immersive::register() {
         tracing::warn!("couldn't register the shell stand-in: {e}");
     }
-    framer.scan();
+    framer.leave_dormant();
     let mut next_tick = Instant::now();
     let mut next_sweep = next_tick + SWEEP;
     while pump_pending() {
@@ -151,6 +155,16 @@ impl Framer {
             tried: HashMap::new(),
             pending: Vec::new(),
             empty: HashMap::new(),
+            dormant: HashSet::new(),
+        }
+    }
+
+    /// Notes the app windows that are hidden now, to leave them be until something asks for one.
+    fn leave_dormant(&mut self) {
+        for app in windows::top_level_windows() {
+            if windows::is_hidden_app_window(app) {
+                self.dormant.insert(app as usize);
+            }
         }
     }
 
@@ -162,6 +176,7 @@ impl Framer {
     /// Frames every new Store app window the shell is still hiding.
     fn scan(&mut self) {
         self.tried.retain(|&app, _| is_window(app as HWND));
+        self.dormant.retain(|&app| is_window(app as HWND));
         for app in windows::top_level_windows() {
             self.consider(app);
         }
@@ -177,6 +192,12 @@ impl Framer {
     /// Frames `app` if it is a Store app window the shell is still hiding and hasn't been tried
     /// too often. One that isn't framed this time is tried again next tick.
     fn consider(&mut self, app: HWND) {
+        if self.dormant.contains(&(app as usize)) {
+            if windows::foreground() != app {
+                return;
+            }
+            self.dormant.remove(&(app as usize));
+        }
         let attempts = self.tried.get(&(app as usize)).copied().unwrap_or(0);
         if attempts >= MAX_TRIES || !windows::is_hidden_app_window(app) {
             return;

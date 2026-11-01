@@ -16,9 +16,10 @@ use windows_sys::Win32::{
         WindowsAndMessaging::{
             CHILDID_SELF, CreateWindowExW, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CREATE,
             EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED, EnumChildWindows, EnumWindows,
-            GetClientRect, GetParent, GetSystemMetrics, OBJID_WINDOW, PostMessageW, SM_CXSCREEN,
-            SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
-            SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
+            GetClientRect, GetForegroundWindow, GetParent, GetSystemMetrics, OBJID_WINDOW,
+            PostMessageW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
+            SetWindowPos, SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT,
+            WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
         },
     },
 };
@@ -222,6 +223,12 @@ pub(super) fn top_level_windows() -> Vec<HWND> {
     // SAFETY: `collect` only touches the `Vec` behind the pointer.
     unsafe { EnumWindows(Some(collect), (&raw mut windows) as LPARAM) };
     windows
+}
+
+/// The window with the keyboard focus.
+pub(super) fn foreground() -> HWND {
+    // SAFETY: takes no arguments.
+    unsafe { GetForegroundWindow() }
 }
 
 /// Whether `window` is a Store app frame.
