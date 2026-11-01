@@ -11,8 +11,24 @@
 //! - The live `NotificationChanged` event does not: subscribing fails outright with
 //!   `0x80070490` ("Element not found"). That matches reports elsewhere of the same error for a
 //!   packaged app too, which would mean it needs some other per-package registration, not just an
-//!   identity, but only the unpackaged case was tested here. So this module polls
-//!   `GetNotificationsAsync` instead and works out what is new by id.
+//!   identity, but only the unpackaged case was tested here.
+//!
+//! Two pushes were tried later, instead of settling straight for polling:
+//! - A sparse MSIX package (a manifest with app identity but no real packaging payload) was built
+//!   and signed for a throwaway test binary outside the Tile source tree, to see whether package
+//!   identity makes `NotificationChanged` subscribe. Installing it failed with `0x800B0109`: the
+//!   self-signed test certificate's root isn't trusted, and trusting it would be a real (if
+//!   small) weakening of the machine's trust store, so that step wasn't taken. Whether
+//!   `NotificationChanged` would then subscribe was never confirmed.
+//! - Windows' own shell wakes for new notifications via WNF, an undocumented publish/subscribe
+//!   mechanism with some state names catalogued by community reverse-engineering (SharpWnfSuite,
+//!   the WNFUN talk, Quarkslab's write-up). None of those sources name a WNF state that
+//!   corresponds to a toast being posted or changed, so none was guessed at and subscribed to.
+//!
+//! So this module polls `GetNotificationsAsync` instead and works out what is new by id.
+//! [`POLL_INTERVAL`] stays a private constant rather than a setting: two seconds is a deliberate
+//! trade-off (one cheap, async WinRT call against how stale the popup can be), not a technical
+//! floor, so it's easy to tune here if the balance should move.
 
 use std::{
     collections::HashSet,
