@@ -178,9 +178,9 @@ device's row opens Settings.
 ### Session buttons
 
 **Switch user**, **Log out**, **Lock**, **Restart** and **Shut down**. Switch user leaves your
-session running and shows the sign-in screen (`tsdisconnect`). Log out, Restart and Shut down
-lose unsaved work, so the first click lights the button and a second click does it; moving off
-the button takes the question back. The window widens to hold the bar when it is wider than the
+session running and shows the sign-in screen (`tsdisconnect`). A click does it
+at once. Log out, Restart and Shut down lose unsaved work, so as rows (typed or selected with
+the keys) they ask for Enter twice. The window widens to hold the bar when it is wider than the
 launcher.
 
 ## Keys

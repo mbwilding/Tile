@@ -343,13 +343,6 @@ const QUICK_BUTTONS: usize = 4;
 /// Refreshes what the panel shows a moment after something in it was changed.
 const STATUS_TIMER: usize = 4;
 
-/// The power action of a bar button, if it is one.
-fn power_at(index: usize) -> Option<Power> {
-    match BAR_BUTTONS[index].1 {
-        BarAction::Power(power) => Some(power),
-        BarAction::Panel(_) => None,
-    }
-}
 /// How long a menu may take to appear before it is taken to have never come.
 const MENU_GRACE: Duration = Duration::from_millis(1500);
 /// How long after a click a popup in a corner is moved, and how often it is looked for then.
@@ -1459,7 +1452,8 @@ fn run(
         }
     };
 
-    // A button of the bar. Those that lose unsaved work ask for a second click first.
+    // A button of the bar. A click on a labelled button is deliberate, so power buttons act at
+    // once; only the keyboard rows ask for Enter twice.
     let click_bar = {
         let (wnd, hide, status_refresh) = (wnd.clone(), hide.clone(), status_refresh.clone());
         move |state: &Rc<RefCell<State>>, index: usize, right: bool| {
@@ -1499,13 +1493,6 @@ fn run(
                 }
                 BarAction::Power(power) => power,
             };
-            if power.needs_confirmation() && s.armed != Some(power) {
-                s.armed = Some(power);
-                drop(s);
-                let _ = wnd.hwnd().InvalidateRect(None, false);
-                return;
-            }
-            s.armed = None;
             let events = s.events.clone();
             drop(s);
             hide();
@@ -1639,10 +1626,6 @@ fn run(
             let bar_hover = s.bar_button_at(&layout, at.0, at.1);
             if bar_hover != s.bar_hover {
                 s.bar_hover = bar_hover;
-                // Moving off a button that was asked to confirm takes the question back.
-                if s.armed.is_some() && bar_hover.and_then(power_at) != s.armed {
-                    s.armed = None;
-                }
                 let _ = wnd.hwnd().InvalidateRect(None, false);
             }
             if let Some(row) = s.row_at(&layout, at.0, at.1)
@@ -1959,11 +1942,10 @@ fn paint_with(s: &mut State, fonts: &Fonts, dc: &w::HDC, client: w::RECT) -> w::
         let idle = mix(style.background, style.foreground, 20);
         let hovered = mix(style.background, style.foreground, 40);
         for (i, ((glyph, action), rect)) in BAR_BUTTONS.iter().zip(&layout.buttons).enumerate() {
-            // A switch is lit while on and dim while off or missing; a power button is lit
-            // while it waits to be confirmed.
+            // A switch is lit while on and dim while off or missing.
             let active = match action {
                 BarAction::Panel(group) => group.is_on(&s.status) == Some(true),
-                BarAction::Power(power) => s.armed == Some(*power),
+                BarAction::Power(_) => false,
             };
             let off = matches!(action, BarAction::Panel(_)) && !active;
             let (fill, colour) = if active {
