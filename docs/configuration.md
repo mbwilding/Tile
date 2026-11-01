@@ -181,7 +181,7 @@ Popups for Windows toast notifications, read through `UserNotificationListener`.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `enabled` | `false` | Show a popup for each new notification. |
+| `enabled` | unset | Show a popup for each new notification. Unset follows shell mode: on while Tile hosts the shell, off otherwise. `true` or `false` overrides that. |
 | `position` | `bottom_right` | Where it sits on the monitor's work area: `center`, `top`, `top_left`, `top_right`, `bottom`, `bottom_left`, `bottom_right`, `left` or `right`. |
 | `gap` | `16` | Pixels from the edges it sits against, at 100% scaling. Unused for `center`. |
 | `width` | `340` | Width in pixels at 100% scaling. It grows tall enough for the text. |
@@ -331,7 +331,7 @@ workspace_indicator:
   # foreground: "#1e1e2e"       # unset follows theme.accent_foreground
 
 notifications:
-  enabled: false                # show a popup for each new Windows toast notification
+  enabled: ~                    # unset follows shell mode; true/false always shows or never does
   position: bottom_right        # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
   gap: 16                       # px from the edges, unused for center
   width: 340                    # px at 100% scaling

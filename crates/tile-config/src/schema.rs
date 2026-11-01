@@ -729,9 +729,10 @@ impl Default for WorkspaceIndicator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Notifications {
-    /// Show a popup for each new notification. Off by default: reading every notification is a
-    /// deliberate choice, not a silent default.
-    pub enabled: bool,
+    /// Show a popup for each new notification. Unset (the default) follows shell mode: on while
+    /// Tile hosts the notification area, since that is when Explorer's own toasts don't show, and
+    /// off otherwise. `true` or `false` forces it on or off regardless.
+    pub enabled: Option<bool>,
     /// Where on the monitor it sits.
     pub position: IndicatorPosition,
     /// Pixels between the popup and the edges of the work area it sits against, at 100% scaling.
@@ -747,7 +748,7 @@ pub struct Notifications {
 impl Default for Notifications {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: None,
             position: IndicatorPosition::BottomRight,
             gap: 16,
             width: 340,

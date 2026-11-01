@@ -109,10 +109,15 @@ struct Daemon {
     indicator: Indicator,
     /// Popups for Windows toast notifications.
     toast: Toast,
-    /// Reads posted notifications, while `notifications.enabled` is on and Tile has permission.
+    /// Reads posted notifications, while notifications are wanted and Tile has permission.
     notify_listener: Option<NotificationListener>,
     /// Where notifications read by [`Self::notify_listener`] are sent.
     notify_tx: UnboundedSender<Notification>,
+    /// Already asked Windows for permission to read notifications this run.
+    notify_access_requested: bool,
+    /// Already warned that notifications are wanted but refused, so this isn't repeated on every
+    /// retry.
+    notify_denied: bool,
     /// The tray icons apps have added, while Tile hosts the notification area.
     registry: Registry,
     /// The notification area's window, while Tile is the shell and no other taskbar runs.
@@ -175,8 +180,9 @@ fn indicator_settings(loaded: &Loaded) -> IndicatorSettings {
     }
 }
 
-fn toast_settings(loaded: &Loaded) -> ToastSettings {
+fn toast_settings(loaded: &Loaded, enabled: bool) -> ToastSettings {
     ToastSettings {
+        enabled,
         config: loaded.config.notifications,
         style: loaded.config.notification_style(),
     }
@@ -280,7 +286,11 @@ pub async fn run(
         registry.clone(),
     );
     let indicator = Indicator::spawn(indicator_settings(&loaded));
-    let toast = Toast::spawn(toast_settings(&loaded));
+    // Not hosting the shell yet at this point; `start_shell` below corrects it once it is known.
+    let toast = Toast::spawn(toast_settings(
+        &loaded,
+        loaded.config.notifications.enabled.unwrap_or(false),
+    ));
     let _watcher = tile_config::watch(&config_path, move || {
         let _ = config_tx.send(());
     })
@@ -304,6 +314,8 @@ pub async fn run(
         toast,
         notify_listener: None,
         notify_tx,
+        notify_access_requested: false,
+        notify_denied: false,
         registry,
         notify_host: None,
         shell_forced,
