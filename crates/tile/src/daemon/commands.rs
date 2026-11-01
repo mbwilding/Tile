@@ -72,9 +72,7 @@ impl Daemon {
             .map(|(bind, command)| (bind.clone(), command.works_while_paused()))
             .collect();
         self.commands = usable.iter().map(|(_, c)| c.clone()).collect();
-        for error in self.hotkeys.set_binds(&binds) {
-            tracing::error!("{error}");
-        }
+        self.hotkeys.set_binds(&binds);
         self.hotkeys
             .set_disable_start_menu(self.loaded.config.general.disable_start_menu);
     }
@@ -92,7 +90,7 @@ impl Daemon {
     }
 
     pub(super) fn focus_or_exec(&mut self, command: &str) {
-        let exe = Path::new(tile_config::program(command))
+        let exe = Path::new(program(command))
             .file_name()
             .map(|n| n.to_string_lossy().into_owned());
         if let Some(exe) = exe {
@@ -226,5 +224,30 @@ impl Daemon {
 
     pub(super) fn focused_monitor(&self) -> Option<&MonitorInfo> {
         self.desktops.current_ref().focused_monitor()
+    }
+}
+
+/// The program a command line starts: its first word, or the quoted path it starts with.
+fn program(command: &str) -> &str {
+    let command = command.trim();
+    match command.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next().unwrap_or(quoted),
+        None => command.split_whitespace().next().unwrap_or(command),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::program;
+
+    #[test]
+    fn program_is_the_first_word_or_quoted_path() {
+        assert_eq!(program("  notepad.exe file.txt"), "notepad.exe");
+        assert_eq!(
+            program(r#""C:\Program Files\App\app.exe" --flag"#),
+            r"C:\Program Files\App\app.exe"
+        );
+        assert_eq!(program(r#""unterminated path"#), "unterminated path");
+        assert_eq!(program(""), "");
     }
 }

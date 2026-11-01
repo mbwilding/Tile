@@ -1,11 +1,11 @@
 //! Turning the window manager and the remapper on and off, reloading and pausing.
 
 use tile_config::Loaded;
+use tile_core::Desktops;
 use tile_platform::desktops as vd;
 
 use super::{Daemon, indicator_settings, launcher_settings};
 use crate::{
-    desktops::Desktops,
     logging,
     remap::{self, Remap},
     settings,

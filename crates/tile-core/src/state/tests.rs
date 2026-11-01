@@ -47,6 +47,28 @@ fn open(s: &mut State, id: WindowId) -> Vec<Effect> {
     )
 }
 
+/// A state on `monitors` monitors with `ids` opened, each focused in turn.
+fn opened(monitors: usize, ids: &[WindowId]) -> State {
+    let mut s = state(monitors);
+    for &id in ids {
+        open(&mut s, id);
+    }
+    s
+}
+
+fn float(s: &mut State, id: WindowId) {
+    s.window_opened(
+        id,
+        WindowInfo::default(),
+        ManageOptions {
+            floating: true,
+            rect: Rect::new(100, 100, 400, 300),
+            focus: true,
+            ..Default::default()
+        },
+    );
+}
+
 fn placed(effects: &[Effect], id: WindowId) -> Option<Rect> {
     effects.iter().rev().find_map(|e| match e {
         Effect::Place { id: i, rect } if *i == id => Some(*rect),
@@ -64,8 +86,7 @@ fn monitors_have_workspaces_of_their_own() {
 
 #[test]
 fn switching_workspace_stays_on_the_monitor() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     let effects = s.apply(&Command::Workspace(2));
     assert!(effects.contains(&Effect::Hide(W)));
     let monitors = s.snapshot_monitors();
@@ -75,8 +96,7 @@ fn switching_workspace_stays_on_the_monitor() {
 
 #[test]
 fn an_empty_workspace_keeps_focus_on_its_monitor() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     s.apply(&Command::MoveFocus(Direction::Right));
     open(&mut s, X);
     s.apply(&Command::MoveFocus(Direction::Left));
@@ -96,8 +116,7 @@ fn synced_monitors_switch_together() {
 
 #[test]
 fn opening_tiles_and_focuses() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     let effects = open(&mut s, X);
     assert_eq!(placed(&effects, W), Some(Rect::new(0, 0, 500, 960)));
     assert_eq!(placed(&effects, X), Some(Rect::new(500, 0, 500, 960)));
@@ -106,8 +125,7 @@ fn opening_tiles_and_focuses() {
 
 #[test]
 fn workspace_switch_hides_and_shows() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     let effects = s.apply(&Command::Workspace(2));
     assert!(effects.contains(&Effect::Hide(W)));
     assert_eq!(s.focused(), None);
@@ -118,9 +136,7 @@ fn workspace_switch_hides_and_shows() {
 
 #[test]
 fn move_to_workspace_follows_the_window() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.apply(&Command::MoveToWorkspace(3));
     assert!(effects.contains(&Effect::Focus(X)));
     assert!(effects.contains(&Effect::Hide(W)));
@@ -130,9 +146,7 @@ fn move_to_workspace_follows_the_window() {
 
 #[test]
 fn move_to_workspace_silent_keeps_view() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.apply(&Command::MoveToWorkspaceSilent(3));
     assert!(effects.contains(&Effect::Hide(X)));
     assert_eq!(placed(&effects, W), Some(Rect::new(0, 0, 1000, 960)));
@@ -142,8 +156,7 @@ fn move_to_workspace_silent_keeps_view() {
 
 #[test]
 fn focus_crosses_monitors() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     let effects = s.apply(&Command::MoveFocus(Direction::Right));
     assert!(s.snapshot_monitors()[1].focused);
     assert!(!effects.iter().any(|e| matches!(e, Effect::Focus(_))));
@@ -153,8 +166,7 @@ fn focus_crosses_monitors() {
 
 #[test]
 fn focus_enters_the_nearest_window_on_the_next_monitor() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     s.apply(&Command::MoveFocus(Direction::Right));
     open(&mut s, X);
     open(&mut s, Y);
@@ -188,8 +200,7 @@ fn portrait_monitors_start_with_even() {
 
 #[test]
 fn move_window_to_other_monitor_at_edge() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     let effects = s.apply(&Command::MoveWindow(Direction::Right));
     assert_eq!(placed(&effects, W), Some(Rect::new(1000, 0, 1000, 960)));
     assert!(s.snapshot_monitors()[1].focused);
@@ -197,10 +208,7 @@ fn move_window_to_other_monitor_at_edge() {
 
 #[test]
 fn closing_focuses_previous() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
-    open(&mut s, Y);
+    let mut s = opened(1, &[W, X, Y]);
     s.window_focused(X);
     let effects = s.window_closed(X);
     assert!(effects.contains(&Effect::Focus(Y)));
@@ -208,19 +216,14 @@ fn closing_focuses_previous() {
 
 #[test]
 fn cycle_wraps_in_layout_order() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
-    open(&mut s, Y);
+    let mut s = opened(1, &[W, X, Y]);
     assert!(s.apply(&Command::CycleNext).contains(&Effect::Focus(W)));
     assert!(s.apply(&Command::CyclePrev).contains(&Effect::Focus(Y)));
 }
 
 #[test]
 fn floating_and_fullscreen() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.apply(&Command::ToggleFloating);
     assert_eq!(placed(&effects, W), Some(Rect::new(0, 0, 1000, 960)));
     assert!(s.is_floating(X));
@@ -231,9 +234,7 @@ fn floating_and_fullscreen() {
 
 #[test]
 fn fullscreen_owns_the_workspace() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     s.apply(&Command::Fullscreen);
     // Focus can't wander to windows hidden behind the fullscreen one.
     assert!(s.apply(&Command::MoveFocus(Direction::Left)).is_empty());
@@ -247,9 +248,7 @@ fn fullscreen_owns_the_workspace() {
 
 #[test]
 fn minimize_and_restore() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.window_minimized(X);
     assert_eq!(placed(&effects, W), Some(Rect::new(0, 0, 1000, 960)));
     let effects = s.window_restored(X);
@@ -262,10 +261,12 @@ fn scrolling_hides_offscreen_columns() {
     s.apply(&Command::Layout(LayoutKind::Scrolling));
     open(&mut s, W);
     open(&mut s, X);
-    let effects = open(&mut s, Y);
+    open(&mut s, Y);
+    let effects = open(&mut s, WindowId(4));
     assert!(effects.contains(&Effect::Hide(W)));
-    let effects = s.apply(&Command::MoveFocus(Direction::Left));
-    let effects = [effects, s.apply(&Command::MoveFocus(Direction::Left))].concat();
+    let effects = (0..3)
+        .flat_map(|_| s.apply(&Command::MoveFocus(Direction::Left)))
+        .collect::<Vec<_>>();
     assert!(effects.contains(&Effect::Show(W)));
     assert_eq!(s.focused(), Some(W));
 }
@@ -282,9 +283,7 @@ fn monitor_removal_keeps_windows() {
 
 #[test]
 fn dragging_an_edge_over_a_neighbour_resizes_instead_of_swapping() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     // W's right edge dragged well into X, the pointer ending over X.
     let effects = s.window_moved(W, Rect::new(0, 0, 700, 960), (690, 400));
     assert_eq!(placed(&effects, W).map(|r| (r.x, r.w)), Some((0, 700)));
@@ -293,9 +292,7 @@ fn dragging_an_edge_over_a_neighbour_resizes_instead_of_swapping() {
 
 #[test]
 fn dragging_an_edge_moves_the_others_as_it_goes() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     assert!(s.window_resizing(W, Rect::new(0, 0, 500, 960)).is_empty());
     let effects = s.window_resizing(W, Rect::new(0, 0, 600, 960));
     assert_eq!(placed(&effects, X).map(|r| r.x), Some(600));
@@ -305,30 +302,14 @@ fn dragging_an_edge_moves_the_others_as_it_goes() {
 
 #[test]
 fn drag_onto_other_tile_swaps() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.window_moved(W, Rect::new(600, 10, 500, 960), (700, 100));
     assert_eq!(placed(&effects, W), Some(Rect::new(500, 0, 500, 960)));
 }
 
-fn float(s: &mut State, id: WindowId) {
-    s.window_opened(
-        id,
-        WindowInfo::default(),
-        ManageOptions {
-            floating: true,
-            rect: Rect::new(100, 100, 400, 300),
-            focus: true,
-            ..Default::default()
-        },
-    );
-}
-
 #[test]
 fn opening_a_managed_window_again_does_nothing() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     assert!(open(&mut s, W).is_empty());
     assert_eq!(s.managed().count(), 1);
 }
@@ -357,8 +338,7 @@ fn exec_and_kill_become_effects() {
 
 #[test]
 fn commands_for_the_daemon_have_no_effects() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     for command in [
         Command::FocusOrExec("x".into()),
         Command::Pin,
@@ -378,8 +358,7 @@ fn commands_for_the_daemon_have_no_effects() {
 
 #[test]
 fn on_focused_monitor_follows_focus() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     s.apply(&Command::FocusMonitor(Direction::Right));
     open(&mut s, X);
     assert!(s.on_focused_monitor(X));
@@ -422,8 +401,7 @@ fn a_window_opened_for_another_monitor_goes_there() {
 
 #[test]
 fn focus_from_the_os_on_a_hidden_workspace_switches_to_it() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     s.apply(&Command::Workspace(2));
     assert!(s.is_hidden(W));
     let effects = s.window_focused(W);
@@ -433,23 +411,20 @@ fn focus_from_the_os_on_a_hidden_workspace_switches_to_it() {
 
 #[test]
 fn focus_on_an_unmanaged_window_clears_focus() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     assert!(s.window_focused(Y).is_empty());
     assert_eq!(s.focused(), None);
 }
 
 #[test]
 fn focus_on_the_focused_window_is_a_no_op() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     assert!(s.window_focused(W).is_empty());
 }
 
 #[test]
 fn focus_from_the_os_moves_the_focused_monitor() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     s.apply(&Command::FocusMonitor(Direction::Right));
     open(&mut s, X);
     s.window_focused(W);
@@ -458,8 +433,7 @@ fn focus_from_the_os_moves_the_focused_monitor() {
 
 #[test]
 fn closing_the_last_window_defocuses() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     let effects = s.window_closed(W);
     assert!(effects.contains(&Effect::Defocus));
     assert_eq!(s.focused(), None);
@@ -468,9 +442,7 @@ fn closing_the_last_window_defocuses() {
 
 #[test]
 fn closing_an_unfocused_window_keeps_focus() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     s.window_closed(W);
     assert_eq!(s.focused(), Some(X));
     assert!(s.window_closed(Y).is_empty());
@@ -478,8 +450,7 @@ fn closing_an_unfocused_window_keeps_focus() {
 
 #[test]
 fn closing_a_window_on_a_hidden_workspace_keeps_focus() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     s.apply(&Command::Workspace(2));
     open(&mut s, X);
     s.apply(&Command::MoveToWorkspaceSilent(1));
@@ -490,8 +461,7 @@ fn closing_a_window_on_a_hidden_workspace_keeps_focus() {
 
 #[test]
 fn minimising_the_last_window_defocuses() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     let effects = s.window_minimized(W);
     assert!(effects.contains(&Effect::Defocus));
     assert!(s.window_minimized(Y).is_empty());
@@ -499,16 +469,14 @@ fn minimising_the_last_window_defocuses() {
 
 #[test]
 fn restoring_a_window_that_is_not_minimised_does_nothing() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     assert!(s.window_restored(W).is_empty());
     assert!(s.window_restored(Y).is_empty());
 }
 
 #[test]
 fn dragging_to_another_monitor_moves_the_window() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     let effects = s.window_moved(W, Rect::new(1200, 100, 400, 300), (1300, 200));
     assert_eq!(placed(&effects, W), Some(Rect::new(1000, 0, 1000, 960)));
     assert!(s.snapshot_monitors()[1].focused);
@@ -542,9 +510,7 @@ fn floating_windows_move_and_resize_in_steps() {
 
 #[test]
 fn resizing_a_tiled_window_changes_its_split() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.apply(&Command::ResizeActive(100, 0));
     let (w, x) = (placed(&effects, W).unwrap(), placed(&effects, X).unwrap());
     assert_ne!(w.w, 500);
@@ -563,9 +529,7 @@ fn resizing_with_nothing_focused_does_nothing() {
 
 #[test]
 fn a_tiled_window_swaps_with_its_neighbour() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let effects = s.apply(&Command::MoveWindow(Direction::Left));
     assert_eq!(placed(&effects, X), Some(Rect::new(0, 0, 500, 960)));
     assert_eq!(placed(&effects, W), Some(Rect::new(500, 0, 500, 960)));
@@ -573,15 +537,13 @@ fn a_tiled_window_swaps_with_its_neighbour() {
 
 #[test]
 fn moving_a_window_past_the_last_monitor_does_nothing() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     assert!(s.apply(&Command::MoveWindow(Direction::Right)).is_empty());
 }
 
 #[test]
 fn a_floating_window_tiles_again() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     float(&mut s, X);
     assert!(s.is_floating(X));
     let effects = s.apply(&Command::ToggleFloating);
@@ -592,9 +554,7 @@ fn a_floating_window_tiles_again() {
 
 #[test]
 fn fullscreen_toggles_off() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     s.apply(&Command::Fullscreen);
     let effects = s.apply(&Command::Fullscreen);
     assert_eq!(placed(&effects, X), Some(Rect::new(500, 0, 500, 960)));
@@ -616,8 +576,7 @@ fn focus_moves_between_floating_windows() {
 
 #[test]
 fn focus_starts_from_a_window_when_none_is_focused() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     s.apply(&Command::Workspace(2));
     s.apply(&Command::Workspace(1));
     s.window_focused(Y);
@@ -635,17 +594,14 @@ fn cycling_an_empty_workspace_does_nothing() {
 
 #[test]
 fn cycling_with_nothing_focused_starts_at_the_first() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     s.window_focused(Y);
     assert!(s.apply(&Command::CycleNext).contains(&Effect::Focus(W)));
 }
 
 #[test]
 fn moving_to_the_current_workspace_does_nothing() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     assert!(s.apply(&Command::MoveToWorkspace(1)).is_empty());
     let mut empty = state(1);
     assert!(empty.apply(&Command::MoveToWorkspace(2)).is_empty());
@@ -653,8 +609,7 @@ fn moving_to_the_current_workspace_does_nothing() {
 
 #[test]
 fn moving_the_only_window_away_silently_leaves_the_workspace_empty() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     let effects = s.apply(&Command::MoveToWorkspaceSilent(2));
     assert!(effects.contains(&Effect::Hide(W)));
     assert_eq!(s.focused(), None);
@@ -662,9 +617,7 @@ fn moving_the_only_window_away_silently_leaves_the_workspace_empty() {
 
 #[test]
 fn layouts_switch_and_cycle() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     s.apply(&Command::Layout(LayoutKind::Monocle));
     assert_eq!(s.active_layout(), Some(LayoutKind::Monocle));
     let effects = s.sync();
@@ -676,8 +629,7 @@ fn layouts_switch_and_cycle() {
 
 #[test]
 fn layout_commands_ignore_other_layouts() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     s.apply(&Command::Layout(LayoutKind::Monocle));
     for command in [
         Command::CycleProportion,
@@ -709,9 +661,7 @@ fn scrolling_commands_change_the_columns() {
 
 #[test]
 fn dwindle_commands_rearrange() {
-    let mut s = state(1);
-    open(&mut s, W);
-    open(&mut s, X);
+    let mut s = opened(1, &[W, X]);
     let before = placed(&s.sync(), X);
     let effects = s.apply(&Command::ToggleSplit);
     assert_ne!(placed(&effects, X), before);
@@ -731,8 +681,7 @@ fn master_swap_puts_the_focused_window_first() {
 
 #[test]
 fn settings_changes_reflow_and_info_updates() {
-    let mut s = state(1);
-    open(&mut s, W);
+    let mut s = opened(1, &[W]);
     let settings = LayoutSettings {
         gaps_in: 0,
         gaps_out: 20,
@@ -755,8 +704,7 @@ fn settings_changes_reflow_and_info_updates() {
 
 #[test]
 fn snapshots_describe_the_desktop() {
-    let mut s = state(2);
-    open(&mut s, W);
+    let mut s = opened(2, &[W]);
     s.apply(&Command::Workspace(2));
     open(&mut s, X);
     let windows = s.snapshot_windows();

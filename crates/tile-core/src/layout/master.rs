@@ -1,4 +1,4 @@
-use super::{Layout, LayoutSettings, Tile};
+use super::{Layout, LayoutSettings, Tile, WindowList, clamp_ratio, equal_tiles};
 use crate::{
     WindowId,
     geometry::{Axis, Rect, ratio_of},
@@ -7,28 +7,31 @@ use crate::{
 /// Master/stack: `count` master windows on the left, the rest stacked on the right.
 #[derive(Debug, Clone)]
 pub struct Master {
-    windows: Vec<WindowId>,
+    windows: WindowList,
     mfact: f32,
 }
 
 impl Master {
+    /// An empty layout with the master column at `s.master_mfact`.
     pub fn new(s: &LayoutSettings) -> Self {
         Self {
-            windows: Vec::new(),
+            windows: WindowList::default(),
             mfact: s.master_mfact,
         }
     }
 
+    /// Swaps `id` with the first master, or a master with the first stacked window.
     pub fn swap_with_master(&mut self, id: WindowId, s: &LayoutSettings) {
-        let Some(pos) = self.windows.iter().position(|w| *w == id) else {
+        let Some(pos) = self.windows.position(id) else {
             return;
         };
-        if pos < s.master_count.max(1) {
-            if self.windows.len() > s.master_count {
-                self.windows.swap(pos, s.master_count);
+        let windows = &mut self.windows.0;
+        if pos < s.master_count {
+            if windows.len() > s.master_count {
+                windows.swap(pos, s.master_count);
             }
         } else {
-            self.windows.swap(pos, 0);
+            windows.swap(pos, 0);
         }
     }
 }
@@ -42,63 +45,47 @@ impl Layout for Master {
         s: &LayoutSettings,
     ) {
         if s.master_new_is_master {
-            self.windows.insert(0, id);
+            self.windows.0.insert(0, id);
         } else {
-            self.windows.push(id);
+            self.windows.0.push(id);
         }
     }
 
     fn remove(&mut self, id: WindowId) {
-        self.windows.retain(|w| *w != id);
+        self.windows.remove(id);
     }
 
     fn windows(&self) -> Vec<WindowId> {
-        self.windows.clone()
+        self.windows.0.clone()
     }
 
     fn arrange(&mut self, area: Rect, _focused: Option<WindowId>, s: &LayoutSettings) -> Vec<Tile> {
-        let area = area.shrink(s.gaps_out);
-        let count = s.master_count.max(1);
-        let column = |rect: Rect, ids: &[WindowId]| -> Vec<Tile> {
-            rect.split_weighted(Axis::Vertical, &vec![1.0; ids.len()], s.gaps_in)
-                .into_iter()
-                .zip(ids)
-                .map(|(rect, id)| Tile {
-                    id: *id,
-                    rect,
-                    visible: true,
-                })
-                .collect()
-        };
-        if self.windows.len() <= count {
-            return column(area, &self.windows);
+        let windows = &self.windows.0;
+        if windows.len() <= s.master_count {
+            return equal_tiles(area, Axis::Vertical, windows, s.gaps_in);
         }
         let (master_area, stack_area) = area.split(Axis::Horizontal, self.mfact, s.gaps_in);
-        let (masters, stack) = self.windows.split_at(count);
-        let mut tiles = column(master_area, masters);
-        tiles.extend(column(stack_area, stack));
+        let (masters, stack) = windows.split_at(s.master_count);
+        let mut tiles = equal_tiles(master_area, Axis::Vertical, masters, s.gaps_in);
+        tiles.extend(equal_tiles(stack_area, Axis::Vertical, stack, s.gaps_in));
         tiles
     }
 
     fn swap(&mut self, a: WindowId, b: WindowId) {
-        let pa = self.windows.iter().position(|w| *w == a);
-        let pb = self.windows.iter().position(|w| *w == b);
-        if let (Some(pa), Some(pb)) = (pa, pb) {
-            self.windows.swap(pa, pb);
-        }
+        self.windows.swap(a, b);
     }
 
     fn resize(&mut self, id: WindowId, dx: i32, _dy: i32, area: Rect, s: &LayoutSettings) {
-        let Some(pos) = self.windows.iter().position(|w| *w == id) else {
+        let Some(pos) = self.windows.position(id) else {
             return;
         };
-        let change = ratio_of(dx, area.shrink(s.gaps_out).w);
-        let signed = if pos < s.master_count.max(1) {
+        let change = ratio_of(dx, area.w);
+        let signed = if pos < s.master_count {
             change
         } else {
             -change
         };
-        self.mfact = (self.mfact + signed).clamp(0.1, 0.9);
+        self.mfact = clamp_ratio(self.mfact + signed);
     }
 }
 

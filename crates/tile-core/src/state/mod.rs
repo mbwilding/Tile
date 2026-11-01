@@ -22,16 +22,22 @@ use crate::{
 /// Descriptive information about a window, used for rules and IPC.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WindowInfo {
+    /// The title bar text.
     pub title: String,
+    /// The window class.
     pub class: String,
+    /// The program's file name, e.g. `code.exe`.
     pub exe: String,
 }
 
 /// How a newly discovered window should be managed (resolved from window rules).
 #[derive(Debug, Clone, Default)]
 pub struct ManageOptions {
+    /// Float instead of tiling.
     pub floating: bool,
+    /// Open on this workspace instead of the focused one.
     pub workspace: Option<u8>,
+    /// Open on this monitor (by index) instead of the focused one.
     pub monitor: Option<usize>,
     /// The window's current visible frame, used as its floating geometry.
     pub rect: Rect,
@@ -39,10 +45,14 @@ pub struct ManageOptions {
     pub focus: bool,
 }
 
+/// A monitor as the platform reports it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MonitorInfo {
+    /// Its handle.
     pub id: MonitorId,
+    /// The whole monitor.
     pub rect: Rect,
+    /// The monitor less the taskbar and other app bars.
     pub work_area: Rect,
 }
 
@@ -51,16 +61,23 @@ pub struct MonitorInfo {
 pub enum Effect {
     /// Move and resize a window so its visible frame matches `rect`.
     Place {
+        /// The window.
         id: WindowId,
+        /// Where its visible frame goes.
         rect: Rect,
     },
+    /// Show a window that was hidden.
     Show(WindowId),
+    /// Hide a window, as its workspace isn't shown or it scrolled off screen.
     Hide(WindowId),
+    /// Give a window the keyboard focus.
     Focus(WindowId),
     /// Nothing on the focused monitor can take focus: put it on the desktop, so Windows
     /// doesn't pick a window on another monitor.
     Defocus,
+    /// Close a window, like Alt+F4.
     Close(WindowId),
+    /// Run a command line.
     Exec(String),
 }
 
@@ -95,6 +112,7 @@ pub struct State {
 }
 
 impl State {
+    /// No monitors or windows yet. Workspaces start with `default_layout`.
     pub fn new(settings: LayoutSettings, default_layout: LayoutKind) -> Self {
         Self {
             monitors: Vec::new(),
@@ -109,14 +127,17 @@ impl State {
         }
     }
 
+    /// The window with focus, if Tile manages it.
     pub const fn focused(&self) -> Option<WindowId> {
         self.focused
     }
 
+    /// Whether Tile manages `id`.
     pub fn is_managed(&self, id: WindowId) -> bool {
         self.windows.contains_key(&id)
     }
 
+    /// Every managed window.
     pub fn managed(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.windows.keys().copied()
     }
@@ -126,24 +147,29 @@ impl State {
         self.hidden.iter().copied()
     }
 
+    /// Whether Tile hid `id`.
     pub fn is_hidden(&self, id: WindowId) -> bool {
         self.hidden.contains(&id)
     }
 
+    /// Whether `id` floats.
     pub fn is_floating(&self, id: WindowId) -> bool {
         self.windows.get(&id).is_some_and(|m| m.floating)
     }
 
+    /// Updates the title, class and program of `id`.
     pub fn set_info(&mut self, id: WindowId, info: WindowInfo) {
         if let Some(m) = self.windows.get_mut(&id) {
             m.info = info;
         }
     }
 
+    /// How many monitors there are.
     pub fn monitor_count(&self) -> usize {
         self.monitors.len()
     }
 
+    /// The monitor with focus.
     pub fn focused_monitor(&self) -> Option<&MonitorInfo> {
         self.monitors.get(self.focused_monitor).map(|m| &m.info)
     }
@@ -166,6 +192,7 @@ impl State {
         self.monitors.get(self.focused_monitor).map(|m| m.workspace)
     }
 
+    /// The layout of the focused monitor's workspace.
     pub fn active_layout(&self) -> Option<LayoutKind> {
         let ws = self.focused_key()?;
         self.workspaces.get(&ws).map(|w| w.layout.kind())

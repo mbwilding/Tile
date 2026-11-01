@@ -1,7 +1,7 @@
 # Tile
 
-A dynamic tiling window manager for Windows, with a [keyd](https://github.com/rvaiya/keyd)-style
-key remapper built in (layers, home-row mods, tap/hold keys). Either side can be switched off.
+A dynamic tiling window manager for Windows, with a key remapper built in (layers, home-row
+mods, tap/hold keys). Either side can be switched off.
 Written in Rust.
 
 Keybinds are handled in-process by a low-level keyboard hook, including `Win` combos (the Start
@@ -25,8 +25,7 @@ menu is suppressed), so no separate hotkey program is needed.
 - A workspace indicator that flashes the workspace number when you switch
 - Coloured focus borders (Windows 11) and eased move/resize animations
 - Optional title bar removal for tiled windows, with per-app overrides
-- Key remapping in keyd's terms: layers, modifier layers, `overload()`, `overloadt()` and key
-  sequences
+- Key remapping: layers, modifier layers, `overload()`, `overloadt()` and key sequences
 - YAML config, applied live on save, with window rules
 - Commands in `tile` itself: dispatch, query state as JSON, subscribe to events, check the
   config, install/uninstall
@@ -106,7 +105,7 @@ config to copy and paste, and [`examples/`](examples) has complete configs to st
 | [Keybinds](docs/keybinds.md) | Default keys, key names, every dispatcher |
 | [Layouts](docs/layouts.md) | The five layouts, portrait and multi-monitor behaviour |
 | [Window rules](docs/window-rules.md) | Float, ignore or place windows by program, class or title |
-| [Key remapping](docs/key-remapping.md) | keyd-style layers, overloads and their limits |
+| [Key remapping](docs/key-remapping.md) | Remap layers, overloads and their limits |
 | [Launcher](docs/launcher.md) | The app launcher: searching, keys, launch history |
 | [Shell mode](docs/shell.md) | Replace Explorer's taskbar: tray icons and system items in the launcher |
 | [Command line](docs/cli.md) | The `tile` commands, console behaviour and the IPC pipe |

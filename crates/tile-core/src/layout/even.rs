@@ -1,4 +1,4 @@
-use super::{Layout, LayoutSettings, Tile};
+use super::{Layout, LayoutSettings, Tile, WindowList, equal_tiles};
 use crate::{
     WindowId,
     geometry::{Axis, Rect},
@@ -7,7 +7,7 @@ use crate::{
 /// Every window gets an equal share, side by side on landscape and stacked on portrait.
 #[derive(Debug, Clone, Default)]
 pub struct Even {
-    windows: Vec<WindowId>,
+    windows: WindowList,
 }
 
 impl Layout for Even {
@@ -19,42 +19,26 @@ impl Layout for Even {
         _s: &LayoutSettings,
     ) {
         let at = focused
-            .and_then(|f| self.windows.iter().position(|w| *w == f))
-            .map_or(self.windows.len(), |i| i + 1);
-        self.windows.insert(at, id);
+            .and_then(|f| self.windows.position(f))
+            .map_or(self.windows.0.len(), |i| i + 1);
+        self.windows.0.insert(at, id);
     }
 
     fn remove(&mut self, id: WindowId) {
-        self.windows.retain(|w| *w != id);
+        self.windows.remove(id);
     }
 
     fn windows(&self) -> Vec<WindowId> {
-        self.windows.clone()
+        self.windows.0.clone()
     }
 
     fn arrange(&mut self, area: Rect, _focused: Option<WindowId>, s: &LayoutSettings) -> Vec<Tile> {
-        let area = area.shrink(s.gaps_out);
-        let axis = Axis::for_rect(&area);
-        area.split_weighted(axis, &vec![1.0; self.windows.len()], s.gaps_in)
-            .into_iter()
-            .zip(&self.windows)
-            .map(|(rect, id)| Tile {
-                id: *id,
-                rect,
-                visible: true,
-            })
-            .collect()
+        equal_tiles(area, Axis::for_rect(&area), &self.windows.0, s.gaps_in)
     }
 
     fn swap(&mut self, a: WindowId, b: WindowId) {
-        let pa = self.windows.iter().position(|w| *w == a);
-        let pb = self.windows.iter().position(|w| *w == b);
-        if let (Some(pa), Some(pb)) = (pa, pb) {
-            self.windows.swap(pa, pb);
-        }
+        self.windows.swap(a, b);
     }
-
-    fn resize(&mut self, _id: WindowId, _dx: i32, _dy: i32, _area: Rect, _s: &LayoutSettings) {}
 }
 
 #[cfg(test)]

@@ -2,7 +2,6 @@
 //! reload.
 
 mod keys;
-mod remap;
 mod rules;
 mod schema;
 mod watch;
@@ -14,27 +13,34 @@ use std::{
 
 pub use keys::{Keybind, Modifiers};
 pub use rules::{RuleOutcome, Rules};
+pub(crate) use schema::default_binds;
 pub use schema::{
     Animations, Color, Config, Corners, Cursor, General, IndicatorPosition, IndicatorStyle,
     Launcher, LauncherStyle, Remap, Rule, SearchPosition, Shell, Theme, Tray, WorkspaceIndicator,
-    default_binds, program,
 };
 pub use watch::watch;
 
 use tile_core::Command;
 
+/// Why a config didn't load.
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    /// The file couldn't be read.
     #[error("failed to read {0}: {1}")]
     Io(PathBuf, io::Error),
+    /// The YAML is malformed or doesn't match the schema.
     #[error("invalid config: {0}")]
     Yaml(#[from] serde_yaml_ng::Error),
+    /// A bind's keys or command is invalid.
     #[error("bind `{0}`: {1}")]
     Bind(String, String),
+    /// A window rule's pattern is invalid.
     #[error("rule #{0}: {1}")]
     Rule(usize, String),
+    /// The remap layers have errors, every one listed.
     #[error("remap: {}", .0.join("; "))]
     Remap(Vec<String>),
+    /// A `launcher.hide` pattern is invalid.
     #[error("launcher.hide: {0}")]
     LauncherHide(String),
 }
@@ -68,9 +74,11 @@ impl ConfigError {
 /// A validated configuration, ready to use.
 #[derive(Debug, Clone)]
 pub struct Loaded {
+    /// The settings, as written with the defaults filled in.
     pub config: Config,
     /// The default binds (unless switched off) with `binds` applied over them.
     pub binds: Vec<(Keybind, Command)>,
+    /// `rules`, compiled.
     pub rules: Rules,
     /// `remap`, compiled for the remapping engine.
     pub remap: tile_remap::Config,
@@ -79,6 +87,7 @@ pub struct Loaded {
 }
 
 impl Loaded {
+    /// Parses and validates config text. An empty document is the defaults.
     pub fn parse(text: &str) -> Result<Self, ConfigError> {
         // An empty document (or one of only comments) is YAML's null, not an empty map.
         let value: serde_yaml_ng::Value = serde_yaml_ng::from_str(text)?;
@@ -127,7 +136,8 @@ impl Loaded {
             binds.push((bind, command));
         }
         let rules = Rules::compile(&config.rules)?;
-        let remap = remap::compile(&config.remap).map_err(ConfigError::Remap)?;
+        let remap = tile_remap::Config::compile(&config.remap.layers, config.remap.modifier_guard)
+            .map_err(ConfigError::Remap)?;
         let launcher_hide = regex::RegexSetBuilder::new(&config.launcher.hide)
             .case_insensitive(true)
             .build()
@@ -141,6 +151,7 @@ impl Loaded {
         })
     }
 
+    /// Loads and validates the config file at `path`.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let text = fs::read_to_string(path).map_err(|e| ConfigError::Io(path.into(), e))?;
         Self::parse(&text)
@@ -400,8 +411,9 @@ mod tests {
 
     #[test]
     fn remap_layers_replace_the_defaults() {
+        assert!(Loaded::defaults().remap.is_empty());
         let loaded = Loaded::parse("remap:\n  layers:\n    main:\n      capslock: esc\n").unwrap();
-        assert!(loaded.remap.layer("capslock").is_none());
+        assert!(!loaded.remap.is_empty());
         let err = Loaded::parse("remap:\n  layers:\n    main:\n      capslock: layer(nav)\n")
             .unwrap_err();
         assert!(err.to_string().contains("unknown layer `nav`"), "{err}");

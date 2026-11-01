@@ -28,14 +28,20 @@ pub struct Rules(Vec<CompiledRule>);
 /// The combined effect of every matching rule.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RuleOutcome {
+    /// Leave the window alone.
     pub ignore: bool,
+    /// Float (or tile) it, whatever the layout.
     pub float: Option<bool>,
+    /// Open it on this workspace.
     pub workspace: Option<u8>,
+    /// Open it on this monitor, by index.
     pub monitor: Option<usize>,
+    /// Force its title bar on or off.
     pub decorations: Option<bool>,
 }
 
 impl Rules {
+    /// Compiles the rules' patterns, naming the first rule with an invalid one.
     pub fn compile(rules: &[Rule]) -> Result<Self, ConfigError> {
         let compile = |i: usize, pattern: &Option<String>| {
             pattern
@@ -65,6 +71,7 @@ impl Rules {
             .map(Self)
     }
 
+    /// What the rules matching `info` add up to, later rules winning.
     pub fn resolve(&self, info: &WindowInfo) -> RuleOutcome {
         let mut out = RuleOutcome::default();
         for compiled in self.0.iter().filter(|r| r.matches(info)) {

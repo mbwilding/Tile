@@ -3,47 +3,27 @@ use std::{fmt, str::FromStr};
 /// Modifier keys required by a keybind. A bind fires only when exactly these are held.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Modifiers {
+    /// Either Win key.
     pub super_key: bool,
+    /// Either Shift.
     pub shift: bool,
+    /// Either Ctrl.
     pub ctrl: bool,
+    /// Either Alt.
     pub alt: bool,
 }
 
 /// A parsed key combination such as `super+shift+q`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Keybind {
+    /// The modifiers held with the key.
     pub modifiers: Modifiers,
-    /// A Windows virtual-key name understood by `win-hotkeys` (e.g. `RETURN`, `Q`, `OEM_COMMA`).
-    pub key: String,
+    /// The key's Windows virtual-key code, resolved from its name when the bind is parsed.
+    pub vk: u16,
 }
 
-/// Maps friendly key names onto Windows virtual-key names.
-fn key_name(name: &str) -> String {
-    let lower = name.to_ascii_lowercase();
-    let mapped = match lower.as_str() {
-        "enter" | "return" => "RETURN",
-        "esc" | "escape" => "ESCAPE",
-        "backspace" => "BACK",
-        "del" | "delete" => "DELETE",
-        "ins" | "insert" => "INSERT",
-        "pageup" | "pgup" => "PRIOR",
-        "pagedown" | "pgdn" => "NEXT",
-        "print" | "printscreen" => "SNAPSHOT",
-        "comma" => "OEM_COMMA",
-        "period" | "dot" => "OEM_PERIOD",
-        "minus" => "OEM_MINUS",
-        "equal" | "plus" => "OEM_PLUS",
-        "semicolon" => "OEM_1",
-        "slash" => "OEM_2",
-        "grave" | "backtick" => "OEM_3",
-        "bracketleft" => "OEM_4",
-        "backslash" => "OEM_5",
-        "bracketright" => "OEM_6",
-        "apostrophe" | "quote" => "OEM_7",
-        _ => return name.to_ascii_uppercase(),
-    };
-    mapped.to_string()
-}
+/// The `L` key, which Win+L locks the workstation with.
+const VK_L: u16 = 0x4C;
 
 impl FromStr for Keybind {
     type Err = String;
@@ -66,7 +46,7 @@ impl FromStr for Keybind {
         }
         Ok(Self {
             modifiers,
-            key: key_name(key),
+            vk: tile_remap::vk_from_name(key)?,
         })
     }
 }
@@ -76,7 +56,7 @@ impl Keybind {
     /// `general.override_win_l`.
     pub fn is_win_l(&self) -> bool {
         let m = self.modifiers;
-        m.super_key && !m.shift && !m.ctrl && !m.alt && self.key == "L"
+        m.super_key && !m.shift && !m.ctrl && !m.alt && self.vk == VK_L
     }
 }
 
@@ -93,7 +73,10 @@ impl fmt::Display for Keybind {
                 write!(f, "{name}+")?;
             }
         }
-        f.write_str(&self.key)
+        match tile_remap::vk_name(self.vk) {
+            Some(name) => f.write_str(name),
+            None => write!(f, "{:#04x}", self.vk),
+        }
     }
 }
 
@@ -101,13 +84,24 @@ impl fmt::Display for Keybind {
 mod tests {
     use super::*;
 
+    fn vk(keys: &str) -> u16 {
+        keys.parse::<Keybind>().unwrap().vk
+    }
+
     #[test]
     fn parses_modifiers_and_aliases() {
         let k: Keybind = "SUPER+Shift+enter".parse().unwrap();
         assert!(k.modifiers.super_key && k.modifiers.shift && !k.modifiers.ctrl);
-        assert_eq!(k.key, "RETURN");
-        assert_eq!("alt+comma".parse::<Keybind>().unwrap().key, "OEM_COMMA");
-        assert_eq!("super+1".parse::<Keybind>().unwrap().key, "1");
+        assert_eq!(k.vk, 0x0D);
+        assert_eq!(vk("alt+comma"), 0xBC);
+        assert_eq!(vk("super+1"), 0x31);
+        assert_eq!(vk("super+OEM_102"), 0xE2);
+        assert_eq!(vk("super+pgup"), vk("super+PRIOR"));
+        assert_eq!(vk("super+leftbrace"), vk("super+bracketleft"));
+        assert_eq!(
+            "super+ctrl+[".parse::<Keybind>().unwrap().to_string(),
+            "super+ctrl+leftbrace"
+        );
     }
 
     #[test]
@@ -116,5 +110,7 @@ mod tests {
         assert!(!"super+shift+l".parse::<Keybind>().unwrap().is_win_l());
         assert!("hyper+a".parse::<Keybind>().is_err());
         assert!("super+".parse::<Keybind>().is_err());
+        let err = "super+bracket".parse::<Keybind>().unwrap_err();
+        assert_eq!(err, "unknown key `bracket`");
     }
 }

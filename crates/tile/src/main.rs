@@ -1,6 +1,5 @@
 mod cli;
 mod daemon;
-mod desktops;
 mod install;
 mod launch;
 mod logging;
@@ -13,7 +12,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use tile_config::Loaded;
 
-/// A dynamic tiling window manager and keyd-style key remapper for Windows. Without a command
+/// A dynamic tiling window manager and key remapper for Windows. Without a command
 /// it runs the window manager; the commands control one that is running.
 #[derive(Parser)]
 #[command(version = env!("TILE_VERSION"), about)]

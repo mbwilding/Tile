@@ -164,7 +164,10 @@ fn reset_releases_everything() {
     // Its keys' releases then pass.
     assert_eq!(run(e, "-j@20 -capslock@30"), "=-j =-capslock");
     run(e, "+space@100");
-    assert_eq!(e.reset(), [Out::Release(Key::LEFTSHIFT)]);
+    assert_eq!(
+        e.reset(),
+        [Out::Release(Key::from_name("leftshift").unwrap())]
+    );
 }
 
 #[test]
