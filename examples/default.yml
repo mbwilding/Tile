@@ -5,6 +5,7 @@ general:
   tiling: true # manage windows; false leaves them alone
   default_binds: false # only the binds below; true adds them to the defaults
   remap: true # remap keys with the remap layers
+  launcher_key: true # bind the launcher to Win+R (else Win+D) when no bind opens it
   gaps_in: 10 # px between neighbouring windows
   gaps_out: 10 # px between windows and the monitor edge
   independent_workspaces: true # each monitor has its own workspaces; false syncs them

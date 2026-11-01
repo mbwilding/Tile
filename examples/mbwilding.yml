@@ -1,5 +1,6 @@
 ---
 general:
+  launcher_key: true
   disable_start_menu: true
 
 tray:

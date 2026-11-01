@@ -34,6 +34,7 @@ or contains `: ` or ` #`, and around numbers meant as text (`"2"`).
 | `tiling` | `true` | Manage windows. `false` leaves them alone and gives Win+L back; turning it on again manages the open windows. |
 | `default_binds` | `true` | Start from the [default binds](keybinds.md#default-keys), which `binds` add to. `false` leaves only your own `binds`. |
 | `remap` | `true` | Run the key remapper with the `remap` layers. |
+| `launcher_key` | `true` | Bind the [launcher](launcher.md) to `Win+R`, or `Win+D` if that is taken, when none of your `binds` opens it. It works with `tiling` on or off and with `default_binds` off, so Tile can run as only a remapper and launcher. `false` adds no bind. In [shell mode](shell.md) the launcher is bound whatever this says. |
 | `gaps_in` | `10` | Pixels between neighbouring tiled windows. |
 | `gaps_out` | `10` | Pixels between tiled windows and the monitor edge. |
 | `independent_workspaces` | `true` | Every monitor has workspaces of its own, so `workspace 2` is workspace 2 on the monitor you are on and never moves focus to another monitor. `false` syncs the monitors: switching workspace switches them all together. See [layouts](layouts.md#workspaces-and-monitors). |
@@ -213,6 +214,7 @@ general:
   tiling: true                  # manage windows; false leaves them alone
   default_binds: true           # start from the default binds; false leaves only yours
   remap: true                   # remap keys with the remap layers
+  launcher_key: true            # bind the launcher to Win+R (else Win+D) when no bind opens it
   gaps_in: 10                   # px between neighbouring windows
   gaps_out: 10                  # px between windows and the monitor edge
   independent_workspaces: true  # each monitor has its own workspaces; false syncs them

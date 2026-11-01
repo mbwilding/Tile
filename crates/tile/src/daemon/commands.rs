@@ -8,6 +8,21 @@ use tile_platform::{close_foreground, cursor_pos, desktops as vd, focus_exe, set
 use super::Daemon;
 use crate::launch;
 
+/// Win+R, or Win+D if that is taken, as the launcher's bind when `wanted` and no bind opens it.
+fn launcher_fallback(
+    wanted: bool,
+    binds: &[(tile_config::Keybind, Command)],
+) -> Option<(tile_config::Keybind, Command)> {
+    if !wanted || binds.iter().any(|(_, c)| *c == Command::Launcher) {
+        return None;
+    }
+    ["super+r", "super+d"].into_iter().find_map(|keys| {
+        let bind: tile_config::Keybind = keys.parse().ok()?;
+        let free = !binds.iter().any(|(b, _)| *b == bind);
+        free.then_some((bind, Command::Launcher))
+    })
+}
+
 impl Daemon {
     /// Does what a system row of the launcher asks for.
     pub(super) fn run_system(&mut self, action: Action) {
@@ -31,25 +46,17 @@ impl Daemon {
         }
     }
 
-    /// Installs the binds. While tiling is off or paused only those that
-    /// [work while paused](Command::works_while_paused) fire.
-    /// In shell mode the launcher is how everything starts, so it is always bound: a bind of
-    /// yours if there is one, else Win+R or, if that is taken, Win+D.
-    pub(super) fn shell_launcher_bind(&self) -> Option<(tile_config::Keybind, Command)> {
-        let binds = &self.loaded.binds;
-        if !self.shell_wanted() || binds.iter().any(|(_, c)| *c == Command::Launcher) {
-            return None;
-        }
-        ["super+r", "super+d"].into_iter().find_map(|keys| {
-            let bind: tile_config::Keybind = keys.parse().ok()?;
-            let free = !binds.iter().any(|(b, _)| *b == bind);
-            if free {
-                tracing::info!("shell mode: the launcher is bound to {keys}");
-            }
-            free.then_some((bind, Command::Launcher))
-        })
+    /// The launcher's own bind when none of the binds opens it: wanted by `general.launcher_key`,
+    /// and always in shell mode, where the launcher is how everything starts.
+    pub(super) fn launcher_fallback_bind(&self) -> Option<(tile_config::Keybind, Command)> {
+        let wanted = self.loaded.config.general.launcher_key || self.shell_wanted();
+        let bind = launcher_fallback(wanted, &self.loaded.binds)?;
+        tracing::info!("the launcher is bound to {}", bind.0);
+        Some(bind)
     }
 
+    /// Installs the binds. While tiling is off or paused only those that
+    /// [work while paused](Command::works_while_paused) fire.
     pub(super) fn install_binds(&mut self) {
         self.hotkeys.set_paused(self.paused || !self.tiling);
         // Without the takeover, Windows would lock *and* run the bind.
@@ -59,7 +66,7 @@ impl Daemon {
                 "Win+L binds are skipped: Windows keeps Win+L (see `general.override_win_l`)"
             );
         }
-        let fallback = self.shell_launcher_bind();
+        let fallback = self.launcher_fallback_bind();
         let mut usable: Vec<_> = self
             .loaded
             .binds
@@ -226,5 +233,35 @@ impl Daemon {
 
     pub(super) fn focused_monitor(&self) -> Option<&MonitorInfo> {
         self.desktops.current_ref().focused_monitor()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn bind(keys: &str, command: Command) -> (tile_config::Keybind, Command) {
+        (keys.parse().unwrap(), command)
+    }
+
+    #[test]
+    fn launcher_gets_win_r_when_nothing_opens_it() {
+        let (b, c) = launcher_fallback(true, &[]).unwrap();
+        assert_eq!(b, "super+r".parse().unwrap());
+        assert_eq!(c, Command::Launcher);
+    }
+
+    #[test]
+    fn launcher_moves_to_win_d_when_win_r_is_taken() {
+        let binds = [bind("super+r", Command::KillActive)];
+        let (b, _) = launcher_fallback(true, &binds).unwrap();
+        assert_eq!(b, "super+d".parse().unwrap());
+    }
+
+    #[test]
+    fn launcher_is_left_alone_when_bound_or_unwanted() {
+        assert!(launcher_fallback(false, &[]).is_none());
+        let binds = [bind("super+space", Command::Launcher)];
+        assert!(launcher_fallback(true, &binds).is_none());
     }
 }
