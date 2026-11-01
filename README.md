@@ -2,7 +2,7 @@
 
 A dynamic tiling window manager for Windows, with a [keyd](https://github.com/rvaiya/keyd)-style
 key remapper built in (layers, home-row mods, tap/hold keys). Either side can be switched off.
-Written in Rust, with all `unsafe` in one small crate.
+Written in Rust.
 
 Keybinds are handled in-process by a low-level keyboard hook, including `Win` combos (the Start
 menu is suppressed), so no separate hotkey program is needed.

@@ -51,7 +51,8 @@ Before anything is typed the list shows `pinned` apps first, in their order, the
 
 **Right click** an app for a menu with **Open** and **Run as administrator**, or press
 **Shift+Enter** on the selected app. Windows asks for consent unless Tile already runs elevated.
-Store apps can't be elevated, so for those it behaves like Open.
+Windows has no consent prompt for Store apps: Tile starts them from its own process, so they
+run as administrator only when Tile does, and otherwise it behaves like Open.
 
 ## Calculator
 
