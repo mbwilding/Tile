@@ -4,11 +4,12 @@
 //! Like the other low-level crates, it holds `unsafe` and exposes a safe API.
 
 mod cursor;
+mod hook;
 mod keyboard;
 mod mouse;
 mod send;
 
 pub use cursor::{hide_cursor, restore_cursors};
-pub use keyboard::{Decision, Handler, RawKey, TAG, Waker, spawn};
+pub use keyboard::{Decision, Handler, KeyboardHook, RawKey, Waker, spawn};
 pub use mouse::{MouseEvent, MouseHandler, MouseHook, spawn_mouse};
-pub use send::{Input, send};
+pub use send::{Input, SILENT_VK, send, tap_silent};
