@@ -7,7 +7,7 @@ use std::{sync::mpsc, thread};
 
 use tile_core::command::DesktopTarget;
 use tokio::sync::mpsc::UnboundedSender;
-use windows::Win32::Foundation::HWND;
+use windows_winvd::Win32::Foundation::HWND;
 use winsafe::{self as w, co};
 use winvd::{Desktop, DesktopEvent, DesktopEventThread};
 
