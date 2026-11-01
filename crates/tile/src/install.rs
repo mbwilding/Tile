@@ -249,8 +249,6 @@ fn copy_programs(source: &Path, dir: &Path) -> anyhow::Result<()> {
             let _ = fs::remove_file(path);
         }
     }
-    // Earlier versions shipped the command line as a separate program.
-    let _ = fs::remove_file(dir.join("tilectl.exe"));
     let target = dir.join(EXE);
     if target.exists() {
         let nanos = std::time::SystemTime::now()
