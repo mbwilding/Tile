@@ -4,6 +4,9 @@ description = "What Explorer provides, for running Tile as the Windows shell: th
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish.workspace = true
 
 [dependencies]
 tracing.workspace = true
@@ -31,9 +34,8 @@ windows = { workspace = true, features = [
     "Win32_System_WinRT",
     "Win32_UI_Shell",
 ] }
-
 # Named by the code `windows`'s `implement` macro writes.
-windows-core = "0.58"
+windows-core.workspace = true
 
 # Not the workspace lints: this crate is where `unsafe` is allowed. Every block says why it
 # is sound in a `// SAFETY:` comment.
