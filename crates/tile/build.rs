@@ -49,12 +49,7 @@ fn icon_resource() -> Vec<u8> {
         let id = GROUP_ID + 1 + i as u16;
         record(&mut res, 3, id, &image);
 
-        // 256 is stored as 0 in the one-byte dimensions.
-        let dim = if size >= 256 { 0 } else { size as u8 };
-        group.extend_from_slice(&[dim, dim, 0, 0]);
-        group.extend_from_slice(&1u16.to_le_bytes());
-        group.extend_from_slice(&32u16.to_le_bytes());
-        group.extend_from_slice(&(image.len() as u32).to_le_bytes());
+        dir_entry(&mut group, size, &image);
         group.extend_from_slice(&id.to_le_bytes());
     }
     record(&mut res, 14, GROUP_ID, &group);
@@ -68,11 +63,7 @@ fn icon_file() -> Vec<u8> {
     ico.extend_from_slice(&(SIZES.len() as u16).to_le_bytes());
     let mut offset = 6 + 16 * SIZES.len() as u32;
     for (size, image) in SIZES.into_iter().zip(&images) {
-        let dim = if size >= 256 { 0 } else { size as u8 };
-        ico.extend_from_slice(&[dim, dim, 0, 0]);
-        ico.extend_from_slice(&1u16.to_le_bytes());
-        ico.extend_from_slice(&32u16.to_le_bytes());
-        ico.extend_from_slice(&(image.len() as u32).to_le_bytes());
+        dir_entry(&mut ico, size, image);
         ico.extend_from_slice(&offset.to_le_bytes());
         offset += image.len() as u32;
     }
@@ -80,6 +71,17 @@ fn icon_file() -> Vec<u8> {
         ico.extend_from_slice(&image);
     }
     ico
+}
+
+/// Appends the part of an icon directory entry that a `.ico` file and an icon group resource
+/// share, for a `size` x `size` 32-bit `image`; each then adds where the image is.
+fn dir_entry(out: &mut Vec<u8>, size: u32, image: &[u8]) {
+    // 256 is stored as 0 in the one-byte dimensions.
+    let dim = if size >= 256 { 0 } else { size as u8 };
+    out.extend_from_slice(&[dim, dim, 0, 0]);
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&32u16.to_le_bytes());
+    out.extend_from_slice(&(image.len() as u32).to_le_bytes());
 }
 
 /// An icon image in DIB form: 32-bit bottom-up BGRA, then the (all clear) AND mask.
