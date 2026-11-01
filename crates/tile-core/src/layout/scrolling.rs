@@ -1,10 +1,9 @@
-use super::{CenterMode, Layout, LayoutSettings, Tile};
+use super::{CenterMode, Layout, LayoutSettings, Tile, clamp_proportion};
 use crate::{
     WindowId,
     geometry::{Axis, Direction, Rect, ratio_of, scale},
 };
 
-const MIN_PROPORTION: f32 = 0.1;
 const MIN_WEIGHT: f32 = 0.1;
 
 /// Scrolling: an endless horizontal strip of columns, scrolled to keep the focus in view.
@@ -64,12 +63,14 @@ impl Scrolling {
             .min(self.columns.len().saturating_sub(1));
     }
 
+    /// Sets the width of `id`'s column, as a share of the width.
     pub fn set_proportion(&mut self, id: WindowId, proportion: f32) {
         if let Some((c, _)) = self.locate(id) {
-            self.columns[c].proportion = proportion.clamp(MIN_PROPORTION, 1.0);
+            self.columns[c].proportion = clamp_proportion(proportion);
         }
     }
 
+    /// Steps `id`'s column to the next of the width presets, wrapping round.
     pub fn cycle_proportion(&mut self, id: WindowId, s: &LayoutSettings) {
         let Some((c, _)) = self.locate(id) else {
             return;
@@ -82,7 +83,7 @@ impl Scrolling {
             .find(|p| *p > current + 0.01)
             .or_else(|| s.scrolling_presets.first().copied())
             .unwrap_or(s.scrolling_proportion);
-        self.columns[c].proportion = next.clamp(MIN_PROPORTION, 1.0);
+        self.columns[c].proportion = clamp_proportion(next);
     }
 
     /// Moves `id` into the neighbouring column in `dir`.
@@ -119,6 +120,7 @@ impl Scrolling {
         self.focused_column = at;
     }
 
+    /// Centres the focused column at the next arrangement.
     pub fn center(&mut self) {
         self.center_once = true;
     }
@@ -189,8 +191,7 @@ impl Layout for Scrolling {
             self.focused_column = c;
             self.columns[c].active = r;
         }
-        let usable = area.shrink(s.gaps_out);
-        let widths = self.column_widths(usable, s.gaps_in);
+        let widths = self.column_widths(area, s.gaps_in);
         let xs: Vec<i32> = widths
             .iter()
             .scan(0, |x, w| {
@@ -199,12 +200,12 @@ impl Layout for Scrolling {
                 Some(start)
             })
             .collect();
-        self.update_offset(&xs, &widths, usable.w, s.scrolling_center);
+        self.update_offset(&xs, &widths, area.w, s.scrolling_center);
 
         let mut tiles = Vec::new();
         for ((col, x), w) in self.columns.iter().zip(&xs).zip(&widths) {
-            let rect = Rect::new(usable.x + x - self.offset, usable.y, *w, usable.h);
-            let visible = rect.x >= usable.x - 1 && rect.right() <= usable.right() + 1;
+            let rect = Rect::new(area.x + x - self.offset, area.y, *w, area.h);
+            let visible = rect.x >= area.x - 1 && rect.right() <= area.right() + 1;
             let parts = rect.split_weighted(Axis::Vertical, &col.weights, s.gaps_in);
             tiles.extend(parts.into_iter().zip(&col.windows).map(|(rect, id)| Tile {
                 id: *id,
@@ -223,16 +224,15 @@ impl Layout for Scrolling {
         self.columns[cb].windows[rb] = a;
     }
 
-    fn resize(&mut self, id: WindowId, dx: i32, dy: i32, area: Rect, s: &LayoutSettings) {
+    fn resize(&mut self, id: WindowId, dx: i32, dy: i32, area: Rect, _s: &LayoutSettings) {
         let Some((c, r)) = self.locate(id) else {
             return;
         };
-        let usable = area.shrink(s.gaps_out);
         let col = &mut self.columns[c];
-        col.proportion = (col.proportion + ratio_of(dx, usable.w)).clamp(MIN_PROPORTION, 1.0);
+        col.proportion = clamp_proportion(col.proportion + ratio_of(dx, area.w));
         if dy != 0 && col.windows.len() > 1 {
             let total: f32 = col.weights.iter().sum();
-            let change = ratio_of(dy, usable.h) * total;
+            let change = ratio_of(dy, area.h) * total;
             col.weights[r] = (col.weights[r] + change).max(MIN_WEIGHT);
         }
     }
@@ -371,10 +371,11 @@ mod tests {
         let s = settings(CenterMode::Never);
         let mut l = filled(&s, 1);
         l.cycle_proportion(WindowId(1), &s);
-        assert!((l.columns[0].proportion - 2.0 / 3.0).abs() < 1e-4);
+        assert_eq!(l.columns[0].proportion, 1.0);
         l.cycle_proportion(WindowId(1), &s);
+        assert_eq!(l.columns[0].proportion, 0.25);
         l.cycle_proportion(WindowId(1), &s);
-        assert!((l.columns[0].proportion - 1.0 / 3.0).abs() < 1e-4);
+        assert_eq!(l.columns[0].proportion, 0.333);
     }
 
     #[test]

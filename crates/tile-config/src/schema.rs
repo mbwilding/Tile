@@ -151,15 +151,16 @@ impl Config {
         LayoutSettings {
             gaps_in: self.general.gaps_in,
             gaps_out: self.general.gaps_out,
-            dwindle_split_ratio: self.dwindle.split_ratio.clamp(0.1, 0.9),
-            master_mfact: self.master.mfact.clamp(0.1, 0.9),
-            master_count: self.master.count.max(1),
+            dwindle_split_ratio: self.dwindle.split_ratio,
+            master_mfact: self.master.mfact,
+            master_count: self.master.count,
             master_new_is_master: self.master.new_is_master,
-            scrolling_proportion: self.scrolling.proportion.clamp(0.1, 1.0),
+            scrolling_proportion: self.scrolling.proportion,
             scrolling_presets: self.scrolling.proportion_presets.clone(),
             scrolling_center: self.scrolling.center_focused,
             independent_workspaces: self.general.independent_workspaces,
         }
+        .clamped()
     }
 
     /// The focused window's border colour.
@@ -300,8 +301,8 @@ impl Default for General {
             tiling: true,
             default_binds: true,
             remap: true,
-            gaps_in: 10,
-            gaps_out: 10,
+            gaps_in: LayoutSettings::DEFAULT_GAPS_IN,
+            gaps_out: LayoutSettings::DEFAULT_GAPS_OUT,
             independent_workspaces: true,
             layout: LayoutKind::Master,
             borders: true,
@@ -405,7 +406,9 @@ pub struct Dwindle {
 
 impl Default for Dwindle {
     fn default() -> Self {
-        Self { split_ratio: 0.5 }
+        Self {
+            split_ratio: LayoutSettings::DEFAULT_SPLIT_RATIO,
+        }
     }
 }
 
@@ -420,8 +423,8 @@ pub struct Master {
 impl Default for Master {
     fn default() -> Self {
         Self {
-            mfact: 0.5,
-            count: 1,
+            mfact: LayoutSettings::DEFAULT_MFACT,
+            count: LayoutSettings::DEFAULT_MASTER_COUNT,
             new_is_master: false,
         }
     }
@@ -438,8 +441,8 @@ pub struct Scrolling {
 impl Default for Scrolling {
     fn default() -> Self {
         Self {
-            proportion: 0.333,
-            proportion_presets: vec![0.25, 0.333, 0.5, 1.0],
+            proportion: LayoutSettings::DEFAULT_PROPORTION,
+            proportion_presets: LayoutSettings::DEFAULT_PROPORTION_PRESETS.to_vec(),
             center_focused: CenterMode::OnOverflow,
         }
     }
@@ -759,11 +762,24 @@ mod tests {
         config.master.mfact = -1.0;
         config.master.count = 0;
         config.scrolling.proportion = 0.0;
+        config.scrolling.proportion_presets = vec![2.0];
         let settings = config.layout_settings();
-        assert_eq!(settings.dwindle_split_ratio, 0.9);
-        assert_eq!(settings.master_mfact, 0.1);
-        assert_eq!(settings.master_count, 1);
-        assert_eq!(settings.scrolling_proportion, 0.1);
+        assert_eq!(settings.dwindle_split_ratio, LayoutSettings::MAX_RATIO);
+        assert_eq!(settings.master_mfact, LayoutSettings::MIN_RATIO);
+        assert_eq!(settings.master_count, LayoutSettings::MIN_MASTER_COUNT);
+        assert_eq!(
+            settings.scrolling_proportion,
+            LayoutSettings::MIN_PROPORTION
+        );
+        assert_eq!(settings.scrolling_presets, [LayoutSettings::MAX_PROPORTION]);
+    }
+
+    #[test]
+    fn layout_defaults_come_from_the_layouts() {
+        assert_eq!(
+            Config::default().layout_settings(),
+            LayoutSettings::default()
+        );
     }
 
     #[test]

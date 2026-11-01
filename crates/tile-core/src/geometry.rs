@@ -44,25 +44,19 @@ impl Rect {
         )
     }
 
-    /// Splits along `axis`, giving the first part `ratio` of the space minus half the gap.
-    pub fn split(&self, axis: Axis, ratio: f32, gap: i32) -> (Self, Self) {
+    /// The width for [`Axis::Horizontal`], the height for [`Axis::Vertical`].
+    pub const fn length(&self, axis: Axis) -> i32 {
         match axis {
-            Axis::Horizontal => {
-                let avail = self.w - gap;
-                let first = scale(avail, ratio);
-                (
-                    Self::new(self.x, self.y, first, self.h),
-                    Self::new(self.x + first + gap, self.y, avail - first, self.h),
-                )
-            }
-            Axis::Vertical => {
-                let avail = self.h - gap;
-                let first = scale(avail, ratio);
-                (
-                    Self::new(self.x, self.y, self.w, first),
-                    Self::new(self.x, self.y + first + gap, self.w, avail - first),
-                )
-            }
+            Axis::Horizontal => self.w,
+            Axis::Vertical => self.h,
+        }
+    }
+
+    /// Splits along `axis`, giving the first part `ratio` of the space left after the gap.
+    pub fn split(&self, axis: Axis, ratio: f32, gap: i32) -> (Self, Self) {
+        match self.split_weighted(axis, &[ratio, 1.0 - ratio], gap)[..] {
+            [a, b] => (a, b),
+            _ => unreachable!("two weights make two parts"),
         }
     }
 
@@ -73,11 +67,7 @@ impl Rect {
         }
         let total: f32 = weights.iter().sum();
         let count = i32::try_from(weights.len()).unwrap_or(i32::MAX);
-        let length = match axis {
-            Axis::Horizontal => self.w,
-            Axis::Vertical => self.h,
-        };
-        let avail = length - gap * (count - 1);
+        let avail = self.length(axis) - gap * (count - 1);
         let mut out = Vec::with_capacity(weights.len());
         let mut offset = 0;
         let mut used = 0;
@@ -101,9 +91,7 @@ impl Rect {
 /// Multiplies a pixel length by a ratio, rounding to the nearest pixel.
 pub fn scale(length: i32, ratio: f32) -> i32 {
     // Pixel values comfortably fit in f32's exact integer range.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss)]
-    let scaled = (length as f32 * ratio).round() as i32;
-    scaled
+    (length as f32 * ratio).round() as i32
 }
 
 /// Converts a pixel delta into a ratio delta relative to `length`.
@@ -111,9 +99,7 @@ pub fn ratio_of(delta: i32, length: i32) -> f32 {
     if length == 0 {
         return 0.0;
     }
-    #[allow(clippy::cast_precision_loss)]
-    let ratio = delta as f32 / length as f32;
-    ratio
+    delta as f32 / length as f32
 }
 
 /// The orientation of a split. `Horizontal` places children side by side.

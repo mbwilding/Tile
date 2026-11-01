@@ -16,7 +16,7 @@ pub use scrolling::Scrolling;
 
 use crate::{
     WindowId,
-    geometry::{Direction, Rect, nearest_in_direction},
+    geometry::{Axis, Direction, Rect, nearest_in_direction},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -84,64 +84,173 @@ pub enum CenterMode {
     Never,
 }
 
-/// Layout tunables, derived from the user config.
+/// Layout tunables, derived from the user config. The config's defaults and limits are the
+/// constants here.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LayoutSettings {
     /// Space between neighbouring windows.
     pub gaps_in: i32,
     /// Space between windows and the edge of the area.
     pub gaps_out: i32,
+    /// The share of a new dwindle split given to the window that was there.
     pub dwindle_split_ratio: f32,
+    /// The master column's share of the width.
     pub master_mfact: f32,
+    /// How many windows share the master column, at least [`Self::MIN_MASTER_COUNT`].
     pub master_count: usize,
+    /// New windows become the master instead of joining the stack.
     pub master_new_is_master: bool,
+    /// A new scrolling column's share of the width.
     pub scrolling_proportion: f32,
+    /// The column widths `cycleproportion` steps through.
     pub scrolling_presets: Vec<f32>,
+    /// When the scrolling layout centres the focused column.
     pub scrolling_center: CenterMode,
     /// Each monitor has workspaces of its own. Off, switching workspace switches every monitor.
     pub independent_workspaces: bool,
 }
 
+impl LayoutSettings {
+    /// Default [`gaps_in`](Self::gaps_in), in pixels.
+    pub const DEFAULT_GAPS_IN: i32 = 10;
+    /// Default [`gaps_out`](Self::gaps_out), in pixels.
+    pub const DEFAULT_GAPS_OUT: i32 = 10;
+    /// Default [`dwindle_split_ratio`](Self::dwindle_split_ratio).
+    pub const DEFAULT_SPLIT_RATIO: f32 = 0.5;
+    /// Default [`master_mfact`](Self::master_mfact).
+    pub const DEFAULT_MFACT: f32 = 0.5;
+    /// Default [`master_count`](Self::master_count).
+    pub const DEFAULT_MASTER_COUNT: usize = 1;
+    /// Default [`scrolling_proportion`](Self::scrolling_proportion).
+    pub const DEFAULT_PROPORTION: f32 = 0.333;
+    /// Default [`scrolling_presets`](Self::scrolling_presets).
+    pub const DEFAULT_PROPORTION_PRESETS: [f32; 4] = [0.25, 0.333, 0.5, 1.0];
+
+    /// The smallest share of a dwindle split or the master column.
+    pub const MIN_RATIO: f32 = 0.1;
+    /// The largest share of a dwindle split or the master column.
+    pub const MAX_RATIO: f32 = 0.9;
+    /// The narrowest scrolling column, as a share of the width.
+    pub const MIN_PROPORTION: f32 = 0.1;
+    /// The widest scrolling column: the whole width.
+    pub const MAX_PROPORTION: f32 = 1.0;
+    /// The fewest windows in the master column.
+    pub const MIN_MASTER_COUNT: usize = 1;
+
+    /// These settings with every value brought within its limits.
+    #[must_use]
+    pub fn clamped(mut self) -> Self {
+        self.dwindle_split_ratio = clamp_ratio(self.dwindle_split_ratio);
+        self.master_mfact = clamp_ratio(self.master_mfact);
+        self.master_count = self.master_count.max(Self::MIN_MASTER_COUNT);
+        self.scrolling_proportion = clamp_proportion(self.scrolling_proportion);
+        for preset in &mut self.scrolling_presets {
+            *preset = clamp_proportion(*preset);
+        }
+        self
+    }
+
+    /// The part of a monitor's work area that windows tile in: inside the outer gap.
+    pub fn tiling_area(&self, work_area: Rect) -> Rect {
+        work_area.shrink(self.gaps_out)
+    }
+}
+
 impl Default for LayoutSettings {
     fn default() -> Self {
         Self {
-            gaps_in: 10,
-            gaps_out: 10,
-            dwindle_split_ratio: 0.5,
-            master_mfact: 0.55,
-            master_count: 1,
+            gaps_in: Self::DEFAULT_GAPS_IN,
+            gaps_out: Self::DEFAULT_GAPS_OUT,
+            dwindle_split_ratio: Self::DEFAULT_SPLIT_RATIO,
+            master_mfact: Self::DEFAULT_MFACT,
+            master_count: Self::DEFAULT_MASTER_COUNT,
             master_new_is_master: false,
-            scrolling_proportion: 0.5,
-            scrolling_presets: vec![1.0 / 3.0, 0.5, 2.0 / 3.0, 1.0],
+            scrolling_proportion: Self::DEFAULT_PROPORTION,
+            scrolling_presets: Self::DEFAULT_PROPORTION_PRESETS.to_vec(),
             scrolling_center: CenterMode::OnOverflow,
             independent_workspaces: true,
         }
     }
 }
 
+fn clamp_ratio(ratio: f32) -> f32 {
+    ratio.clamp(LayoutSettings::MIN_RATIO, LayoutSettings::MAX_RATIO)
+}
+
+fn clamp_proportion(proportion: f32) -> f32 {
+    proportion.clamp(
+        LayoutSettings::MIN_PROPORTION,
+        LayoutSettings::MAX_PROPORTION,
+    )
+}
+
+/// The windows of a list-based layout, in layout order.
+#[derive(Debug, Clone, Default)]
+struct WindowList(Vec<WindowId>);
+
+impl WindowList {
+    fn position(&self, id: WindowId) -> Option<usize> {
+        self.0.iter().position(|w| *w == id)
+    }
+
+    fn remove(&mut self, id: WindowId) {
+        self.0.retain(|w| *w != id);
+    }
+
+    fn swap(&mut self, a: WindowId, b: WindowId) {
+        if let (Some(pa), Some(pb)) = (self.position(a), self.position(b)) {
+            self.0.swap(pa, pb);
+        }
+    }
+}
+
+/// Tiles `ids` in equal parts of `rect`, side by side or stacked along `axis`.
+fn equal_tiles(rect: Rect, axis: Axis, ids: &[WindowId], gap: i32) -> Vec<Tile> {
+    rect.split_weighted(axis, &vec![1.0; ids.len()], gap)
+        .into_iter()
+        .zip(ids)
+        .map(|(rect, id)| Tile {
+            id: *id,
+            rect,
+            visible: true,
+        })
+        .collect()
+}
+
 /// A window's computed position. Invisible tiles (scrolled off screen) must be hidden.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tile {
+    /// The window.
     pub id: WindowId,
+    /// Where it goes.
     pub rect: Rect,
+    /// Whether it is on screen.
     pub visible: bool,
 }
 
-/// Behaviour common to every tiling layout.
+/// Behaviour common to every tiling layout. `area` is always the
+/// [tiling area](LayoutSettings::tiling_area), already inside the outer gap.
 pub trait Layout {
     /// Adds a window, placing it relative to `focused` when that is part of the layout.
     fn insert(&mut self, id: WindowId, focused: Option<WindowId>, area: Rect, s: &LayoutSettings);
+    /// Takes a window out.
     fn remove(&mut self, id: WindowId);
     /// All windows in a stable, layout-defined order.
     fn windows(&self) -> Vec<WindowId>;
+    /// Where every window goes in `area`, with `focused` kept in view.
     fn arrange(&mut self, area: Rect, focused: Option<WindowId>, s: &LayoutSettings) -> Vec<Tile>;
+    /// Exchanges two windows' places, if both are in the layout.
     fn swap(&mut self, a: WindowId, b: WindowId);
-    fn resize(&mut self, id: WindowId, dx: i32, dy: i32, area: Rect, s: &LayoutSettings);
 
+    /// Grows (or shrinks) a window by pixels. Layouts without sizes ignore it.
+    fn resize(&mut self, _id: WindowId, _dx: i32, _dy: i32, _area: Rect, _s: &LayoutSettings) {}
+
+    /// Whether `id` is in the layout.
     fn contains(&self, id: WindowId) -> bool {
         self.windows().contains(&id)
     }
 
+    /// The window `dir` of `id`, given where they are.
     fn neighbor(&self, id: WindowId, dir: Direction, tiles: &[Tile]) -> Option<WindowId> {
         let from = tiles.iter().find(|t| t.id == id)?.rect;
         nearest_in_direction(
@@ -164,17 +273,24 @@ pub trait Layout {
     }
 }
 
-/// The active layout of a workspace.
+/// The active layout of a workspace. Its methods take the monitor's work area and lay windows
+/// out in its [tiling area](LayoutSettings::tiling_area).
 #[derive(Debug, Clone)]
 pub enum LayoutState {
+    /// See [`Dwindle`].
     Dwindle(Dwindle),
+    /// See [`Master`].
     Master(Master),
+    /// See [`Monocle`].
     Monocle(Monocle),
+    /// See [`Scrolling`].
     Scrolling(Scrolling),
+    /// See [`Even`].
     Even(Even),
 }
 
 impl LayoutState {
+    /// An empty layout of `kind`.
     pub fn new(kind: LayoutKind, s: &LayoutSettings) -> Self {
         match kind {
             LayoutKind::Dwindle => Self::Dwindle(Dwindle::default()),
@@ -185,6 +301,7 @@ impl LayoutState {
         }
     }
 
+    /// Which layout this is.
     pub const fn kind(&self) -> LayoutKind {
         match self {
             Self::Dwindle(_) => LayoutKind::Dwindle,
@@ -196,11 +313,11 @@ impl LayoutState {
     }
 
     /// Rebuilds the layout as `kind`, keeping the window order.
-    pub fn convert(&self, kind: LayoutKind, area: Rect, s: &LayoutSettings) -> Self {
+    pub fn convert(&self, kind: LayoutKind, work_area: Rect, s: &LayoutSettings) -> Self {
         let mut next = Self::new(kind, s);
         let mut prev = None;
         for id in self.windows() {
-            next.insert(id, prev, area, s);
+            next.insert(id, prev, work_area, s);
             prev = Some(id);
         }
         next
@@ -226,49 +343,61 @@ impl LayoutState {
         }
     }
 
+    /// See [`Layout::insert`].
     pub fn insert(
         &mut self,
         id: WindowId,
         focused: Option<WindowId>,
-        area: Rect,
+        work_area: Rect,
         s: &LayoutSettings,
     ) {
-        self.inner_mut().insert(id, focused, area, s);
+        self.inner_mut()
+            .insert(id, focused, s.tiling_area(work_area), s);
     }
 
+    /// See [`Layout::remove`].
     pub fn remove(&mut self, id: WindowId) {
         self.inner_mut().remove(id);
     }
 
+    /// See [`Layout::windows`].
     pub fn windows(&self) -> Vec<WindowId> {
         self.inner().windows()
     }
 
+    /// See [`Layout::contains`].
     pub fn contains(&self, id: WindowId) -> bool {
         self.inner().contains(id)
     }
 
+    /// See [`Layout::arrange`].
     pub fn arrange(
         &mut self,
-        area: Rect,
+        work_area: Rect,
         focused: Option<WindowId>,
         s: &LayoutSettings,
     ) -> Vec<Tile> {
-        self.inner_mut().arrange(area, focused, s)
+        self.inner_mut()
+            .arrange(s.tiling_area(work_area), focused, s)
     }
 
+    /// See [`Layout::swap`].
     pub fn swap(&mut self, a: WindowId, b: WindowId) {
         self.inner_mut().swap(a, b);
     }
 
-    pub fn resize(&mut self, id: WindowId, dx: i32, dy: i32, area: Rect, s: &LayoutSettings) {
-        self.inner_mut().resize(id, dx, dy, area, s);
+    /// See [`Layout::resize`].
+    pub fn resize(&mut self, id: WindowId, dx: i32, dy: i32, work_area: Rect, s: &LayoutSettings) {
+        self.inner_mut()
+            .resize(id, dx, dy, s.tiling_area(work_area), s);
     }
 
+    /// See [`Layout::neighbor`].
     pub fn neighbor(&self, id: WindowId, dir: Direction, tiles: &[Tile]) -> Option<WindowId> {
         self.inner().neighbor(id, dir, tiles)
     }
 
+    /// See [`Layout::move_window`].
     pub fn move_window(&mut self, id: WindowId, dir: Direction, tiles: &[Tile]) -> bool {
         self.inner_mut().move_window(id, dir, tiles)
     }
