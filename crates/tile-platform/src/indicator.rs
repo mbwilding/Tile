@@ -5,12 +5,7 @@
 use std::{
     cell::RefCell,
     rc::Rc,
-    sync::{
-        Arc,
-        atomic::{AtomicIsize, Ordering},
-        mpsc as std_mpsc,
-    },
-    thread::{self, JoinHandle},
+    sync::mpsc,
     time::{Duration, Instant},
 };
 
@@ -18,7 +13,9 @@ use tile_config::{IndicatorPosition, IndicatorStyle, WorkspaceIndicator as Confi
 use tile_core::Rect;
 use winsafe::{self as w, co, guard::DeleteObjectGuard, gui, prelude::*};
 
-use crate::gui::{colorref, corner_preference, wake};
+use crate::gui::{
+    Mailbox, WindowThread, colorref, make_font, paint_buffered, scale, set_alpha, style_popup,
+};
 
 const FADE_TIMER: usize = 1;
 const FRAME_MS: u32 = 15;
@@ -37,35 +34,21 @@ enum Request {
 }
 
 /// The workspace indicator window, on its own thread.
-pub struct Indicator {
-    requests: std_mpsc::Sender<Request>,
-    hwnd: Arc<AtomicIsize>,
-    thread: Option<JoinHandle<()>>,
-}
+pub struct Indicator(WindowThread<Request>);
 
 impl Indicator {
     /// Starts the indicator thread.
     pub fn spawn(settings: IndicatorSettings) -> Self {
-        let (tx, rx) = std_mpsc::channel();
-        let hwnd = Arc::new(AtomicIsize::new(0));
-        let thread = thread::Builder::new()
-            .name("indicator".into())
-            .spawn({
-                let hwnd = hwnd.clone();
-                move || run(settings, rx, hwnd)
-            })
-            .inspect_err(|e| tracing::error!("failed to start the indicator thread: {e}"))
-            .ok();
-        Self {
-            requests: tx,
-            hwnd,
-            thread,
-        }
+        Self(WindowThread::spawn(
+            "indicator",
+            move |requests, mailbox| {
+                run(settings, requests, mailbox);
+            },
+        ))
     }
 
     fn send(&self, request: Request) {
-        let _ = self.requests.send(request);
-        wake(&self.hwnd);
+        self.0.send(request);
     }
 
     /// Flashes `workspace` in `area` (a monitor's work area), unless the indicator is off.
@@ -73,16 +56,14 @@ impl Indicator {
         self.send(Request::Show(workspace.to_string(), area));
     }
 
+    /// Applies new settings, hiding the indicator until it is next shown.
     pub fn set_settings(&self, settings: IndicatorSettings) {
         self.send(Request::Settings(Box::new(settings)));
     }
 
     /// Closes the window and stops the thread.
     pub fn shutdown(&mut self) {
-        self.send(Request::Quit);
-        if let Some(thread) = self.thread.take() {
-            let _ = thread.join();
-        }
+        self.0.shutdown(Request::Quit);
     }
 }
 
@@ -126,27 +107,19 @@ impl State {
     }
 
     fn scale(&self, px: u32) -> i32 {
-        (px * self.dpi / 96) as i32
+        scale(px as i32, self.dpi)
     }
 
     fn font(&mut self) -> &w::HFONT {
         if self.font.is_none() {
             let config = &self.settings.config;
             let px = (config.font_size.clamp(6, 200) * self.dpi / 72) as i32;
-            let font = &self.settings.style.font;
-            let mut lf = w::LOGFONT::new_face(-px, font);
-            lf.lfQuality = co::QUALITY::CLEARTYPE;
-            if config.bold {
-                lf.lfWeight = co::FW::BOLD;
-            }
-            self.font = Some(match w::HFONT::CreateFontIndirect(&lf) {
-                Ok(font) => font,
-                Err(e) => {
-                    tracing::warn!("indicator font `{font}`: {e}");
-                    w::HFONT::CreateFontIndirect(&w::LOGFONT::default())
-                        .expect("the default font exists")
-                }
-            });
+            let face = &self.settings.style.font;
+            self.font = Some(make_font(face, px, config.bold).unwrap_or_else(|e| {
+                tracing::warn!("indicator font `{face}`: {e}");
+                w::HFONT::CreateFontIndirect(&w::LOGFONT::default())
+                    .expect("the default font exists")
+            }));
         }
         self.font.as_ref().expect("the font was just made")
     }
@@ -157,17 +130,10 @@ impl State {
 }
 
 fn style_window(hwnd: &w::HWND, settings: &IndicatorSettings) {
-    let corners = corner_preference(settings.style.corners);
-    let _ = hwnd.DwmSetWindowAttribute(w::DwmAttr::WindowCornerPreference(corners));
-    let _ =
-        hwnd.DwmSetWindowAttribute(w::DwmAttr::BorderColor(colorref(settings.style.background)));
+    style_popup(hwnd, settings.style.corners, settings.style.background);
 }
 
-fn run(
-    settings: IndicatorSettings,
-    requests: std_mpsc::Receiver<Request>,
-    hwnd_slot: Arc<AtomicIsize>,
-) {
+fn run(settings: IndicatorSettings, requests: mpsc::Receiver<Request>, mailbox: Mailbox<Request>) {
     let wnd = gui::WindowMain::new(gui::WindowMainOpts {
         title: "Tile workspace indicator",
         class_name: "tile-indicator",
@@ -190,12 +156,10 @@ fn run(
     }));
 
     wnd.on().wm_create({
-        let (wnd, state, hwnd_slot) = (wnd.clone(), state.clone(), hwnd_slot.clone());
+        let (wnd, state, mailbox) = (wnd.clone(), state.clone(), mailbox.clone());
         move |_| {
             style_window(wnd.hwnd(), &state.borrow().settings);
-            hwnd_slot.store(wnd.hwnd().ptr() as isize, Ordering::Release);
-            // Requests sent before the window existed.
-            tile_sys::post_app(wnd.hwnd().ptr() as isize, 0);
+            mailbox.attach(wnd.hwnd());
             Ok(0)
         }
     });
@@ -241,11 +205,7 @@ fn run(
             s.label = label;
             s.shown_at = Instant::now();
             drop(s);
-            if let Err(e) = hwnd.SetLayeredWindowAttributes(
-                w::COLORREF::from_rgb(0, 0, 0),
-                alpha,
-                co::LWA::ALPHA,
-            ) {
+            if let Err(e) = set_alpha(hwnd, alpha) {
                 tracing::warn!("indicator opacity: {e}");
             }
             let placed = hwnd.SetWindowPos(
@@ -300,11 +260,7 @@ fn run(
             drop(s);
             match alpha {
                 Some(alpha) => {
-                    let _ = wnd.hwnd().SetLayeredWindowAttributes(
-                        w::COLORREF::from_rgb(0, 0, 0),
-                        alpha,
-                        co::LWA::ALPHA,
-                    );
+                    let _ = set_alpha(wnd.hwnd(), alpha);
                 }
                 None => hide(),
             }
@@ -315,34 +271,23 @@ fn run(
     wnd.on().wm_paint({
         let (wnd, state) = (wnd.clone(), state.clone());
         move || {
-            let hwnd = wnd.hwnd();
-            let hdc = hwnd.BeginPaint()?;
-            let mut client = hwnd.GetClientRect()?;
-            let (w, h) = (client.right - client.left, client.bottom - client.top);
-            let mem = hdc.CreateCompatibleDC()?;
-            let bitmap = hdc.CreateCompatibleBitmap(w, h)?;
-            let _bitmap = mem.SelectObject(&*bitmap)?;
-            let mut s = state.borrow_mut();
-            let (background, foreground) =
-                (s.settings.style.background, s.settings.style.foreground);
-            let brush = w::HBRUSH::CreateSolidBrush(colorref(background))?;
-            mem.FillRect(client, &brush)?;
-            mem.SetBkMode(co::BKMODE::TRANSPARENT)?;
-            mem.SetTextColor(colorref(foreground))?;
-            let label = s.label.clone();
-            let _font = mem.SelectObject(s.font())?;
-            mem.DrawText(
-                &label,
-                &mut client,
-                co::DT::CENTER | co::DT::VCENTER | co::DT::SINGLELINE | co::DT::NOPREFIX,
-            )?;
-            hdc.BitBlt(
-                w::POINT::default(),
-                w::SIZE::with(w, h),
-                &mem,
-                w::POINT::default(),
-                co::ROP::SRCCOPY,
-            )?;
+            paint_buffered(wnd.hwnd(), |dc, mut client| {
+                let mut s = state.borrow_mut();
+                let (background, foreground) =
+                    (s.settings.style.background, s.settings.style.foreground);
+                let brush = w::HBRUSH::CreateSolidBrush(colorref(background))?;
+                dc.FillRect(client, &brush)?;
+                dc.SetBkMode(co::BKMODE::TRANSPARENT)?;
+                dc.SetTextColor(colorref(foreground))?;
+                let label = s.label.clone();
+                let _font = dc.SelectObject(s.font())?;
+                dc.DrawText(
+                    &label,
+                    &mut client,
+                    co::DT::CENTER | co::DT::VCENTER | co::DT::SINGLELINE | co::DT::NOPREFIX,
+                )?;
+                Ok(())
+            })?;
             Ok(())
         }
     });
@@ -350,7 +295,7 @@ fn run(
     if let Err(e) = wnd.run_main(Some(co::SW::HIDE)) {
         tracing::error!("indicator message loop failed: {e}");
     }
-    hwnd_slot.store(0, Ordering::Release);
+    mailbox.detach();
 }
 
 #[cfg(test)]

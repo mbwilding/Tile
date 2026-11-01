@@ -4,20 +4,12 @@
 //! weights follow Noctalia's launcher: the app name always outranks the id, a name that
 //! starts with the query gets a bonus, and launch counts nudge close matches.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs, path::Path};
 
 use serde::{Deserialize, Serialize};
 
 use tile_core::{Command, command::DISPATCHERS};
-
-/// An app the launcher can start.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct App {
-    /// What Start shows, like `Windows Terminal`.
-    pub name: String,
-    /// The `shell:AppsFolder` id: an AppUserModelID or a path.
-    pub id: String,
-}
+pub use tile_platform::App;
 
 const GAP_LEADING: f64 = -0.005;
 const GAP_TRAILING: f64 = -0.005;
@@ -185,13 +177,32 @@ impl Usage {
     fn recency(&self, id: &str) -> Option<usize> {
         self.recent.iter().position(|r| r == id)
     }
+
+    /// The history saved at `path`, or none if it can't be read.
+    pub fn load(path: &Path) -> Self {
+        fs::read_to_string(path)
+            .ok()
+            .and_then(|text| serde_json::from_str(&text).ok())
+            .unwrap_or_default()
+    }
+
+    /// Saves the history to `path`, logging a failure.
+    pub fn save(&self, path: &Path) {
+        let result = path
+            .parent()
+            .map_or(Ok(()), fs::create_dir_all)
+            .and_then(|()| fs::write(path, serde_json::to_string_pretty(self).unwrap_or_default()));
+        if let Err(e) = result {
+            tracing::warn!("couldn't save {}: {e}", path.display());
+        }
+    }
 }
 
 /// How [`rank`] orders results.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RankOptions {
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RankOptions<'a> {
     /// Names or ids listed first, in this order, when the query is empty.
-    pub pinned: Vec<String>,
+    pub pinned: &'a [String],
     /// Let launch counts and recent launches affect the order.
     pub sort_by_usage: bool,
     /// The most results returned.
@@ -204,17 +215,23 @@ fn pin_index(pinned: &[String], app: &App) -> Option<usize> {
         .position(|p| p.eq_ignore_ascii_case(&app.name) || p.eq_ignore_ascii_case(&app.id))
 }
 
-/// The indices into `apps` to show for `query`, best first.
+/// The indices into `apps`, of those in `shown`, to show for `query`, best first.
 ///
 /// With no query: pinned apps, then (with `sort_by_usage`) recent launches, then the rest by
 /// name. With a query: matches by score, launch counts breaking near ties.
-pub fn rank(query: &str, apps: &[App], usage: &Usage, options: &RankOptions) -> Vec<usize> {
+pub fn rank(
+    query: &str,
+    apps: &[App],
+    shown: &[usize],
+    usage: &Usage,
+    options: &RankOptions,
+) -> Vec<usize> {
     let query = query.trim();
     let mut out: Vec<usize> = if query.is_empty() {
-        let mut order: Vec<usize> = (0..apps.len()).collect();
+        let mut order = shown.to_vec();
         order.sort_by_cached_key(|&i| {
             let app = &apps[i];
-            let pin = pin_index(&options.pinned, app).unwrap_or(usize::MAX);
+            let pin = pin_index(options.pinned, app).unwrap_or(usize::MAX);
             let recent = if options.sort_by_usage {
                 usage.recency(&app.id).unwrap_or(usize::MAX)
             } else {
@@ -224,10 +241,10 @@ pub fn rank(query: &str, apps: &[App], usage: &Usage, options: &RankOptions) -> 
         });
         order
     } else {
-        let mut scored: Vec<(f64, usize)> = apps
+        let mut scored: Vec<(f64, usize)> = shown
             .iter()
-            .enumerate()
-            .filter_map(|(i, app)| {
+            .filter_map(|&i| {
+                let app = &apps[i];
                 let mut s = score(query, app)?;
                 if options.sort_by_usage {
                     let boost = f64::from(usage.count(&app.id)) * USAGE_PER_COUNT;
@@ -254,15 +271,20 @@ pub enum CommandEntry {
     Dispatch(Command),
     /// A dispatcher that takes an argument: picking it completes its name in the search box.
     Complete {
+        /// The dispatcher's name.
         name: &'static str,
+        /// Its usage, like `<1-255>`.
         args: &'static str,
     },
     /// Run a dispatcher that takes no argument.
     Name(&'static str),
     /// A known dispatcher whose arguments don't parse yet: shows its usage and the error.
     Invalid {
+        /// The dispatcher's name.
         name: &'static str,
+        /// Its usage, like `<1-255>`.
         args: &'static str,
+        /// What is wrong with the arguments typed.
         error: String,
     },
     /// Run the text as a command line, like the Run dialog.
@@ -325,16 +347,20 @@ mod tests {
         }
     }
 
+    fn all(apps: &[App]) -> Vec<usize> {
+        (0..apps.len()).collect()
+    }
+
     fn names(query: &str, apps: &[App], usage: &Usage, options: &RankOptions) -> Vec<String> {
-        rank(query, apps, usage, options)
+        rank(query, apps, &all(apps), usage, options)
             .into_iter()
             .map(|i| apps[i].name.clone())
             .collect()
     }
 
-    fn options() -> RankOptions {
+    fn options() -> RankOptions<'static> {
         RankOptions {
-            pinned: Vec::new(),
+            pinned: &[],
             sort_by_usage: true,
             max_results: 50,
         }
@@ -408,8 +434,9 @@ mod tests {
         let apps = [app("b", "b"), app("a", "a"), app("c", "c"), app("d", "d")];
         let mut usage = Usage::default();
         usage.record("c");
+        let pinned = ["D".to_owned()];
         let options = RankOptions {
-            pinned: vec!["D".into()],
+            pinned: &pinned,
             ..options()
         };
         assert_eq!(names("", &apps, &usage, &options), ["d", "c", "a", "b"]);
@@ -472,6 +499,36 @@ mod tests {
             max_results: 3,
             ..options()
         };
-        assert_eq!(rank("app", &apps, &Usage::default(), &options).len(), 3);
+        assert_eq!(
+            rank("app", &apps, &all(&apps), &Usage::default(), &options).len(),
+            3
+        );
+    }
+
+    #[test]
+    fn only_shown_apps_are_ranked() {
+        let apps = [app("a", "a"), app("b", "b"), app("c", "c")];
+        let shown = [0, 2];
+        assert_eq!(
+            rank("", &apps, &shown, &Usage::default(), &options()),
+            [0, 2]
+        );
+        assert_eq!(
+            rank("b", &apps, &shown, &Usage::default(), &options()),
+            Vec::<usize>::new()
+        );
+    }
+
+    #[test]
+    fn usage_is_saved_and_loaded() {
+        let path = std::env::temp_dir()
+            .join(format!("tile-usage-{}", std::process::id()))
+            .join("usage.json");
+        let mut usage = Usage::default();
+        usage.record("a");
+        usage.save(&path);
+        assert_eq!(Usage::load(&path), usage);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        assert_eq!(Usage::load(&path), Usage::default());
     }
 }
