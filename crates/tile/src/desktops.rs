@@ -159,3 +159,156 @@ impl Desktops {
         self.for_all(|s| s.set_settings(settings.clone(), layout))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use tile_core::{MonitorId, geometry::Rect};
+
+    use super::*;
+
+    const ONE: DesktopId = 1;
+    const TWO: DesktopId = 2;
+    const W: WindowId = WindowId(1);
+    const X: WindowId = WindowId(2);
+
+    fn desktops() -> Desktops {
+        let mut d = Desktops::new(ONE, LayoutSettings::default(), LayoutKind::Dwindle);
+        d.set_monitors(vec![MonitorInfo {
+            id: MonitorId(1),
+            rect: Rect::new(0, 0, 1000, 1000),
+            work_area: Rect::new(0, 0, 1000, 960),
+        }]);
+        d
+    }
+
+    fn open(d: &mut Desktops, desktop: DesktopId, id: WindowId) -> Vec<Effect> {
+        d.open(
+            desktop,
+            id,
+            WindowInfo::default(),
+            ManageOptions {
+                focus: true,
+                ..Default::default()
+            },
+        )
+    }
+
+    #[test]
+    fn a_window_belongs_to_the_desktop_it_opened_on() {
+        let mut d = desktops();
+        open(&mut d, ONE, W);
+        open(&mut d, TWO, X);
+        assert_eq!(d.owner(W), Some(ONE));
+        assert_eq!(d.owner(X), Some(TWO));
+        assert!(d.is_managed(W) && d.is_managed(X));
+        assert_eq!(d.managed().len(), 2);
+        assert_eq!(d.current_id(), ONE);
+    }
+
+    #[test]
+    fn the_current_desktop_may_focus_but_others_may_not() {
+        let mut d = desktops();
+        let here = open(&mut d, ONE, W);
+        assert!(here.contains(&Effect::Focus(W)));
+        let elsewhere = open(&mut d, TWO, X);
+        assert!(!elsewhere.iter().any(|e| matches!(e, Effect::Focus(_))));
+        assert!(
+            d.with_owner(X, |s| s.window_focused(X))
+                .iter()
+                .all(|e| !matches!(e, Effect::Focus(_)))
+        );
+    }
+
+    #[test]
+    fn unknown_windows_have_no_owner_and_no_effects() {
+        let mut d = desktops();
+        assert_eq!(d.owner(W), None);
+        assert!(d.with_owner(W, |s| s.window_closed(W)).is_empty());
+        assert!(d.close(W).is_empty());
+        assert!(!d.is_hidden(W));
+        assert!(!d.is_floating(W));
+    }
+
+    #[test]
+    fn closing_forgets_the_window() {
+        let mut d = desktops();
+        open(&mut d, ONE, W);
+        d.close(W);
+        assert!(!d.is_managed(W));
+        assert!(!d.current_ref().is_managed(W));
+    }
+
+    #[test]
+    fn switching_resyncs_the_new_desktop() {
+        let mut d = desktops();
+        open(&mut d, TWO, X);
+        let effects = d.switch_to(TWO);
+        assert_eq!(d.current_id(), TWO);
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::Place { id, .. } if *id == X))
+        );
+        assert!(d.current_ref().is_managed(X));
+    }
+
+    #[test]
+    fn a_new_desktop_inherits_the_monitors() {
+        let mut d = desktops();
+        d.switch_to(TWO);
+        assert_eq!(d.current_ref().monitor_count(), 1);
+    }
+
+    #[test]
+    fn hidden_windows_are_collected_from_every_desktop() {
+        let mut d = desktops();
+        open(&mut d, ONE, W);
+        d.current().apply(&tile_core::Command::Workspace(2));
+        assert_eq!(d.hidden(), vec![W]);
+        assert!(d.is_hidden(W));
+    }
+
+    #[test]
+    fn floating_is_looked_up_on_the_owner() {
+        let mut d = desktops();
+        d.open(
+            TWO,
+            W,
+            WindowInfo::default(),
+            ManageOptions {
+                floating: true,
+                rect: Rect::new(10, 10, 300, 200),
+                ..Default::default()
+            },
+        );
+        assert!(d.is_floating(W));
+    }
+
+    #[test]
+    fn monitor_and_settings_changes_reach_every_desktop() {
+        let mut d = desktops();
+        open(&mut d, ONE, W);
+        open(&mut d, TWO, X);
+        let effects = d.set_monitors(vec![MonitorInfo {
+            id: MonitorId(1),
+            rect: Rect::new(0, 0, 2000, 1000),
+            work_area: Rect::new(0, 0, 2000, 960),
+        }]);
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::Place { id, .. } if *id == W))
+        );
+        let settings = LayoutSettings {
+            gaps_out: 30,
+            ..LayoutSettings::default()
+        };
+        let effects = d.set_settings(settings, LayoutKind::Even);
+        assert!(
+            effects
+                .iter()
+                .any(|e| matches!(e, Effect::Place { id, .. } if *id == W))
+        );
+        assert!(!effects.iter().any(|e| matches!(e, Effect::Focus(_))));
+    }
+}

@@ -75,3 +75,63 @@ pub fn load_restore() -> Restore {
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nothing_recorded_is_empty() {
+        assert!(Restore::default().is_empty());
+    }
+
+    #[test]
+    fn any_recorded_change_makes_it_non_empty() {
+        let cases = [
+            Restore {
+                hidden: vec![1],
+                ..Default::default()
+            },
+            Restore {
+                undecorated: vec![1],
+                ..Default::default()
+            },
+            Restore {
+                lock_disabled: true,
+                ..Default::default()
+            },
+            Restore {
+                cursor_hidden: true,
+                ..Default::default()
+            },
+        ];
+        for restore in cases {
+            assert!(!restore.is_empty(), "{restore:?}");
+        }
+    }
+
+    #[test]
+    fn restore_state_survives_json() {
+        let restore = Restore {
+            hidden: vec![1, 2],
+            undecorated: vec![3],
+            lock_disabled: true,
+            cursor_hidden: true,
+        };
+        let json = serde_json::to_string(&restore).unwrap();
+        assert_eq!(serde_json::from_str::<Restore>(&json).unwrap(), restore);
+    }
+
+    #[test]
+    fn files_from_older_versions_still_load() {
+        let old: Restore = serde_json::from_str(r#"{"hidden":[5],"undecorated":[]}"#).unwrap();
+        assert_eq!(old.hidden, vec![5]);
+        assert!(!old.lock_disabled && !old.cursor_hidden);
+    }
+
+    #[test]
+    fn data_lives_under_a_tile_folder() {
+        assert!(data_dir().ends_with("Tile"));
+        assert!(log_dir().starts_with(data_dir()));
+    }
+}
