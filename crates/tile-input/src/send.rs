@@ -77,16 +77,19 @@ pub fn send(inputs: &[Input]) -> usize {
     sent as usize
 }
 
-/// Sends a press and release of [`SILENT_VK`]. Returns whether both were sent.
+/// A press and release of [`SILENT_VK`], for sending among other keys.
+pub const SILENT_TAP: [Input; 2] = [
+    Input::Vk {
+        vk: SILENT_VK,
+        up: false,
+    },
+    Input::Vk {
+        vk: SILENT_VK,
+        up: true,
+    },
+];
+
+/// Sends [`SILENT_TAP`]. Returns whether both keys were sent.
 pub fn tap_silent() -> bool {
-    send(&[
-        Input::Vk {
-            vk: SILENT_VK,
-            up: false,
-        },
-        Input::Vk {
-            vk: SILENT_VK,
-            up: true,
-        },
-    ]) == 2
+    send(&SILENT_TAP) == 2
 }

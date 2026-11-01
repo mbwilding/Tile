@@ -1,6 +1,5 @@
 //! The Win+L override and its permission.
 
-use std::os::windows::process::CommandExt;
 use tokio::time::Instant;
 
 use super::{Daemon, RELOCK_DELAY};
@@ -56,12 +55,12 @@ impl Daemon {
             tracing::error!("could not write {}: {e}", script.display());
             return;
         }
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        let spawned = std::process::Command::new("powershell")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-            .arg(&script)
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn();
+        let spawned = tile_sys::hide_console(
+            std::process::Command::new("powershell")
+                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+                .arg(&script),
+        )
+        .spawn();
         if let Err(e) = spawned {
             tracing::error!("could not request Win+L permission: {e}");
         }

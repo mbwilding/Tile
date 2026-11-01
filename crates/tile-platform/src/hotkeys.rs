@@ -9,22 +9,29 @@ use std::{
 };
 
 use tile_config::{Keybind, Modifiers};
-use tile_input::{Decision, Handler, Input, RawKey};
+use tile_input::{Decision, Handler, Input, RawKey, SILENT_VK, tap_silent};
 use tokio::sync::mpsc;
 use winsafe::{self as w, co};
-
-/// An unassigned virtual key: tapping it while Win is down stops Win's release opening Start.
-pub(crate) const SILENT_VK: u16 = 0xE8;
 
 /// Set while Win is held and has been used for a mouse drag, so releasing it must not open Start.
 pub(crate) static WIN_USED: AtomicBool = AtomicBool::new(false);
 
-const LWIN: u16 = 0x5B;
-const RWIN: u16 = 0x5C;
+const LWIN: u16 = co::VK::LWIN.raw();
+const RWIN: u16 = co::VK::RWIN.raw();
 
 /// Shift, Ctrl, Alt and Win (generic, left and right): pressing one alone isn't typing.
 const MODIFIER_VKS: [u16; 11] = [
-    0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5,
+    co::VK::SHIFT.raw(),
+    co::VK::CONTROL.raw(),
+    co::VK::MENU.raw(),
+    LWIN,
+    RWIN,
+    co::VK::LSHIFT.raw(),
+    co::VK::RSHIFT.raw(),
+    co::VK::LCONTROL.raw(),
+    co::VK::RCONTROL.raw(),
+    co::VK::LMENU.raw(),
+    co::VK::RMENU.raw(),
 ];
 
 /// What the hook reports to the daemon.
@@ -110,24 +117,14 @@ impl Handler for Matcher {
                 || (!key.injected && self.hotkeys.disable_start_menu.load(Ordering::Relaxed)))
         {
             // Windows opens Start when Win goes up with no other key since it went down. Hold
-            // the real release back, press a key that does nothing, then send the release, so
-            // the order is guaranteed.
-            let sent = tile_input::send(&[
-                Input::Vk {
-                    vk: SILENT_VK,
-                    up: false,
-                },
-                Input::Vk {
-                    vk: SILENT_VK,
-                    up: true,
-                },
-                Input::Vk {
+            // the real release back, tap a key that does nothing, then send the release.
+            let sent = tap_silent()
+                && tile_input::send(&[Input::Vk {
                     vk: key.vk,
                     up: true,
-                },
-            ]);
-            // If nothing was sent, let the real release through rather than stick Win down.
-            return if sent == 3 {
+                }]) == 1;
+            // If the release wasn't sent, let the real one through rather than stick Win down.
+            return if sent {
                 Decision::Block
             } else {
                 Decision::Pass
@@ -162,29 +159,10 @@ impl Handler for Matcher {
         };
         if mods.super_key {
             tracing::info!("bind {event:?} for vk {:#x} with {mods:?}", key.vk);
-            tile_input::send(&[
-                Input::Vk {
-                    vk: SILENT_VK,
-                    up: false,
-                },
-                Input::Vk {
-                    vk: SILENT_VK,
-                    up: true,
-                },
-            ]);
+            tap_silent();
         }
         let _ = self.tx.send(event);
         Decision::Block
-    }
-
-    fn deadline(&self) -> Option<Instant> {
-        None
-    }
-
-    fn tick(&mut self) {}
-
-    fn wake(&mut self) -> bool {
-        true
     }
 }
 

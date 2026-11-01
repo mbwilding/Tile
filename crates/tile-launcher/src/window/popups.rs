@@ -38,13 +38,6 @@ pub(super) struct MenuWatch {
     pub(super) fast: bool,
 }
 
-/// The process that owns the window `raw`.
-fn pid_of(raw: isize) -> Option<u32> {
-    enumerate(|h| h.ptr() as isize == raw)
-        .first()
-        .map(|h| h.GetWindowThreadProcessId().1)
-}
-
 /// The windows of the process `pid` that are showing.
 fn visible_windows(pid: u32) -> HashSet<isize> {
     enumerate(|h| h.GetWindowThreadProcessId().1 == pid && h.IsWindowVisible())
@@ -121,7 +114,7 @@ pub(super) fn watch_menu(
     at: (i32, i32),
     keep_open: bool,
 ) -> MenuWatch {
-    let pid = pid_of(owner);
+    let pid = tile_sys::pid_of(owner);
     let _ = wnd.hwnd().SetTimer(MENU_TIMER, POPUP_POLL_MS, None);
     MenuWatch {
         since: Instant::now(),

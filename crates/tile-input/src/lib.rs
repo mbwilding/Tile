@@ -12,4 +12,4 @@ mod send;
 pub use cursor::{hide_cursor, restore_cursors};
 pub use keyboard::{Decision, Handler, KeyboardHook, RawKey, Waker, spawn};
 pub use mouse::{MouseEvent, MouseHandler, MouseHook, spawn_mouse};
-pub use send::{Input, SILENT_VK, send, tap_silent};
+pub use send::{Input, SILENT_TAP, SILENT_VK, send, tap_silent};
