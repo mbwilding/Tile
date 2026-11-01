@@ -6,7 +6,7 @@
 
 use std::{path::Path, process::Command};
 
-use winsafe::{self as w, co};
+use crate::registry;
 
 const KEY: &str = r"Software\Microsoft\Windows\Shell\ClickToDo";
 const VALUE: &str = "DisableClickToDo";
@@ -20,17 +20,12 @@ pub fn click_to_do_available() -> bool {
 
 /// Whether Click to Do is switched off.
 pub fn click_to_do_disabled() -> bool {
-    matches!(
-        w::HKEY::CURRENT_USER.RegGetValue(Some(KEY), Some(VALUE), co::RRF::RT_REG_DWORD),
-        Ok(w::RegistryValue::Dword(v)) if v != 0
-    )
+    registry::dword(KEY, VALUE).is_some_and(|v| v != 0)
 }
 
 /// Switches Click to Do off and stops it. Returns whether the switch could be changed.
 pub fn disable_click_to_do() -> bool {
-    let result =
-        w::HKEY::CURRENT_USER.RegSetKeyValue(Some(KEY), Some(VALUE), w::RegistryValue::Dword(1));
-    if let Err(e) = result {
+    if let Err(e) = registry::set_dword(KEY, VALUE, 1) {
         tracing::warn!("failed to disable Click to Do: {e}");
         return false;
     }

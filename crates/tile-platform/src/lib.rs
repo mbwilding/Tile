@@ -11,9 +11,11 @@ mod frame;
 mod gui;
 mod hotkeys;
 mod indicator;
+mod install;
 mod lock;
 mod monitors;
 mod mover;
+pub mod registry;
 mod sign_in;
 mod startup;
 mod tile_icon;
@@ -31,12 +33,12 @@ pub use gui::{
 };
 pub use hotkeys::{HotkeyEvent, Hotkeys};
 pub use indicator::{Indicator, IndicatorSettings};
-pub use lock::{GRANT_SCRIPT, lock_disabled, lock_workstation, set_lock_disabled};
+pub use install::{EXE, install_dir, installed_exe};
+pub use lock::{lock_disabled, lock_workstation, request_lock_permission, set_lock_disabled};
 pub use monitors::{monitors, rect};
 pub use mover::{Animation, Mover};
 pub use sign_in::{
-    conhost, headless_command, installed_exe, is_shell as is_sign_in_shell,
-    set_shell as set_sign_in_shell,
+    conhost, headless_command, is_shell as is_sign_in_shell, set_shell as set_sign_in_shell,
 };
 pub use startup::{commands as startup_commands, first_this_session as first_startup_this_session};
 pub use token::{is_elevated, user_sid};

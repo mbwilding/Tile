@@ -6,6 +6,7 @@ mod logging;
 mod paths;
 mod remap;
 mod settings;
+mod task;
 
 use std::path::PathBuf;
 
@@ -80,7 +81,7 @@ fn main() -> anyhow::Result<()> {
     }
     // Signed in as the shell without admin rights while the sign-in task starts an elevated
     // Tile: serve it as the launcher, and take over only if the task never starts Tile.
-    let helper = args.shell && !tile_platform::is_elevated() && launch::sign_in_task_exists();
+    let helper = args.shell && !tile_platform::is_elevated() && task::exists(task::TILE);
     let _guard = logging::init(
         if helper { "launcher.log" } else { "tile.log" },
         args.log.as_deref(),

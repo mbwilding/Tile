@@ -4,43 +4,27 @@
 //! keybind is the per-user `DisableLockWorkstation` policy. While it is set, locking
 //! goes through [`lock_workstation`], which lifts the policy just long enough to lock.
 
-use winsafe::{self as w, co};
+use std::{io, path::Path, process::Command};
+
+use winsafe as w;
+
+use crate::registry;
 
 const POLICY_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Policies\System";
 const POLICY_VALUE: &str = "DisableLockWorkstation";
 
 /// Whether locking is currently disabled by the per-user policy.
 pub fn lock_disabled() -> bool {
-    matches!(
-        w::HKEY::CURRENT_USER.RegGetValue(Some(POLICY_KEY), Some(POLICY_VALUE), co::RRF::RT_REG_DWORD),
-        Ok(w::RegistryValue::Dword(v)) if v != 0
-    )
+    registry::dword(POLICY_KEY, POLICY_VALUE).is_some_and(|v| v != 0)
 }
 
 /// Disables (`true`) or re-enables (`false`) Win+L and workstation locking.
 /// Returns whether it worked; the policy key is admin-only on some machines.
 pub fn set_lock_disabled(disabled: bool) -> bool {
     let result = if disabled {
-        w::HKEY::CURRENT_USER.RegSetKeyValue(
-            Some(POLICY_KEY),
-            Some(POLICY_VALUE),
-            w::RegistryValue::Dword(1),
-        )
+        registry::set_dword(POLICY_KEY, POLICY_VALUE, 1)
     } else {
-        w::HKEY::CURRENT_USER
-            .RegOpenKeyEx(
-                Some(POLICY_KEY),
-                co::REG_OPTION::default(),
-                co::KEY::SET_VALUE,
-            )
-            .and_then(|key| key.RegDeleteValue(Some(POLICY_VALUE)))
-            .or_else(|e| {
-                if e == co::ERROR::FILE_NOT_FOUND {
-                    Ok(())
-                } else {
-                    Err(e)
-                }
-            })
+        registry::delete_value(POLICY_KEY, POLICY_VALUE)
     };
     if let Err(e) = &result {
         tracing::debug!(
@@ -53,7 +37,7 @@ pub fn set_lock_disabled(disabled: bool) -> bool {
 
 /// PowerShell that asks for elevation once (UAC) and lets the current user manage the
 /// policy key. Only `QueryValues` and `SetValue` on that one key are granted.
-pub const GRANT_SCRIPT: &str = r#"
+const GRANT_SCRIPT: &str = r#"
 $ErrorActionPreference = 'Stop'
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $inner = @"
@@ -68,6 +52,23 @@ Set-Acl -Path `$p -AclObject `$acl
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($inner))
 Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList '-NoProfile', '-EncodedCommand', $encoded
 "#;
+
+/// Asks Windows (one UAC prompt) for the current user to be allowed to manage the Win+L
+/// policy, by writing a script to `script` and starting it. Returns once it has started; the
+/// permission lands when the prompt is accepted.
+pub fn request_lock_permission(script: &Path) -> io::Result<()> {
+    if let Some(dir) = script.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(script, GRANT_SCRIPT)?;
+    tile_sys::hide_console(
+        Command::new("powershell")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(script),
+    )
+    .spawn()
+    .map(drop)
+}
 
 /// Locks the workstation, temporarily lifting our policy if needed.
 /// Returns whether the policy was lifted, so the caller can re-apply it shortly after.

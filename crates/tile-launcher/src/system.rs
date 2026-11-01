@@ -4,22 +4,11 @@
 //! `tile-sys`'s.
 
 pub use tile_sys::{
-    devices::{Battery, Network, PairedDevice, RadioKind, Volume},
+    devices::{AudioDevice, Battery, Network, PairedDevice, RadioKind, Volume},
     wifi::Network as WifiNetwork,
 };
 
 use crate::search::fuzzy;
-
-/// An audio output or input device that is plugged in and enabled.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AudioDevice {
-    /// The endpoint id Windows knows it by.
-    pub id: String,
-    /// Like `Headphones (RME Babyface Pro)`.
-    pub name: String,
-    /// Whether it is the one in use.
-    pub default: bool,
-}
 
 /// A group of system rows, which the launcher shows on their own when its bar's button for the
 /// group is picked, like the taskbar's quick settings.
