@@ -441,6 +441,9 @@ impl Daemon {
                     LauncherEvent::Launch(id) => {
                         launch::exec(&format!("\"shell:AppsFolder\\{id}\""));
                     }
+                    LauncherEvent::LaunchAsAdmin(id) => {
+                        tile_platform::run_as_admin(&format!("shell:AppsFolder\\{id}"));
+                    }
                     LauncherEvent::Run(line) => launch::exec(&line),
                     LauncherEvent::Dispatch(command) => self.run_command(command),
                     LauncherEvent::Tray { key, click, at } => {

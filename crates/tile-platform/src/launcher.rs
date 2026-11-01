@@ -36,6 +36,8 @@ use crate::monitors::rect;
 pub enum LauncherEvent {
     /// Start the app with this `shell:AppsFolder` id.
     Launch(String),
+    /// Start the app with this `shell:AppsFolder` id as administrator.
+    LaunchAsAdmin(String),
     /// Run a command line, like `exec`.
     Run(String),
     /// Run a Tile dispatcher.
@@ -807,8 +809,8 @@ impl State {
     }
 
     /// Picks the selected row: what to ask the daemon (noting an app launch), or completes a
-    /// dispatcher's name. `secondary` (Shift+Enter, the right button) is a right click on a tray
-    /// icon.
+    /// dispatcher's name. `secondary` (Shift+Enter, the right button's menu) is a right click on a
+    /// tray icon, or starting an app as administrator.
     fn pick(&mut self, secondary: bool) -> Picked {
         let event = match self.results.get(self.selected).cloned() {
             None => return Picked::Nothing,
@@ -845,7 +847,11 @@ impl State {
                     self.usage.record(&id);
                     save_usage(&self.usage_path, &self.usage);
                 }
-                LauncherEvent::Launch(id)
+                if secondary {
+                    LauncherEvent::LaunchAsAdmin(id)
+                } else {
+                    LauncherEvent::Launch(id)
+                }
             }
             Some(Row::Command(CommandEntry::Dispatch(command))) => LauncherEvent::Dispatch(command),
             Some(Row::Command(CommandEntry::Name(name))) => match name.parse() {
@@ -1703,12 +1709,27 @@ fn run(
                 click_bar(&state, index, true);
                 return Ok(());
             }
-            if let Some(row) = s.row_at(&layout, p.coords.x, p.coords.y)
-                && matches!(s.results[row], Row::Tray(_))
-            {
-                s.selected = row;
-                drop(s);
-                act(&state, true);
+            if let Some(row) = s.row_at(&layout, p.coords.x, p.coords.y) {
+                match s.results[row] {
+                    Row::Tray(_) => {
+                        s.selected = row;
+                        drop(s);
+                        act(&state, true);
+                    }
+                    Row::App(_) => {
+                        s.selected = row;
+                        drop(s);
+                        let _ = wnd.hwnd().InvalidateRect(None, false);
+                        let _ = wnd.hwnd().UpdateWindow();
+                        // The menu runs its own message loop, so the state must not be borrowed.
+                        match app_menu(wnd.hwnd()) {
+                            Some(APP_OPEN) => act(&state, false),
+                            Some(APP_ADMIN) => act(&state, true),
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                }
             }
             Ok(())
         }
@@ -1734,6 +1755,33 @@ fn run(
         tracing::error!("launcher message loop failed: {e}");
     }
     hwnd_slot.store(0, Ordering::Release);
+}
+
+/// Menu ids of an app's right click menu.
+const APP_OPEN: i32 = 1;
+const APP_ADMIN: i32 = 2;
+
+/// Shows the menu of an app row at the pointer and returns what was chosen.
+fn app_menu(hwnd: &w::HWND) -> Option<i32> {
+    let mut menu = w::HMENU::CreatePopupMenu().ok()?;
+    let built = menu.append_item(&[
+        w::MenuItem::Entry {
+            cmd_id: APP_OPEN as u16,
+            text: "Open",
+        },
+        w::MenuItem::Entry {
+            cmd_id: APP_ADMIN as u16,
+            text: "Run as administrator",
+        },
+    ]);
+    let chosen = built.ok().and_then(|()| {
+        let at = w::GetCursorPos().ok()?;
+        menu.TrackPopupMenu(co::TPM::LEFTBUTTON | co::TPM::RETURNCMD, at, hwnd)
+            .ok()
+            .flatten()
+    });
+    let _ = menu.DestroyMenu();
+    chosen
 }
 
 /// Puts `text` on the clipboard.

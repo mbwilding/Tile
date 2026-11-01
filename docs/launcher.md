@@ -19,7 +19,8 @@ binds:
 again closes it.
 
 This is not the `tile.exe --launcher` helper that starts programs with your normal rights; the
-launcher uses that helper too, so apps it starts never run as administrator.
+launcher uses that helper too, so apps it starts never run as administrator, unless you ask for it
+(see [running as administrator](#running-as-administrator)).
 
 ## What it lists
 
@@ -46,6 +47,11 @@ case doesn't matter. Matches are ranked as in Noctalia:
 Before anything is typed the list shows `pinned` apps first, in their order, then (with
 `sort_by_usage`) the 20 most recently launched, newest first, then everything else by name.
 
+### Running as administrator
+
+**Right click** an app for a menu with **Open** and **Run as administrator**, or press
+**Shift+Enter** on the selected app. Windows asks for consent unless Tile already runs elevated.
+
 ## Calculator
 
 Type a sum and its value is the first row: `12 * 3` shows `= 36`. Enter (or a click) copies the
@@ -54,7 +60,7 @@ value to the clipboard and closes the launcher. Apps that match the same text ar
 A search counts as a calculation when it has a digit and is more than a bare number, so `7zip`
 or `42` stay app searches. It understands:
 
-- `+`, `-`, `*` (or `x` or `×`), `/` (or `÷`), `%` (remainder) and `^` (or `**`), with
+- `+`, `-`, `*` (or `x` or `Ã—`), `/` (or `Ã·`), `%` (remainder) and `^` (or `**`), with
   brackets; spaces don't matter, so `5x5` and `5 * 5` are the same
 - numbers like `1.5`, `1_000`, `2.5e3` and hex `0x1f` (`0x` is always hex, never times zero)
 - `pi`, `tau` and `e`
@@ -181,7 +187,7 @@ launcher.
 | Key | Action |
 | --- | --- |
 | `Enter` | start the selected row (run a command, copy a sum, change a system item, click a tray icon found by typing) |
-| `Shift+Enter` | right click the selected tray icon found by typing |
+| `Shift+Enter` | run the selected app as administrator, or right click the selected tray icon found by typing |
 | `Esc` | close |
 | `Up` / `Down`, `Ctrl+K` / `Ctrl+J`, `Ctrl+P` / `Ctrl+N` | select the previous / next row |
 | `Tab` / `Shift+Tab` | next / previous row |

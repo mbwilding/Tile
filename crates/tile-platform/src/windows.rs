@@ -181,6 +181,20 @@ pub fn focus_exe(exe: &str) -> bool {
     candidates.first().is_some_and(focus_hwnd)
 }
 
+/// Starts a file, folder or `shell:` path as administrator, asking for consent unless Tile
+/// already runs elevated. Returns at once; a failure is logged.
+pub fn run_as_admin(target: &str) {
+    let target = target.to_owned();
+    // ShellExecute wants a single-threaded COM apartment of its own.
+    std::thread::spawn(move || {
+        let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
+        if let Err(e) = w::HWND::NULL.ShellExecute("runas", &target, None, None, co::SW::SHOWNORMAL)
+        {
+            tracing::warn!("couldn't run `{target}` as administrator: {e}");
+        }
+    });
+}
+
 /// Closes the foreground window like Alt+F4, unless it belongs to the shell.
 pub fn close_foreground() {
     if let Some(raw) = foreground()

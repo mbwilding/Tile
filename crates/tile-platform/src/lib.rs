@@ -37,5 +37,6 @@ pub use token::{is_elevated, user_sid};
 pub use tray::{Tray, TrayEvent};
 pub use windows::{
     Discovered, PlaceError, Windows, close_foreground, cursor_pos, focus_desktop, focus_exe,
-    foreground, is_shell_window, mouse_button_down, restore_windows, set_cursor_pos, wait_for_exit,
+    foreground, is_shell_window, mouse_button_down, restore_windows, run_as_admin, set_cursor_pos,
+    wait_for_exit,
 };
