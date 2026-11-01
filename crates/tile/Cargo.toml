@@ -31,7 +31,6 @@ tokio = { workspace = true, features = ["rt", "macros", "sync", "time", "signal"
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true
-interprocess.workspace = true
 # Task Scheduler, for `install`, on top of the workspace features.
 winsafe = { workspace = true, features = ["taskschd"] }
 

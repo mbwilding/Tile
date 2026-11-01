@@ -133,16 +133,7 @@ pub async fn serve_for_tile() -> anyhow::Result<bool> {
     tracing::info!("launcher started, waiting for Tile");
     // As the shell, this process answers for Store apps the way Explorer would.
     tile_shell::uwp::start();
-    let mut serving = tokio::spawn(async move {
-        loop {
-            match server.next().await {
-                Ok(LaunchRequest::Exec { command_line }) => run(&command_line),
-                Ok(LaunchRequest::Activate { aumid }) => activate_now(&aumid),
-                Ok(LaunchRequest::Exit) => break,
-                Err(e) => tracing::debug!("bad launch request: {e}"),
-            }
-        }
-    });
+    let mut serving = tokio::spawn(serve_requests(server));
     let deadline = Instant::now() + SHELL_WAIT;
     let mut seen = false;
     let mut tick = tokio::time::interval(Duration::from_millis(500));
@@ -177,14 +168,31 @@ pub async fn serve() -> anyhow::Result<()> {
     if tile_platform::is_sign_in_shell() {
         tile_shell::uwp::start();
     }
+    serve_requests(server).await;
+    tracing::info!("launcher stopped");
+    Ok(())
+}
+
+/// Carries out a launch request. Returns `false` for [`LaunchRequest::Exit`].
+fn handle(request: LaunchRequest) -> bool {
+    match request {
+        LaunchRequest::Exec { command_line } => run(&command_line),
+        LaunchRequest::Activate { aumid } => activate_now(&aumid),
+        LaunchRequest::Exit => return false,
+    }
+    true
+}
+
+/// Carries out launch requests until one asks to exit.
+async fn serve_requests(server: LaunchServer) {
     loop {
         match server.next().await {
-            Ok(LaunchRequest::Exec { command_line }) => run(&command_line),
-            Ok(LaunchRequest::Activate { aumid }) => activate_now(&aumid),
-            Ok(LaunchRequest::Exit) => break,
+            Ok(request) => {
+                if !handle(request) {
+                    break;
+                }
+            }
             Err(e) => tracing::debug!("bad launch request: {e}"),
         }
     }
-    tracing::info!("launcher stopped");
-    Ok(())
 }
