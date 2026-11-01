@@ -131,6 +131,7 @@ impl Daemon {
             Command::ToggleRemap => self.set_remap_paused(!self.remap_paused),
             Command::ToggleShell => self.toggle_shell(),
             Command::ToggleLog => self.toggle_logging(),
+            Command::ToggleDnd => self.toggle_dnd(),
             Command::Exit => self.quit = true,
             Command::Exec(line) => launch::exec(&line),
             Command::FocusOrExec(line) => self.focus_or_exec(&line),

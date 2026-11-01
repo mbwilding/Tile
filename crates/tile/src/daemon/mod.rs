@@ -118,6 +118,9 @@ struct Daemon {
     /// Already warned that notifications are wanted but refused, so this isn't repeated on every
     /// retry.
     notify_denied: bool,
+    /// Muted with `togglednd`: popups are suppressed, but Windows keeps delivering notifications
+    /// as normal, so nothing is missed once unmuted.
+    dnd: bool,
     /// The tray icons apps have added, while Tile hosts the notification area.
     registry: Registry,
     /// The notification area's window, while Tile is the shell and no other taskbar runs.
@@ -183,7 +186,7 @@ fn indicator_settings(loaded: &Loaded) -> IndicatorSettings {
 fn toast_settings(loaded: &Loaded, enabled: bool) -> ToastSettings {
     ToastSettings {
         enabled,
-        config: loaded.config.notifications,
+        config: loaded.config.notifications.clone(),
         style: loaded.config.notification_style(),
     }
 }
@@ -316,6 +319,7 @@ pub async fn run(
         notify_tx,
         notify_access_requested: false,
         notify_denied: false,
+        dnd: false,
         registry,
         notify_host: None,
         shell_forced,

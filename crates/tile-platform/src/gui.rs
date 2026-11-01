@@ -67,6 +67,87 @@ pub fn set_alpha(hwnd: &w::HWND, alpha: u8) -> w::SysResult<()> {
     hwnd.SetLayeredWindowAttributes(w::COLORREF::from_rgb(0, 0, 0), alpha, co::LWA::ALPHA)
 }
 
+/// As [`set_alpha`], but also makes `key` a transparent colour key: any pixel painted exactly
+/// that colour shows whatever is behind the window instead. Lets a window hold several separately
+/// shaped pieces (the notification popup's stacked cards) with real gaps between them.
+pub fn set_transparent(hwnd: &w::HWND, key: Color, alpha: u8) -> w::SysResult<()> {
+    hwnd.SetLayeredWindowAttributes(colorref(key), alpha, co::LWA::COLORKEY | co::LWA::ALPHA)
+}
+
+/// Fills `bounds` with a `color` rounded rectangle, `radius` pixels on each corner. Shared by
+/// the launcher's cards and the notification popup, so both look like the same kind of window.
+pub fn fill_round(dc: &w::HDC, bounds: w::RECT, radius: i32, color: Color) -> w::SysResult<()> {
+    fill_round_bordered(dc, bounds, radius, color, color, 0)
+}
+
+/// As [`fill_round`], but stroked with a `width` pixel border in `border`. `width` of 0 draws no
+/// border, same as [`fill_round`].
+pub fn fill_round_bordered(
+    dc: &w::HDC,
+    bounds: w::RECT,
+    radius: i32,
+    fill: Color,
+    border: Color,
+    width: i32,
+) -> w::SysResult<()> {
+    let brush = w::HBRUSH::CreateSolidBrush(colorref(fill))?;
+    let _brush = dc.SelectObject(&*brush)?;
+    let style = if width > 0 {
+        co::PS::SOLID
+    } else {
+        co::PS::NULL
+    };
+    let pen = w::HPEN::CreatePen(style, width.max(1), colorref(border))?;
+    let _pen = dc.SelectObject(&*pen)?;
+    // RoundRect leaves out the bottom and right edges with a null pen; a real pen needs no such
+    // adjustment, but including it anyway keeps both cases pixel-aligned with the bounds given.
+    let bounds = w::RECT {
+        right: bounds.right + 1,
+        bottom: bounds.bottom + 1,
+        ..bounds
+    };
+    dc.RoundRect(bounds, w::SIZE::with(radius, radius))
+}
+
+/// Draws `s` in `font` and `color` within `bounds`, truncated to one line with an ellipsis.
+pub fn text(
+    dc: &w::HDC,
+    font: &w::HFONT,
+    color: Color,
+    s: &str,
+    mut bounds: w::RECT,
+    flags: co::DT,
+) -> w::SysResult<()> {
+    let _font = dc.SelectObject(font)?;
+    dc.SetTextColor(colorref(color))?;
+    dc.DrawText(
+        s,
+        &mut bounds,
+        flags | co::DT::SINGLELINE | co::DT::NOPREFIX | co::DT::END_ELLIPSIS,
+    )?;
+    Ok(())
+}
+
+/// As [`text`], but wraps onto several lines instead of staying on one; text past the bottom of
+/// `bounds` is cut with an ellipsis.
+pub fn text_wrapped(
+    dc: &w::HDC,
+    font: &w::HFONT,
+    color: Color,
+    s: &str,
+    mut bounds: w::RECT,
+    flags: co::DT,
+) -> w::SysResult<()> {
+    let _font = dc.SelectObject(font)?;
+    dc.SetTextColor(colorref(color))?;
+    dc.DrawText(
+        s,
+        &mut bounds,
+        flags | co::DT::WORDBREAK | co::DT::NOPREFIX | co::DT::END_ELLIPSIS,
+    )?;
+    Ok(())
+}
+
 /// Handles `WM_PAINT` by having `paint` draw the whole client area (the rectangle it is given)
 /// off screen, then copying it to the window at once, so nothing flickers.
 pub fn paint_buffered(

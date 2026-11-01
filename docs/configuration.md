@@ -185,8 +185,13 @@ Popups for Windows toast notifications, read through `UserNotificationListener`.
 | `position` | `top_right` | Where it sits on the monitor's work area: `center`, `top`, `top_left`, `top_right`, `bottom`, `bottom_left`, `bottom_right`, `left` or `right`. |
 | `gap` | `16` | Pixels from the edges it sits against, at 100% scaling. Unused for `center`. |
 | `width` | `340` | Width in pixels at 100% scaling. It grows tall enough for the text. |
-| `duration_ms` | `5000` | How long it stays shown before it fades out. |
+| `duration_ms` | `5000` | How long it stays shown before it fades out. Hovering a popup pauses its countdown; it resumes when the pointer leaves. |
 | `fade_ms` | `400` | How long it then takes to fade out. `0` hides it at once. |
+| `max_visible` | `3` | How many popups are shown stacked at once; the rest wait their turn. |
+| `show_app_name` | `true` | Show the posting app's name above the title. |
+| `border` | `theme.accent` | The card's outline colour. |
+| `border_width` | `1` | The outline's thickness in pixels at 100% scaling. `0` draws no outline. |
+| `filter` | `[]` | Mutes, or overrides the duration of, notifications from apps whose name matches. Each entry has `app` (a regex, matched the same way as a [window rule](window-rules.md)'s patterns), `mute` and `duration_ms`. The first matching entry wins each field. |
 
 ### `binds`
 
@@ -337,6 +342,11 @@ notifications:
   width: 340                    # px at 100% scaling
   duration_ms: 5000             # fully shown
   fade_ms: 400                  # then fades out
+  max_visible: 3                # popups stacked at once; the rest wait their turn
+  show_app_name: true           # above the title
+  # border: "#89b4fa"           # unset follows theme.accent
+  border_width: 1               # px at 100% scaling; 0 draws no border
+  filter: []                    # mute, or override the duration of, notifications from an app
 
 binds: {}                       # added to the default binds; see keybinds.md
 

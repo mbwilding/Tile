@@ -114,6 +114,11 @@ notifications:
   width: 340 # px at 100% scaling
   duration_ms: 5000 # fully shown
   fade_ms: 400 # then fades out
+  max_visible: 3 # popups stacked at once; the rest wait their turn
+  show_app_name: true # above the title
+  # border: "#89b4fa" # unset follows theme.accent
+  border_width: 1 # px at 100% scaling; 0 draws no border
+  filter: [] # mute, or override the duration of, notifications from an app
 
 # Every default bind. See keybinds.md for the key names and dispatchers.
 binds:

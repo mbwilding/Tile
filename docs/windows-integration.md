@@ -127,11 +127,17 @@ focus, and Tile never tiles it. It fades by stepping the window's layered alpha 
 
 ## Notifications
 
-A popup, bottom-right by default, shows for each new Windows toast notification while Tile hosts
-the shell, since that is when Explorer's own `shellexperiencehost.exe` popups don't show (only the
+A popup, top-right by default, shows for each new Windows toast notification while Tile hosts the
+shell, since that is when Explorer's own `shellexperiencehost.exe` popups don't show (only the
 registered shell can drive them, and Tile doesn't reimplement that; see
 [shell mode](shell.md#what-you-give-up)). [`notifications.enabled`](configuration.md#notifications)
-overrides the default: `true` always shows popups, `false` never does, even while hosting.
+overrides the default: `true` always shows popups, `false` never does, even while hosting. It is
+styled like the [launcher](launcher.md)'s own cards (rounded, bordered panels) rather than the
+plain [workspace indicator](#the-workspace-indicator), and up to
+[`notifications.max_visible`](configuration.md#notifications) show stacked at once, the rest
+queued. `togglednd` mutes popups without touching Windows' own notification or Focus Assist
+settings; [`notifications.filter`](configuration.md#notifications) does the same per app, or
+overrides one app's duration, by name.
 
 Tile reads notifications with
 `Windows.UI.Notifications.Management.UserNotificationListener`, the API behind Focus Assist's
@@ -144,17 +150,45 @@ already runs with the signed-in user's full rights, which this read-only API acc
 it; no sparse MSIX package or Store listing was needed.
 
 The live `NotificationChanged` event is a different story: subscribing to it fails outright with
-`0x80070490` ("Element not found"). Others have reported the same for a packaged app, which would
-mean it needs some other per-package registration, not just an identity, but that wasn't tested
-here; only the unpackaged case was. So Tile polls `GetNotificationsAsync` every two seconds
-instead and works out what is new by id; new notifications land as a popup within that couple of
-seconds, not instantly. Two seconds is a deliberate trade-off, not a technical floor: it is one
-cheap, asynchronous WinRT call, so a shorter interval is possible if the delay matters more than
-the (small) extra overhead.
+`0x80070490` ("Element not found"). Two further pushes were tried, rather than settling for
+polling straight away:
+
+- A throwaway test binary was given a sparse MSIX package (a manifest with app identity but no
+  real packaging payload, the usual way an unpackaged Win32 process gets WinRT identity), signed
+  with a self-signed test certificate, built entirely outside the Tile source tree. Packaging and
+  signing worked, but installing the package failed with `0x800B0109` ("the root certificate ...
+  must be trusted"): the self-signed certificate's issuer isn't a trusted root. Trusting it as a
+  root CA is a real, if small, weakening of the machine's trust store, so that step wasn't taken,
+  and the test was left there rather than pushed through. Package identity, and so whether
+  `NotificationChanged` would subscribe, was never confirmed either way.
+- Windows' own shell wakes for new notifications via WNF (Windows Notification Facility), an
+  undocumented publish/subscribe mechanism with some state names catalogued by community
+  reverse-engineering tools (SharpWnfSuite, the WNFUN talk, Quarkslab's WNF write-up). None of
+  those sources tie a specific, named WNF state to "a toast was posted or changed": the
+  `WNF_SHEL_*` names found in public dumps cover other shell activity (app launches and the like),
+  not notifications. Tile already uses undocumented NT APIs elsewhere (`tile-shell`'s frame code,
+  for `NtUserAcquireIAMKey`) with a documented fallback, so there is precedent for this if a
+  genuine candidate turned up — but subscribing to a guessed state name with no evidence it fires
+  for notifications isn't that, so none was tried.
+
+So Tile polls `GetNotificationsAsync` every two seconds instead and works out what is new by id;
+new notifications land as a popup within that couple of seconds, not instantly. Two seconds is a
+deliberate trade-off, not a technical floor: it is one cheap, asynchronous WinRT call, so a
+shorter interval is possible if the delay matters more than the (small) extra overhead. It stays a
+private constant (`POLL_INTERVAL` in `tile-sys/src/notifications.rs`) rather than a setting, so
+it's easy to tune later without it being something most users would ever need to touch.
 
 The popup window is a topmost layered popup on a thread of its own, the same shape as the
-[workspace indicator](#the-workspace-indicator): it never steals focus, and a click dismisses it
-early. Queued notifications show one after another.
+[launcher](launcher.md) and the [workspace indicator](#the-workspace-indicator): it never steals
+focus, and clicking a card dismisses it early. Hovering a card pauses its countdown (shown as a
+thin progress bar) until the pointer leaves.
+
+As [shell mode](shell.md#what-you-give-up) already documents, Action Center (Win+N) is one of the
+things Tile gives up in shell mode: it is `ShellExperienceHost.exe`-driven, the same host behind
+the Store app frames and Explorer's own toast popups, none of which run without Explorer. With no
+Action Center to fall back on, a dismissed or missed popup currently has nowhere to be reviewed in
+shell mode; a small in-memory notification history shown from the launcher would close that gap,
+but wasn't built in this change.
 
 ## Secure desktops
 

@@ -53,6 +53,7 @@ impl State {
             | Command::ToggleRemap
             | Command::ToggleShell
             | Command::ToggleLog
+            | Command::ToggleDnd
             | Command::Exit => Vec::new(),
         }
     }
