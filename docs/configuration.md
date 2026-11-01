@@ -184,7 +184,7 @@ Popups for Windows toast notifications, read through `UserNotificationListener`.
 | `enabled` | unset | Show a popup for each new notification. Unset follows shell mode: on while Tile hosts the shell, off otherwise. `true` or `false` overrides that. |
 | `position` | `top_right` | Where it sits on the monitor's work area: `center`, `top`, `top_left`, `top_right`, `bottom`, `bottom_left`, `bottom_right`, `left` or `right`. |
 | `gap` | `16` | Pixels from the edges it sits against, at 100% scaling. Unused for `center`. |
-| `width` | `340` | Width in pixels at 100% scaling. It grows tall enough for the text. |
+| `width` | `380` | Width in pixels at 100% scaling. It grows tall enough for the icon and the text. |
 | `duration_ms` | `5000` | How long it stays shown before it fades out. Hovering a popup pauses its countdown; it resumes when the pointer leaves. |
 | `fade_ms` | `400` | How long it then takes to fade out. `0` hides it at once. |
 | `max_visible` | `3` | How many popups are shown stacked at once; the rest wait their turn. |
@@ -339,7 +339,7 @@ notifications:
   enabled: ~                    # unset follows shell mode; true/false always shows or never does
   position: top_right           # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
   gap: 16                       # px from the edges, unused for center
-  width: 340                    # px at 100% scaling
+  width: 380                    # px at 100% scaling
   duration_ms: 5000             # fully shown
   fade_ms: 400                  # then fades out
   max_visible: 3                # popups stacked at once; the rest wait their turn

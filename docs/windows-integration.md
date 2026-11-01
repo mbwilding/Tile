@@ -139,6 +139,17 @@ queued. `togglednd` mutes popups without touching Windows' own notification or F
 settings; [`notifications.filter`](configuration.md#notifications) does the same per app, or
 overrides one app's duration, by name.
 
+The popup shows the posting app's icon, the same one Windows shows for it elsewhere. Each
+notification carries the app's AUMID (`UserNotification.AppInfo().AppUserModelId()`), and the
+popup resolves its icon from `shell:AppsFolder\<aumid>` through `tile_shell::shell_icon`, the same
+`IShellItemImageFactory` lookup the [launcher](launcher.md) uses for its own rows, so both surfaces
+draw the identical icon for a given app rather than Tile having two icon-resolution paths. A
+notification with no AUMID, or an AUMID `shell_icon` can't resolve, shows with no icon, the same
+as a real app without one. Checked by hand with `scripts/send-test-toast.ps1`: Windows Terminal, a
+Win32 console app with a path-shaped AUMID, and most Store apps all resolved; a couple of
+system apps' own AUMIDs (`Windows.Defender.SecurityCenter`) did not, most likely because their
+real AUMID needs a suffix this one lacks.
+
 Tile reads notifications with
 `Windows.UI.Notifications.Management.UserNotificationListener`, the API behind Focus Assist's
 priority list and notification-reading apps, rather than Explorer's path. This was checked by
