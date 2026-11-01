@@ -32,7 +32,7 @@ time it starts and whenever the file changes. So a config with `shell: true` is 
 first run, and a config set back to `false` restores Explorer.
 
 The launcher is how you start everything in shell mode, so in shell mode it is always bound (see
-`general.launcher_key`, which does the same outside shell mode). If you haven't bound the
+`general.launcher`, which does the same outside shell mode). If you haven't bound the
 `launcher` dispatcher yourself, Tile binds it to `Win+R`, or to `Win+D` if `Win+R` is taken. The tray icons are a row of their own at the top of the launcher, under its bar.
 
 ### Without signing out

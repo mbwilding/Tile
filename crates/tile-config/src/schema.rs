@@ -268,7 +268,7 @@ pub struct General {
     pub remap: bool,
     /// Bind the launcher to `Win+R` (or `Win+D` if that is taken) when no bind opens it, with
     /// tiling on or off. In shell mode the launcher is bound whatever this says.
-    pub launcher_key: bool,
+    pub launcher: bool,
     /// Space between neighbouring tiled windows.
     pub gaps_in: i32,
     /// Space between tiled windows and the monitor edge.
@@ -302,7 +302,7 @@ impl Default for General {
             tiling: true,
             default_binds: true,
             remap: true,
-            launcher_key: true,
+            launcher: true,
             gaps_in: 10,
             gaps_out: 10,
             independent_workspaces: true,

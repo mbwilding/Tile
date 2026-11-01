@@ -46,10 +46,10 @@ impl Daemon {
         }
     }
 
-    /// The launcher's own bind when none of the binds opens it: wanted by `general.launcher_key`,
+    /// The launcher's own bind when none of the binds opens it: wanted by `general.launcher`,
     /// and always in shell mode, where the launcher is how everything starts.
     pub(super) fn launcher_fallback_bind(&self) -> Option<(tile_config::Keybind, Command)> {
-        let wanted = self.loaded.config.general.launcher_key || self.shell_wanted();
+        let wanted = self.loaded.config.general.launcher || self.shell_wanted();
         let bind = launcher_fallback(wanted, &self.loaded.binds)?;
         tracing::info!("the launcher is bound to {}", bind.0);
         Some(bind)
