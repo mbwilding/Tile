@@ -19,17 +19,24 @@ use crate::{
     geometry::{Axis, Direction, Rect, nearest_in_direction},
 };
 
+/// The tiling layouts a workspace can use. See `docs/layouts.md`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LayoutKind {
+    /// A binary tree: each new window splits the focused one.
     Dwindle,
+    /// Master windows on the left, the rest stacked on the right.
     Master,
+    /// Every window fills the workspace.
     Monocle,
+    /// An endless strip of columns, scrolled to keep the focus in view.
     Scrolling,
+    /// Equal shares, side by side or stacked.
     Even,
 }
 
 impl LayoutKind {
+    /// Every layout, in the order `cyclelayout` steps through them.
     pub const ALL: [Self; 5] = [
         Self::Dwindle,
         Self::Master,
@@ -38,6 +45,7 @@ impl LayoutKind {
         Self::Even,
     ];
 
+    /// The layout after this one, wrapping round.
     pub fn next(self) -> Self {
         let i = Self::ALL.iter().position(|k| *k == self).unwrap_or(0);
         Self::ALL[(i + 1) % Self::ALL.len()]

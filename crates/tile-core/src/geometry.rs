@@ -3,33 +3,43 @@ use serde::{Deserialize, Serialize};
 /// An axis-aligned rectangle in physical screen pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct Rect {
+    /// Left edge.
     pub x: i32,
+    /// Top edge.
     pub y: i32,
+    /// Width.
     pub w: i32,
+    /// Height.
     pub h: i32,
 }
 
 impl Rect {
+    /// A rectangle at (x, y) of size w by h.
     pub const fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
         Self { x, y, w, h }
     }
 
+    /// A rectangle from its left, top, right and bottom edges.
     pub const fn from_ltrb(left: i32, top: i32, right: i32, bottom: i32) -> Self {
         Self::new(left, top, right - left, bottom - top)
     }
 
+    /// The right edge, just outside the rectangle.
     pub const fn right(&self) -> i32 {
         self.x + self.w
     }
 
+    /// The bottom edge, just outside the rectangle.
     pub const fn bottom(&self) -> i32 {
         self.y + self.h
     }
 
+    /// The middle point.
     pub const fn center(&self) -> (i32, i32) {
         (self.x + self.w / 2, self.y + self.h / 2)
     }
 
+    /// Whether the point (x, y) is inside.
     pub const fn contains_point(&self, x: i32, y: i32) -> bool {
         x >= self.x && x < self.right() && y >= self.y && y < self.bottom()
     }
@@ -105,7 +115,9 @@ pub fn ratio_of(delta: i32, length: i32) -> f32 {
 /// The orientation of a split. `Horizontal` places children side by side.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Axis {
+    /// Side by side, splitting the width.
     Horizontal,
+    /// Stacked, splitting the height.
     Vertical,
 }
 
@@ -119,6 +131,7 @@ impl Axis {
         }
     }
 
+    /// The other axis.
     pub const fn flip(self) -> Self {
         match self {
             Self::Horizontal => Self::Vertical,
@@ -127,15 +140,21 @@ impl Axis {
     }
 }
 
+/// A direction on screen, for focus and moves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Direction {
+    /// Towards lower x.
     Left,
+    /// Towards higher x.
     Right,
+    /// Towards lower y.
     Up,
+    /// Towards higher y.
     Down,
 }
 
 impl Direction {
+    /// The axis moving this way travels along.
     pub const fn axis(self) -> Axis {
         match self {
             Self::Left | Self::Right => Axis::Horizontal,

@@ -118,6 +118,7 @@ impl State {
         self.sync()
     }
 
+    /// Takes a minimised window out of its layout until it is restored.
     pub fn window_minimized(&mut self, id: WindowId) -> Vec<Effect> {
         let Some(n) = self.detach(id) else {
             return Vec::new();
@@ -139,6 +140,7 @@ impl State {
         effects
     }
 
+    /// Puts a restored window back in its layout.
     pub fn window_restored(&mut self, id: WindowId) -> Vec<Effect> {
         let Some(n) = self.windows.get(&id).map(|m| m.workspace) else {
             return Vec::new();

@@ -113,16 +113,8 @@ appears. Turning the Shell switch on writes the Winlogon `Shell` value under `HK
 `SeparateProcess`; turning it off removes the value, if it is Tile's, and puts `SeparateProcess`
 back. Tile checks both against the switch each time it starts and when the config changes.
 
-Store apps (Settings, the Microsoft Store) are started by `sihost.exe`, which waits for the shell
-to report the app's window. The shell process, `Tile.exe --shell` with the user's rights, does
-that by creating the `Windows.Internal.Shell.UwpWindowLifecycleManagement.UwpWindowLifecycleManager`
-component the way Explorer does: it makes a CoreMessaging session with `CoreUICreateEx`, calls the
-manager's static `Create` from that session's thread (it opens the thread's own session with
-`CoreUIOpenExisting`), then runs the session. It then frames each app window through
-`ApplicationFrameHost`'s frame manager and lifts the shell's cloak, which needs the Immersive App
-Management key that Windows gives the shell window's owner. It tells the app its size with
-`UniversalAppModelInProc`'s `SetBounds` and `SetVisibleBounds`, which only answer the shell
-process. See [shell mode](shell.md#settings-and-store-apps).
+How the shell process answers for Store apps (Settings, the Microsoft Store) is in
+[shell mode](shell.md#settings-and-store-apps).
 
 ## The workspace indicator
 
