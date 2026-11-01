@@ -7,7 +7,7 @@ use tile_platform::{
 };
 use tokio::time::Instant;
 
-use super::{DEFOCUS_GRACE, Daemon, FORCE_GRACE, consume, on_other_desktop};
+use super::{DEFOCUS_GRACE, Daemon, FORCE_GRACE, on_other_desktop};
 use crate::{launch, paths, remap};
 
 impl Daemon {
@@ -58,7 +58,7 @@ impl Daemon {
             WinEvent::Show(id) | WinEvent::Uncloaked(id) => {
                 if !self.desktops.is_managed(id) {
                     self.try_manage(id);
-                } else if !consume(&mut self.pending_show, id)
+                } else if !self.track(id).pending_show.consume()
                     && self.desktops.is_hidden(id)
                     && self.desktops.is_current(id)
                 {
@@ -69,7 +69,7 @@ impl Daemon {
             }
             WinEvent::Hide(id) | WinEvent::Cloaked(id) => {
                 if self.desktops.is_managed(id)
-                    && !consume(&mut self.pending_hide, id)
+                    && !self.track(id).pending_hide.consume()
                     && !self.windows.is_visible(id)
                 {
                     // The shell cloaks windows on other desktops: keep managing those.
@@ -101,15 +101,18 @@ impl Daemon {
             }
             WinEvent::MoveSizeStart(id) => {
                 if self.desktops.is_managed(id) {
-                    self.moving.insert(id);
-                    self.resizing.remove(&id);
-                    self.tweens.remove(&id);
+                    let tracked = self.track(id);
+                    tracked.moving = true;
+                    tracked.resizing = false;
+                    tracked.tween = None;
                 }
             }
             WinEvent::MoveSizeEnd(id) => {
-                if self.moving.remove(&id) {
-                    self.placed.remove(&id);
-                    let resized = self.resizing.remove(&id);
+                if self.is_moving(id) {
+                    let tracked = self.track(id);
+                    tracked.moving = false;
+                    tracked.placed = None;
+                    let resized = std::mem::take(&mut tracked.resizing);
                     if let Some(rect) = self.windows.frame(id) {
                         let cursor = cursor_pos();
                         let effects = self.desktops.with_owner(id, |s| {
@@ -137,7 +140,7 @@ impl Daemon {
                 }
             }
             WinEvent::LocationChange(id) => {
-                if self.moving.contains(&id) {
+                if self.is_moving(id) {
                     self.follow_resize(id);
                 } else {
                     self.enforce_size(id);
@@ -158,7 +161,7 @@ impl Daemon {
         if effects.is_empty() {
             return;
         }
-        self.resizing.insert(id);
+        self.track(id).resizing = true;
         for effect in effects {
             if let Effect::Place { id: other, rect } = effect {
                 // The window being dragged is skipped by `place`: the user holds it.
@@ -174,14 +177,17 @@ impl Daemon {
     /// Some apps enforce a minimum size larger than their tile. Re-place those with force so
     /// they fit; if one still refuses, at least slide it back inside the work area.
     pub(super) fn enforce_size(&mut self, id: WindowId) {
-        if self.moving.contains(&id)
-            || self.tweens.contains_key(&id)
+        let Some(tracked) = self.tracked.get(&id) else {
+            return;
+        };
+        if tracked.moving
+            || tracked.tween.is_some()
             || self.desktops.is_hidden(id)
             || self.desktops.is_floating(id)
         {
             return;
         }
-        let Some(target) = self.placed.get(&id).copied() else {
+        let (Some(target), forced) = (tracked.placed, tracked.forced) else {
             return;
         };
         let Some(frame) = self.windows.frame(id) else {
@@ -194,14 +200,14 @@ impl Daemon {
         if !at_target || !refused {
             return;
         }
-        match self.forced.get(&id) {
+        match forced {
             None => {
                 tracing::debug!(
                     "{id:?} wants at least {}x{}; forcing its tile size",
                     frame.w,
                     frame.h
                 );
-                self.forced.insert(id, Instant::now());
+                self.track(id).forced = Some(Instant::now());
                 if self.place_now(id, target, true).is_err() {
                     self.unmanage(id);
                 }

@@ -7,7 +7,7 @@ use tile_platform::{
     foreground, monitors,
 };
 
-use super::{Daemon, bump};
+use super::Daemon;
 
 impl Daemon {
     pub(super) fn refresh_monitors(&mut self) {
@@ -41,7 +41,7 @@ impl Daemon {
         }
         tracing::debug!("managing {:?} {:?}", found.id, found.info);
         if let Some(decorations) = outcome.decorations {
-            self.decoration_rules.insert(found.id, decorations);
+            self.track(found.id).decoration_rule = Some(decorations);
         }
         if self.loaded.config.general.borders {
             self.windows
@@ -78,21 +78,15 @@ impl Daemon {
     pub(super) fn unmanage(&mut self, id: WindowId) {
         tracing::debug!("unmanaging {id:?}");
         let alive = self.windows.is_alive(id);
-        if self.undecorated.remove(&id) == Some(true) && alive {
+        let tracked = self.tracked.remove(&id).unwrap_or_default();
+        if tracked.undecorated == Some(true) && alive {
             self.windows.set_decorated(id, true);
         }
         if self.desktops.is_hidden(id) && alive {
             self.windows.show(id);
         }
-        self.decoration_rules.remove(&id);
-        self.forced.remove(&id);
         let effects = self.desktops.close(id);
         self.windows.forget(id);
-        self.placed.remove(&id);
-        self.tweens.remove(&id);
-        self.moving.remove(&id);
-        self.pending_hide.remove(&id);
-        self.pending_show.remove(&id);
         if self.bordered == Some(id) {
             self.bordered = None;
         }
@@ -121,13 +115,14 @@ impl Daemon {
         tracing::debug!("{id:?} moved to desktop {desktop:032x}");
         let floating = self.desktops.is_floating(id);
         if self.desktops.is_hidden(id) {
-            bump(&mut self.pending_show, id);
+            self.track(id).pending_show.bump();
             self.windows.show(id);
         }
         let effects = self.desktops.close(id);
         self.apply(effects);
-        self.placed.remove(&id);
-        self.tweens.remove(&id);
+        let tracked = self.track(id);
+        tracked.placed = None;
+        tracked.tween = None;
         let info = self.windows.info(id).unwrap_or_default();
         let rect = self.windows.frame(id).unwrap_or_default();
         let options = ManageOptions {

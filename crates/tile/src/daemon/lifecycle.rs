@@ -17,9 +17,9 @@ impl Daemon {
         for id in self.desktops.managed() {
             self.windows.set_border(id, None);
         }
-        for (id, changed) in std::mem::take(&mut self.undecorated) {
-            if changed {
-                self.windows.set_decorated(id, true);
+        for (id, tracked) in &mut self.tracked {
+            if tracked.undecorated.take() == Some(true) {
+                self.windows.set_decorated(*id, true);
             }
         }
     }
@@ -56,15 +56,9 @@ impl Daemon {
     pub(super) fn reset_state(&mut self) {
         self.desktops = fresh_desktops(&self.loaded);
         self.monitors.clear();
-        self.placed.clear();
-        self.tweens.clear();
-        self.moving.clear();
-        self.pending_show.clear();
-        self.pending_hide.clear();
+        self.tracked.clear();
         self.ignored.clear();
         self.bordered = None;
-        self.decoration_rules.clear();
-        self.forced.clear();
         self.heal_at = None;
         self.drag = None;
     }
@@ -148,19 +142,18 @@ impl Daemon {
         self.update_lock_override();
         self.switch_off_click_to_do();
         self.install_binds();
-        self.decoration_rules = self
-            .desktops
-            .managed()
-            .into_iter()
-            .filter_map(|id| {
-                let info = self.windows.info(id)?;
-                self.loaded
-                    .rules
-                    .resolve(&info)
-                    .decorations
-                    .map(|d| (id, d))
-            })
-            .collect();
+        for tracked in self.tracked.values_mut() {
+            tracked.decoration_rule = None;
+        }
+        for id in self.desktops.managed() {
+            let rule = self
+                .windows
+                .info(id)
+                .and_then(|info| self.loaded.rules.resolve(&info).decorations);
+            if rule.is_some() {
+                self.track(id).decoration_rule = rule;
+            }
+        }
         let config = &self.loaded.config;
         let effects = self
             .desktops

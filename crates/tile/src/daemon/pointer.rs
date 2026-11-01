@@ -40,16 +40,18 @@ impl Daemon {
                     return;
                 }
                 self.windows.focus(id);
-                self.moving.insert(id);
-                self.tweens.remove(&id);
+                let tracked = self.track(id);
+                tracked.moving = true;
+                tracked.tween = None;
                 self.drag = Some(id);
             }
             DragEvent::End { x, y } => {
                 let Some(id) = self.drag.take() else {
                     return;
                 };
-                self.moving.remove(&id);
-                self.placed.remove(&id);
+                let tracked = self.track(id);
+                tracked.moving = false;
+                tracked.placed = None;
                 if let Some(rect) = self.windows.frame(id) {
                     let effects = self
                         .desktops

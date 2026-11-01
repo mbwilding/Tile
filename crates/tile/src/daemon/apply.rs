@@ -6,7 +6,7 @@ use tile_ipc::{Event, Response};
 use tile_platform::{Animation, Mover, PlaceError, focus_desktop, foreground};
 use tokio::time::Instant;
 
-use super::{Daemon, HEAL_DELAY, Published, Tween, bump};
+use super::{Daemon, HEAL_DELAY, Published, tracked::Tween};
 use crate::{
     launch,
     paths::{self, Restore},
@@ -42,12 +42,13 @@ impl Daemon {
                     }
                 }
                 Effect::Show(id) => {
-                    bump(&mut self.pending_show, id);
+                    self.track(id).pending_show.bump();
                     self.windows.show(id);
                 }
                 Effect::Hide(id) => {
-                    bump(&mut self.pending_hide, id);
-                    self.tweens.remove(&id);
+                    let tracked = self.track(id);
+                    tracked.pending_hide.bump();
+                    tracked.tween = None;
                     self.windows.hide(id);
                 }
                 Effect::Focus(id) => {
@@ -80,7 +81,8 @@ impl Daemon {
     }
 
     pub(super) fn wants_decorations(&self, id: WindowId) -> bool {
-        self.decoration_rules.get(&id).copied().unwrap_or_else(|| {
+        let rule = self.tracked.get(&id).and_then(|t| t.decoration_rule);
+        rule.unwrap_or_else(|| {
             self.loaded.config.general.decorations || self.desktops.is_floating(id)
         })
     }
@@ -89,16 +91,16 @@ impl Daemon {
     pub(super) fn update_decorations(&mut self) {
         for id in self.desktops.managed() {
             let want = self.wants_decorations(id);
-            match (want, self.undecorated.get(&id).copied()) {
+            match (want, self.tracked.get(&id).and_then(|t| t.undecorated)) {
                 (false, None) => {
                     let changed = self.windows.set_decorated(id, false);
-                    self.undecorated.insert(id, changed);
+                    self.track(id).undecorated = Some(changed);
                 }
                 (true, Some(changed)) => {
                     if changed {
                         self.windows.set_decorated(id, true);
                     }
-                    self.undecorated.remove(&id);
+                    self.track(id).undecorated = None;
                 }
                 _ => {}
             }
@@ -111,10 +113,10 @@ impl Daemon {
         rect: Rect,
         may_animate: bool,
     ) -> Result<(), WindowId> {
-        if self.moving.contains(&id) {
+        if self.is_moving(id) {
             return Ok(());
         }
-        let previous = self.placed.insert(id, rect);
+        let previous = self.track(id).placed.replace(rect);
         if previous == Some(rect) {
             return Ok(());
         }
@@ -128,8 +130,9 @@ impl Daemon {
             let now = std::time::Instant::now();
             // Retargeting continues from wherever the running animation is right now.
             let existing = self
-                .tweens
-                .remove(&id)
+                .track(id)
+                .tween
+                .take()
                 .map(|t| (t.animation.at(now).0, t.mover));
             if let Some((from, mover)) =
                 existing.or_else(|| Mover::spawn(id).map(|m| (previous, m)))
@@ -143,14 +146,14 @@ impl Daemon {
                     duration: Duration::from_millis(config.duration_ms.max(1)),
                     curve: config.curve(),
                     insets,
-                    force: self.forced.contains_key(&id),
+                    force: self.is_forced(id),
                 };
                 mover.animate(animation);
-                self.tweens.insert(id, Tween { animation, mover });
+                self.track(id).tween = Some(Tween { animation, mover });
                 return Ok(());
             }
         }
-        self.tweens.remove(&id);
+        self.track(id).tween = None;
         self.place_now(id, rect, true)
     }
 
@@ -161,10 +164,7 @@ impl Daemon {
         rect: Rect,
         settled: bool,
     ) -> Result<(), WindowId> {
-        match self
-            .windows
-            .place(id, rect, self.forced.contains_key(&id), settled)
-        {
+        match self.windows.place(id, rect, self.is_forced(id), settled) {
             Ok(()) => Ok(()),
             Err(PlaceError::Gone) => Err(id),
             Err(PlaceError::AccessDenied) => {
@@ -264,9 +264,9 @@ impl Daemon {
         let mut restore = Restore {
             hidden: self.desktops.hidden().into_iter().map(|id| id.0).collect(),
             undecorated: self
-                .undecorated
+                .tracked
                 .iter()
-                .filter(|(_, changed)| **changed)
+                .filter(|(_, t)| t.undecorated == Some(true))
                 .map(|(id, _)| id.0)
                 .collect(),
             lock_disabled: self.lock_taken,

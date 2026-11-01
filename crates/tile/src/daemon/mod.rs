@@ -10,6 +10,7 @@ mod lock;
 mod manage;
 mod pointer;
 mod shell;
+mod tracked;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -19,12 +20,12 @@ use std::{
 
 use anyhow::{Context, bail};
 use tile_config::Loaded;
-use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, Rect, WindowId};
+use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, WindowId};
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
-    Animation, Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Mover,
-    Tray, TrayEvent, WinDrag, WinEvent, WinEventHooks, Windows,
+    Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Tray, TrayEvent,
+    WinDrag, WinEvent, WinEventHooks, Windows,
     desktops::{self as vd, DesktopChange},
     foreground,
 };
@@ -37,6 +38,7 @@ use tokio::{
     time::{Instant, MissedTickBehavior, interval, sleep_until},
 };
 
+use self::tracked::Tracked;
 use crate::{
     launch, logging,
     paths::{self, Restore},
@@ -51,13 +53,6 @@ const DEFOCUS_GRACE: Duration = Duration::from_millis(500);
 /// Logged when the remapper's emergency exit is typed.
 const REMAP_PANIC: &str =
     "emergency exit (Backspace+Escape+Enter): remapping is off until the config is reloaded";
-
-/// A window being animated. The mover draws the frames on its own thread; the daemon only
-/// keeps the animation to know where the window is and when it ends.
-struct Tween {
-    animation: Animation,
-    mover: Mover,
-}
 
 #[derive(Default, PartialEq)]
 struct Published {
@@ -117,28 +112,14 @@ struct Daemon {
     remap: Option<Remap>,
     remap_notices: UnboundedSender<Notice>,
     monitors: Vec<MonitorInfo>,
-    /// The last rect we placed each window at (or are animating it towards).
-    placed: HashMap<WindowId, Rect>,
-    tweens: HashMap<WindowId, Tween>,
-    /// Windows the user is dragging / resizing with the mouse.
-    moving: HashSet<WindowId>,
-    /// Of those, the ones whose edge has been dragged, so the others have been following it.
-    resizing: HashSet<WindowId>,
-    pending_show: HashMap<WindowId, (u32, Instant)>,
-    pending_hide: HashMap<WindowId, (u32, Instant)>,
+    /// What the daemon keeps about each window it manages.
+    tracked: HashMap<WindowId, Tracked>,
     /// Windows excluded by rules or that we can't control (elevated).
     ignored: HashSet<WindowId>,
     bordered: Option<WindowId>,
-    /// Windows handled as undecorated; `true` if we actually removed a title bar.
-    undecorated: HashMap<WindowId, bool>,
-    /// Per-window `decorations` overrides from rules.
-    decoration_rules: HashMap<WindowId, bool>,
     subscribers: Vec<UnboundedSender<Response>>,
     published: Published,
     saved_restore: Restore,
-    /// Windows that refused their tile size (app minimum size); placed with force from now
-    /// on. The instant is when force was last applied.
-    forced: HashMap<WindowId, Instant>,
     /// We set the policy that disables Win+L (and must remove it again).
     lock_taken: bool,
     /// We already asked (UAC) for permission to manage the Win+L policy this run.
@@ -183,30 +164,6 @@ const RELOCK_DELAY: Duration = Duration::from_secs(2);
 
 /// How often a hidden pointer checks for mouse movement.
 const CURSOR_POLL: Duration = Duration::from_millis(30);
-
-fn bump(map: &mut HashMap<WindowId, (u32, Instant)>, id: WindowId) {
-    let entry = map.entry(id).or_insert((0, Instant::now()));
-    entry.0 += 1;
-    entry.1 = Instant::now();
-}
-
-/// Consumes one expected self-inflicted event, if there is a recent one.
-fn consume(map: &mut HashMap<WindowId, (u32, Instant)>, id: WindowId) -> bool {
-    match map.get_mut(&id) {
-        Some((count, at)) if *count > 0 && at.elapsed() < SELF_EVENT_WINDOW => {
-            *count -= 1;
-            if *count == 0 {
-                map.remove(&id);
-            }
-            true
-        }
-        Some(_) => {
-            map.remove(&id);
-            false
-        }
-        None => false,
-    }
-}
 
 /// Starts `tile --watchdog <pid>`: a detached process that undoes our window changes
 /// when this process exits for any reason, including being killed.
@@ -319,20 +276,12 @@ pub async fn run(
         remap: None,
         remap_notices: remap_tx,
         monitors: Vec::new(),
-        placed: HashMap::new(),
-        tweens: HashMap::new(),
-        moving: HashSet::new(),
-        resizing: HashSet::new(),
-        pending_show: HashMap::new(),
-        pending_hide: HashMap::new(),
+        tracked: HashMap::new(),
         ignored: HashSet::new(),
         bordered: None,
-        undecorated: HashMap::new(),
-        decoration_rules: HashMap::new(),
         subscribers: Vec::new(),
         published: Published::default(),
         saved_restore: Restore::default(),
-        forced: HashMap::new(),
         lock_taken: false,
         lock_grant_requested: false,
         relock_at: None,
@@ -382,6 +331,21 @@ pub async fn run(
 }
 
 impl Daemon {
+    /// The daemon's state for the window `id`, made empty if there is none yet.
+    fn track(&mut self, id: WindowId) -> &mut Tracked {
+        self.tracked.entry(id).or_default()
+    }
+
+    /// Whether the user is moving or resizing `id` with the mouse.
+    fn is_moving(&self, id: WindowId) -> bool {
+        self.tracked.get(&id).is_some_and(|t| t.moving)
+    }
+
+    /// Whether `id` is placed with force, past its app's minimum size.
+    fn is_forced(&self, id: WindowId) -> bool {
+        self.tracked.get(&id).is_some_and(|t| t.forced.is_some())
+    }
+
     async fn event_loop(&mut self, mut rx: Receivers) {
         let mut sweep = interval(Duration::from_secs(2));
         sweep.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -389,7 +353,12 @@ impl Daemon {
 
         while !self.quit {
             // The movers draw animations themselves; the daemon only retires them when done.
-            let animation_end = self.tweens.values().map(|t| t.animation.end()).min();
+            let animation_end = self
+                .tracked
+                .values()
+                .filter_map(|t| t.tween.as_ref())
+                .map(|t| t.animation.end())
+                .min();
             let animations = async {
                 match animation_end {
                     Some(at) => sleep_until(Instant::from_std(at)).await,
@@ -479,7 +448,11 @@ impl Daemon {
                 }
                 () = animations => {
                     let now = std::time::Instant::now();
-                    self.tweens.retain(|_, t| t.animation.end() > now);
+                    for tracked in self.tracked.values_mut() {
+                        if tracked.tween.as_ref().is_some_and(|t| t.animation.end() <= now) {
+                            tracked.tween = None;
+                        }
+                    }
                 }
                 _ = sweep.tick() => self.sweep(),
                 _ = tokio::signal::ctrl_c() => self.quit = true,
