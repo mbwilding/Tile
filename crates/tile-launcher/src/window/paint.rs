@@ -2,8 +2,7 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use tile_config::Color;
-use tile_platform::{colorref, make_font, mix, scale};
+use tile_platform::{colorref, fill_round, make_font, mix, scale, text};
 use tile_shell::{Icon, notify::IconImage};
 use winsafe::{self as w, co, guard::DeleteObjectGuard};
 
@@ -142,38 +141,6 @@ impl IconCache {
 pub(super) struct Resources {
     fonts: FontCache,
     pub(super) icons: IconCache,
-}
-
-fn fill_round(dc: &w::HDC, bounds: w::RECT, radius: i32, color: Color) -> w::SysResult<()> {
-    let brush = w::HBRUSH::CreateSolidBrush(colorref(color))?;
-    let pen = w::HPEN::GetStockObject(co::STOCK_PEN::NULL)?;
-    let _brush = dc.SelectObject(&*brush)?;
-    let _pen = dc.SelectObject(&pen)?;
-    // RoundRect leaves out the bottom and right edges with a null pen.
-    let bounds = w::RECT {
-        right: bounds.right + 1,
-        bottom: bounds.bottom + 1,
-        ..bounds
-    };
-    dc.RoundRect(bounds, w::SIZE::with(radius, radius))
-}
-
-fn text(
-    dc: &w::HDC,
-    font: &w::HFONT,
-    color: Color,
-    s: &str,
-    mut bounds: w::RECT,
-    flags: co::DT,
-) -> w::SysResult<()> {
-    let _font = dc.SelectObject(font)?;
-    dc.SetTextColor(colorref(color))?;
-    dc.DrawText(
-        s,
-        &mut bounds,
-        flags | co::DT::SINGLELINE | co::DT::NOPREFIX | co::DT::END_ELLIPSIS,
-    )?;
-    Ok(())
 }
 
 /// Draws the whole launcher into `dc`, whose size is `client`.

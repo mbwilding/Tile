@@ -30,8 +30,9 @@ pub use click_to_do::{click_to_do_available, click_to_do_disabled, disable_click
 pub use drag::{DragEvent, WinDrag};
 pub use events::{WinEvent, WinEventHooks};
 pub use gui::{
-    Mailbox, WindowThread, colorref, corner_preference, init_com, make_font, mix, paint_buffered,
-    scale, set_alpha, style_popup,
+    Mailbox, WindowThread, colorref, corner_preference, fill_round, fill_round_bordered, init_com,
+    make_font, mix, paint_buffered, scale, set_alpha, set_transparent, style_popup, text,
+    text_wrapped,
 };
 pub use hotkeys::{HotkeyEvent, Hotkeys};
 pub use indicator::{Indicator, IndicatorSettings};
