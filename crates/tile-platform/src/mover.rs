@@ -11,16 +11,9 @@ use tile_core::{
     Rect,
     animation::{Bezier, lerp_rect},
 };
-use winsafe::{self as w, co, prelude::Handle as _};
+use winsafe as w;
 
-/// Space between a window's outer rect and its visible frame (shadows / resize borders).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct Insets {
-    pub left: i32,
-    pub top: i32,
-    pub right: i32,
-    pub bottom: i32,
-}
+use crate::frame::{Insets, Placement, set_frame};
 
 /// One window's move from `from` to `to` (visible frames) over `duration`.
 #[derive(Debug, Clone, Copy)]
@@ -143,49 +136,12 @@ fn run(hwnd: &w::HWND, shared: &Shared) {
 
 /// Applies one frame and waits until the app has painted it. `settled` marks the last one.
 fn draw(hwnd: &w::HWND, visible: Rect, animation: &Animation, settled: bool) {
-    let i = animation.insets;
-    let pos = (visible.x - i.left, visible.y - i.top);
-    let size = (visible.w + i.left + i.right, visible.h + i.top + i.bottom);
-    let mut flags = co::SWP::NOZORDER | co::SWP::NOACTIVATE | co::SWP::NOOWNERZORDER;
-    if animation.force {
-        flags |= co::SWP::NOSENDCHANGING;
-    }
-    let resizing = hwnd
-        .GetWindowRect()
-        .is_ok_and(|r| (r.right - r.left, r.bottom - r.top) != size);
-    if resizing || settled {
-        // Discard the old pixels so nothing stale shows in newly uncovered space.
-        flags |= co::SWP::NOCOPYBITS;
-    }
-    if settled {
-        flags |= co::SWP::FRAMECHANGED;
-    }
-    let point = w::POINT::with(pos.0, pos.1);
-    let extent = w::SIZE::with(size.0, size.1);
-    let (cx, cy) = visible.center();
-    let destination =
-        w::HMONITOR::MonitorFromPoint(w::POINT::with(cx, cy), co::MONITOR::DEFAULTTONEAREST);
-    let crossing = hwnd.MonitorFromWindow(co::MONITOR::DEFAULTTONEAREST) != destination;
-    // Synchronous: returns once the app has processed its new size.
-    if let Err(e) = hwnd.SetWindowPos(w::HwndPlace::None, point, extent, flags) {
-        tracing::debug!("mover: SetWindowPos failed: {e}");
-        return;
-    }
-    if crossing {
-        // Crossing monitors with different DPI makes apps rescale themselves; apply twice.
-        let _ = hwnd.SetWindowPos(w::HwndPlace::None, point, extent, flags);
-    }
-    // Paint now and wait for it: returns once the app and its children handled WM_PAINT.
-    let everything = w::RECT {
-        left: 0,
-        top: 0,
-        right: i32::from(i16::MAX),
-        bottom: i32::from(i16::MAX),
+    let how = Placement {
+        force: animation.force,
+        settled,
+        sync: true,
     };
-    let mut redraw =
-        co::RDW::INVALIDATE | co::RDW::ERASE | co::RDW::ALLCHILDREN | co::RDW::UPDATENOW;
-    if settled {
-        redraw |= co::RDW::FRAME;
+    if let Err(e) = set_frame(hwnd, visible, animation.insets, how) {
+        tracing::debug!("mover: SetWindowPos failed: {e}");
     }
-    let _ = hwnd.RedrawWindow(everything, &w::HRGN::NULL, redraw);
 }

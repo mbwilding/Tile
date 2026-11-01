@@ -10,7 +10,11 @@ use winsafe::{
     },
 };
 
-use crate::{gui::init_com, monitors::rect, mover::Insets};
+use crate::{
+    frame::{Insets, Placement, set_frame},
+    gui::init_com,
+    monitors::rect,
+};
 
 /// A window that passed the manageability checks.
 #[derive(Debug, Clone)]
@@ -345,10 +349,10 @@ impl Windows {
 
     /// The window's invisible borders, for animating it with a [`Mover`](crate::Mover).
     pub fn insets_of(&mut self, id: WindowId) -> Option<Insets> {
-        let hwnd = self.handles.remove(&id)?;
-        let insets = self.insets(id, &hwnd);
-        self.handles.insert(id, hwnd);
-        Some(insets)
+        let Self {
+            handles, insets, ..
+        } = self;
+        Some(measure_insets(insets, id, handles.get(&id)?))
     }
 
     pub fn is_alive(&self, id: WindowId) -> bool {
@@ -360,27 +364,6 @@ impl Windows {
         self.handles
             .get(&id)
             .is_some_and(|h| h.IsWindowVisible() && !is_cloaked(h))
-    }
-
-    fn insets(&mut self, id: WindowId, hwnd: &w::HWND) -> Insets {
-        // Hidden windows report bogus frame bounds, so remember the last good measurement.
-        if hwnd.IsWindowVisible()
-            && let (Ok(outer), Some(frame)) = (hwnd.GetWindowRect(), frame_of(hwnd))
-        {
-            let measured = Insets {
-                left: frame.x - outer.left,
-                top: frame.y - outer.top,
-                right: outer.right - frame.right(),
-                bottom: outer.bottom - frame.bottom(),
-            };
-            let plausible = [measured.left, measured.top, measured.right, measured.bottom]
-                .iter()
-                .all(|v| (0..=64).contains(v));
-            if plausible {
-                self.insets.insert(id, measured);
-            }
-        }
-        self.insets.get(&id).copied().unwrap_or_default()
     }
 
     /// Moves a window so its visible frame covers `target`.
@@ -398,57 +381,20 @@ impl Windows {
         force: bool,
         settled: bool,
     ) -> Result<(), PlaceError> {
-        let Some(hwnd) = self.handles.get(&id) else {
-            return Err(PlaceError::Gone);
-        };
+        let Self {
+            handles, insets, ..
+        } = self;
+        let hwnd = handles.get(&id).ok_or(PlaceError::Gone)?;
         if hwnd.IsZoomed() {
             let _ = hwnd.ShowWindowAsync(co::SW::RESTORE);
         }
-        let hwnd = self.handles.remove(&id).ok_or(PlaceError::Gone)?;
-        let insets = self.insets(id, &hwnd);
-        let pos = w::POINT::with(target.x - insets.left, target.y - insets.top);
-        let size = w::SIZE::with(
-            target.w + insets.left + insets.right,
-            target.h + insets.top + insets.bottom,
-        );
-        let mut flags = co::SWP::NOZORDER
-            | co::SWP::NOACTIVATE
-            | co::SWP::NOOWNERZORDER
-            | co::SWP::ASYNCWINDOWPOS;
-        if force {
-            flags |= co::SWP::NOSENDCHANGING;
-        }
-        let resizing = hwnd
-            .GetWindowRect()
-            .is_ok_and(|r| (r.right - r.left, r.bottom - r.top) != (size.cx, size.cy));
-        if resizing || settled {
-            flags |= co::SWP::NOCOPYBITS;
-        }
-        if settled {
-            flags |= co::SWP::FRAMECHANGED;
-        }
-        let (cx, cy) = target.center();
-        let current = hwnd.MonitorFromWindow(co::MONITOR::DEFAULTTONEAREST);
-        let destination =
-            w::HMONITOR::MonitorFromPoint(w::POINT::with(cx, cy), co::MONITOR::DEFAULTTONEAREST);
-        let mut result = hwnd.SetWindowPos(w::HwndPlace::None, pos, size, flags);
-        if result.is_ok() && current != destination {
-            // Crossing monitors with different DPI makes apps rescale themselves; apply twice.
-            result = hwnd.SetWindowPos(w::HwndPlace::None, pos, size, flags);
-        }
-        if result.is_ok() && settled {
-            let everything = w::RECT {
-                left: 0,
-                top: 0,
-                right: i32::from(i16::MAX),
-                bottom: i32::from(i16::MAX),
-            };
-            let flags =
-                co::RDW::INVALIDATE | co::RDW::ERASE | co::RDW::FRAME | co::RDW::ALLCHILDREN;
-            let _ = hwnd.RedrawWindow(everything, &w::HRGN::NULL, flags);
-        }
-        self.handles.insert(id, hwnd);
-        result.map_err(|e| match e {
+        let insets = measure_insets(insets, id, hwnd);
+        let how = Placement {
+            force,
+            settled,
+            sync: false,
+        };
+        set_frame(hwnd, target, insets, how).map_err(|e| match e {
             co::ERROR::ACCESS_DENIED => PlaceError::AccessDenied,
             co::ERROR::INVALID_WINDOW_HANDLE => PlaceError::Gone,
             other => PlaceError::Other(other),
@@ -523,6 +469,28 @@ impl Windows {
             _ => None,
         }
     }
+}
+
+/// The invisible borders of `hwnd`, measured while it is visible and otherwise the last good
+/// measurement in `saved`: hidden windows report bogus frame bounds.
+fn measure_insets(saved: &mut HashMap<WindowId, Insets>, id: WindowId, hwnd: &w::HWND) -> Insets {
+    if hwnd.IsWindowVisible()
+        && let (Ok(outer), Some(frame)) = (hwnd.GetWindowRect(), frame_of(hwnd))
+    {
+        let measured = Insets {
+            left: frame.x - outer.left,
+            top: frame.y - outer.top,
+            right: outer.right - frame.right(),
+            bottom: outer.bottom - frame.bottom(),
+        };
+        let plausible = [measured.left, measured.top, measured.right, measured.bottom]
+            .iter()
+            .all(|v| (0..=64).contains(v));
+        if plausible {
+            saved.insert(id, measured);
+        }
+    }
+    saved.get(&id).copied().unwrap_or_default()
 }
 
 /// Adds or removes the title bar (`WS_CAPTION`). Returns whether the style changed.
