@@ -63,19 +63,19 @@ pub(crate) fn delete_value_in(root: &w::HKEY, key: &str, name: &str) -> io::Resu
 mod tests {
     use super::*;
 
-    const KEY: &str = r"Software\Tile\Tests";
-
     #[test]
     fn values_round_trip_and_delete_twice() {
-        let name = format!("registry-{}", std::process::id());
-        set_dword(KEY, &name, 7).unwrap();
-        assert_eq!(dword(KEY, &name), Some(7));
-        assert_eq!(sz(KEY, &name), None);
-        set_sz(KEY, &name, "seven").unwrap();
-        assert_eq!(sz(KEY, &name).as_deref(), Some("seven"));
-        delete_value(KEY, &name).unwrap();
-        delete_value(KEY, &name).unwrap();
-        assert_eq!(sz(KEY, &name), None);
-        delete_value(r"Software\Tile\NoSuchKey", &name).unwrap();
+        let key = &format!(r"Software\Tile\Tests-{}", std::process::id());
+        let name = "value";
+        set_dword(key, name, 7).unwrap();
+        assert_eq!(dword(key, name), Some(7));
+        assert_eq!(sz(key, name), None);
+        set_sz(key, name, "seven").unwrap();
+        assert_eq!(sz(key, name).as_deref(), Some("seven"));
+        delete_value(key, name).unwrap();
+        delete_value(key, name).unwrap();
+        assert_eq!(sz(key, name), None);
+        delete_value(r"Software\Tile\NoSuchKey", name).unwrap();
+        w::HKEY::CURRENT_USER.RegDeleteKey(key).unwrap();
     }
 }
