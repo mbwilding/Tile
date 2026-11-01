@@ -311,10 +311,6 @@ impl Windows {
         self.handles.get(&id).is_some_and(w::HWND::IsWindow)
     }
 
-    pub fn is_minimized(&self, id: WindowId) -> bool {
-        self.handles.get(&id).is_some_and(w::HWND::IsIconic)
-    }
-
     /// Whether the window is still visible to the user (not hidden or cloaked by its app).
     pub fn is_visible(&self, id: WindowId) -> bool {
         self.handles

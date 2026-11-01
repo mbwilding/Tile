@@ -50,14 +50,12 @@ impl FromStr for Keybind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut modifiers = Modifiers::default();
-        let parts: Vec<&str> = s.split('+').map(str::trim).collect();
-        let Some((key, mods)) = parts.split_last() else {
-            return Err("empty keybind".into());
-        };
+        let mut parts = s.split('+').map(str::trim);
+        let key = parts.next_back().unwrap_or_default();
         if key.is_empty() {
             return Err("missing key".into());
         }
-        for m in mods {
+        for m in parts {
             match m.to_ascii_lowercase().as_str() {
                 "super" | "win" | "mod4" | "meta" => modifiers.super_key = true,
                 "shift" => modifiers.shift = true,
