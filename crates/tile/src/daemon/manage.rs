@@ -47,7 +47,7 @@ impl Daemon {
             self.windows
                 .set_border(found.id, Some(self.loaded.config.border_inactive()));
         }
-        let desktop = vd::desktop_of(found.id.0).unwrap_or_else(|| self.desktops.current_id());
+        let desktop = vd::desktop_of(found.id).unwrap_or_else(|| self.desktops.current_id());
         let options = ManageOptions {
             floating: outcome.float.unwrap_or(found.floating_hint),
             workspace: outcome.workspace,
@@ -60,13 +60,13 @@ impl Daemon {
         self.desktops.open(desktop, found.id, found.info, options)
     }
 
-    pub(super) fn try_manage(&mut self, raw: isize) {
-        if self.ignored.contains(&WindowId(raw)) {
+    pub(super) fn try_manage(&mut self, id: WindowId) {
+        if self.ignored.contains(&id) {
             return;
         }
-        if let Some(found) = self.windows.discover(raw) {
+        if let Some(found) = self.windows.discover(id) {
             // Windows shown on every desktop float above the tiling.
-            if vd::is_pinned(raw) {
+            if vd::is_pinned(id) {
                 self.windows.forget(found.id);
                 return;
             }
@@ -101,17 +101,17 @@ impl Daemon {
 
     /// Re-homes a window after it was moved to another native desktop or (un)pinned.
     pub(super) fn check_desktop(&mut self, id: WindowId) {
-        if vd::is_pinned(id.0) {
+        if vd::is_pinned(id) {
             if self.desktops.is_managed(id) {
                 self.unmanage(id);
             }
             return;
         }
-        let Some(desktop) = vd::desktop_of(id.0) else {
+        let Some(desktop) = vd::desktop_of(id) else {
             return;
         };
         match self.desktops.owner(id) {
-            None => self.try_manage(id.0),
+            None => self.try_manage(id),
             Some(owner) if owner != desktop => self.migrate(id, desktop),
             Some(_) => {}
         }
@@ -148,8 +148,8 @@ impl Daemon {
         self.apply(effects);
         // Windows on this desktop we haven't seen yet (e.g. created while it was hidden).
         self.discover_existing();
-        if let Some(raw) = foreground() {
-            self.on_foreground(raw);
+        if let Some(id) = foreground() {
+            self.on_foreground(id);
         }
     }
 
@@ -159,7 +159,7 @@ impl Daemon {
         }
         match change {
             DesktopChange::Switched(desktop) => self.switch_desktop(desktop),
-            DesktopChange::Window(raw) => self.check_desktop(WindowId(raw)),
+            DesktopChange::Window(id) => self.check_desktop(id),
             DesktopChange::Changed => {
                 // A removed desktop's windows move to its neighbour.
                 for id in self.desktops.managed() {

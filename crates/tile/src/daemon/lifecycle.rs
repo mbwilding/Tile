@@ -1,15 +1,12 @@
 //! Turning the window manager and the remapper on and off, reloading and pausing.
 
-use tile_config::Loaded;
-use tile_core::Desktops;
-use tile_platform::desktops as vd;
-
-use super::{Daemon, indicator_settings, launcher_settings};
+use super::{Daemon, fresh_desktops, indicator_settings, launcher_settings};
 use crate::{
     logging,
     remap::{self, Remap},
     settings,
 };
+use tile_config::Loaded;
 
 impl Daemon {
     /// Shows the windows we hid and undoes our borders and title bar changes.
@@ -31,12 +28,7 @@ impl Daemon {
     /// windows that are open.
     pub(super) fn start_tiling(&mut self) {
         self.tiling = true;
-        let config = &self.loaded.config;
-        self.desktops = Desktops::new(
-            vd::current_desktop().unwrap_or_default(),
-            config.layout_settings(),
-            config.general.layout,
-        );
+        self.desktops = fresh_desktops(&self.loaded);
         self.update_lock_override();
         self.switch_off_click_to_do();
         self.install_binds();
@@ -62,12 +54,7 @@ impl Daemon {
 
     /// Forgets every window and monitor, as if no window had been managed yet.
     pub(super) fn reset_state(&mut self) {
-        let config = &self.loaded.config;
-        self.desktops = Desktops::new(
-            vd::current_desktop().unwrap_or_default(),
-            config.layout_settings(),
-            config.general.layout,
-        );
+        self.desktops = fresh_desktops(&self.loaded);
         self.monitors.clear();
         self.placed.clear();
         self.tweens.clear();

@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use tile_core::WindowId;
 use tile_input::{Decision, MouseEvent, MouseHandler, MouseHook};
 use tokio::sync::mpsc;
 use winsafe::{self as w, co};
@@ -17,12 +18,16 @@ use crate::{hotkeys::WIN_USED, windows::is_shell_window};
 /// itself, so the daemon only needs to know when to keep its hands off and where it was dropped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DragEvent {
-    /// Pressed over the top-level window `window`.
+    /// Pressed over a top-level window, which the hook now moves.
     Start {
-        window: isize,
+        /// The window being dragged.
+        window: WindowId,
     },
+    /// Released at a point on the screen, which is where the window was dropped.
     End {
+        /// The pointer's x in physical screen pixels.
         x: i32,
+        /// The pointer's y in physical screen pixels.
         y: i32,
     },
 }
@@ -97,7 +102,9 @@ impl Dragger {
         WIN_USED.store(true, Ordering::Relaxed);
         // Stops Win's release opening the Start menu.
         tile_input::tap_silent();
-        let _ = self.tx.send(DragEvent::Start { window: raw });
+        let _ = self.tx.send(DragEvent::Start {
+            window: WindowId(raw),
+        });
         Decision::Block
     }
 }
@@ -134,6 +141,8 @@ impl MouseHandler for Dragger {
 }
 
 impl WinDrag {
+    /// Installs the mouse hook, which reports drags to `tx`. It starts disabled; see
+    /// [`WinDrag::set_enabled`].
     pub fn start(tx: mpsc::UnboundedSender<DragEvent>) -> io::Result<Self> {
         let enabled = Arc::new(AtomicBool::new(false));
         let shared = enabled.clone();

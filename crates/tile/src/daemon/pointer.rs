@@ -1,6 +1,5 @@
 //! Hiding the pointer while typing, and the Win+drag mouse hook.
 
-use tile_core::WindowId;
 use tile_platform::{DragEvent, cursor_pos, mouse_button_down};
 use tokio::time::Instant;
 
@@ -36,8 +35,7 @@ impl Daemon {
     /// moves, and re-tiled where it is dropped.
     pub(super) fn on_drag(&mut self, event: DragEvent) {
         match event {
-            DragEvent::Start { window } => {
-                let id = WindowId(window);
+            DragEvent::Start { window: id } => {
                 if !self.desktops.is_managed(id) || self.desktops.is_hidden(id) {
                     return;
                 }

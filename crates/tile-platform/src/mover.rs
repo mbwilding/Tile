@@ -8,7 +8,7 @@ use std::{
 };
 
 use tile_core::{
-    Rect,
+    Rect, WindowId,
     animation::{Bezier, lerp_rect},
 };
 use winsafe as w;
@@ -67,9 +67,9 @@ pub struct Mover {
 }
 
 impl Mover {
-    /// Starts a mover for the top-level window with this handle value.
-    pub fn spawn(raw: isize) -> Option<Self> {
-        let hwnd = tile_sys::hwnd(raw)?;
+    /// Starts a mover for the top-level window `id`, or `None` if it has gone.
+    pub fn spawn(id: WindowId) -> Option<Self> {
+        let hwnd = tile_sys::hwnd(id.0)?;
         let shared = Arc::new(Shared::default());
         let worker = shared.clone();
         thread::Builder::new()

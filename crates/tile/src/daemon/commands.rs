@@ -94,14 +94,13 @@ impl Daemon {
             .file_name()
             .map(|n| n.to_string_lossy().into_owned());
         if let Some(exe) = exe {
-            let current = self.desktops.current_id();
             let focused = self.focused();
             let mut matches: Vec<WindowId> = self
                 .desktops
                 .managed()
                 .into_iter()
                 .filter(|id| {
-                    self.desktops.owner(*id) == Some(current)
+                    self.desktops.is_current(*id)
                         && self
                             .windows
                             .info(*id)
@@ -148,13 +147,13 @@ impl Daemon {
             _ if self.paused || !self.tiling => {}
             Command::MoveToDesktop(target) => {
                 if let Some(id) = self.focused() {
-                    vd::move_to_desktop(id.0, target);
+                    vd::move_to_desktop(id, target);
                     self.check_desktop(id);
                 }
             }
             Command::Pin => {
                 if let Some(id) = self.focused() {
-                    vd::toggle_pin(id.0);
+                    vd::toggle_pin(id);
                     self.check_desktop(id);
                 }
             }
