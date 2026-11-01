@@ -18,11 +18,17 @@ use crate::frame::{Insets, Placement, set_frame};
 /// One window's move from `from` to `to` (visible frames) over `duration`.
 #[derive(Debug, Clone, Copy)]
 pub struct Animation {
+    /// Where the visible frame starts.
     pub from: Rect,
+    /// Where it ends.
     pub to: Rect,
+    /// When the move started.
     pub start: Instant,
+    /// How long it takes.
     pub duration: Duration,
+    /// How it eases from `from` to `to`.
     pub curve: Bezier,
+    /// The window's invisible borders, from [`Windows::insets_of`](crate::Windows::insets_of).
     pub insets: Insets,
     /// Skip `WM_WINDOWPOSCHANGING` so app minimum sizes can't refuse it.
     pub force: bool,
@@ -43,6 +49,7 @@ impl Animation {
         }
     }
 
+    /// When the animation finishes.
     pub fn end(&self) -> Instant {
         self.start + self.duration
     }

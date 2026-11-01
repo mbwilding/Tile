@@ -201,6 +201,7 @@ impl Hotkeys {
         }
     }
 
+    /// Pauses the binds, all but those marked to work while paused (or resumes them).
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
     }
