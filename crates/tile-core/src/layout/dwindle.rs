@@ -1,11 +1,8 @@
-use super::{Layout, LayoutSettings, Tile};
+use super::{Layout, LayoutSettings, Tile, clamp_ratio};
 use crate::{
     WindowId,
     geometry::{Axis, Rect, ratio_of},
 };
-
-const MIN_RATIO: f32 = 0.1;
-const MAX_RATIO: f32 = 0.9;
 
 /// Dwindle: a binary tree where each new window splits the focused one.
 #[derive(Debug, Clone, Default)]
@@ -31,6 +28,13 @@ enum Search {
 }
 
 impl Node {
+    /// The axis a split divides `rect` along (`None` follows its shape), and its two parts.
+    fn child_rects(axis: Option<Axis>, ratio: f32, rect: Rect, gap: i32) -> (Axis, Rect, Rect) {
+        let axis = axis.unwrap_or_else(|| Axis::for_rect(&rect));
+        let (a, b) = rect.split(axis, ratio, gap);
+        (axis, a, b)
+    }
+
     fn leaves(&self, out: &mut Vec<WindowId>) {
         match self {
             Self::Leaf(id) => out.push(*id),
@@ -105,8 +109,7 @@ impl Node {
                 ratio,
                 children,
             } => {
-                let axis = axis.unwrap_or_else(|| Axis::for_rect(&rect));
-                let (a, b) = rect.split(axis, *ratio, gap);
+                let (_, a, b) = Self::child_rects(*axis, *ratio, rect, gap);
                 children[0].arrange(a, gap, out);
                 children[1].arrange(b, gap, out);
             }
@@ -126,12 +129,11 @@ impl Node {
         else {
             return false;
         };
-        let effective = axis.unwrap_or_else(|| Axis::for_rect(&rect));
+        let (effective, ra, rb) = Self::child_rects(*axis, *ratio, rect, gap);
         if children.iter().any(|c| c.is_leaf(id)) {
             *axis = Some(effective.flip());
             return true;
         }
-        let (ra, rb) = rect.split(effective, *ratio, gap);
         let [a, b] = children.as_mut();
         a.toggle_split(id, ra, gap) || b.toggle_split(id, rb, gap)
     }
@@ -146,8 +148,7 @@ impl Node {
                 ratio,
                 children,
             } => {
-                let effective = axis.unwrap_or_else(|| Axis::for_rect(&rect));
-                let (ra, rb) = rect.split(effective, *ratio, gap);
+                let (effective, ra, rb) = Self::child_rects(*axis, *ratio, rect, gap);
                 let [a, b] = children.as_mut();
                 let (result, first) = match a.resize(id, ra, gap, along, delta) {
                     Search::Missing => (b.resize(id, rb, gap, along, delta), false),
@@ -155,13 +156,9 @@ impl Node {
                 };
                 match result {
                     Search::Found if effective == along => {
-                        let length = match along {
-                            Axis::Horizontal => rect.w,
-                            Axis::Vertical => rect.h,
-                        };
-                        let change = ratio_of(delta, length);
+                        let change = ratio_of(delta, rect.length(along));
                         let signed = if first { change } else { -change };
-                        *ratio = (*ratio + signed).clamp(MIN_RATIO, MAX_RATIO);
+                        *ratio = clamp_ratio(*ratio + signed);
                         Search::Handled
                     }
                     other => other,
@@ -172,9 +169,10 @@ impl Node {
 }
 
 impl Dwindle {
+    /// Flips the direction of the split `id` is part of. `area` is the tiling area.
     pub fn toggle_split(&mut self, id: WindowId, area: Rect, s: &LayoutSettings) {
         if let Some(root) = &mut self.root {
-            root.toggle_split(id, area.shrink(s.gaps_out), s.gaps_in);
+            root.toggle_split(id, area, s.gaps_in);
         }
     }
 
@@ -227,7 +225,7 @@ impl Layout for Dwindle {
     fn arrange(&mut self, area: Rect, _focused: Option<WindowId>, s: &LayoutSettings) -> Vec<Tile> {
         let mut out = Vec::new();
         if let Some(root) = &self.root {
-            root.arrange(area.shrink(s.gaps_out), s.gaps_in, &mut out);
+            root.arrange(area, s.gaps_in, &mut out);
         }
         out
     }
@@ -248,12 +246,11 @@ impl Layout for Dwindle {
 
     fn resize(&mut self, id: WindowId, dx: i32, dy: i32, area: Rect, s: &LayoutSettings) {
         let Some(root) = &mut self.root else { return };
-        let rect = area.shrink(s.gaps_out);
         if dx != 0 {
-            root.resize(id, rect, s.gaps_in, Axis::Horizontal, dx);
+            root.resize(id, area, s.gaps_in, Axis::Horizontal, dx);
         }
         if dy != 0 {
-            root.resize(id, rect, s.gaps_in, Axis::Vertical, dy);
+            root.resize(id, area, s.gaps_in, Axis::Vertical, dy);
         }
     }
 }

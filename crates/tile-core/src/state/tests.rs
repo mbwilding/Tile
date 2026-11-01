@@ -262,10 +262,12 @@ fn scrolling_hides_offscreen_columns() {
     s.apply(&Command::Layout(LayoutKind::Scrolling));
     open(&mut s, W);
     open(&mut s, X);
-    let effects = open(&mut s, Y);
+    open(&mut s, Y);
+    let effects = open(&mut s, WindowId(4));
     assert!(effects.contains(&Effect::Hide(W)));
-    let effects = s.apply(&Command::MoveFocus(Direction::Left));
-    let effects = [effects, s.apply(&Command::MoveFocus(Direction::Left))].concat();
+    let effects = (0..3)
+        .flat_map(|_| s.apply(&Command::MoveFocus(Direction::Left)))
+        .collect::<Vec<_>>();
     assert!(effects.contains(&Effect::Show(W)));
     assert_eq!(s.focused(), Some(W));
 }
