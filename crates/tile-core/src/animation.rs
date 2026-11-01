@@ -3,13 +3,18 @@ use crate::geometry::Rect;
 /// A CSS-style cubic bezier easing curve through (0,0), (x1,y1), (x2,y2), (1,1).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bezier {
+    /// The first control point's x.
     pub x1: f32,
+    /// The first control point's y.
     pub y1: f32,
+    /// The second control point's x.
     pub x2: f32,
+    /// The second control point's y.
     pub y2: f32,
 }
 
 impl Bezier {
+    /// The curve with control points (x1,y1) and (x2,y2).
     pub const fn new(x1: f32, y1: f32, x2: f32, y2: f32) -> Self {
         Self { x1, y1, x2, y2 }
     }

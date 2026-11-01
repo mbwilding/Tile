@@ -7,21 +7,34 @@ use tile_core::{LayoutKind, LayoutSettings, animation::Bezier, layout::CenterMod
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// `general:`, the window manager's main switches.
     pub general: General,
+    /// `theme:`, colours and font shared by everything Tile draws.
     pub theme: Theme,
+    /// `cursor:`, the mouse pointer.
     pub cursor: Cursor,
+    /// `tray:`, the tray's switches.
     pub tray: Tray,
+    /// `shell:`, Tile as the Windows shell.
     pub shell: Shell,
+    /// `animations:`, for windows moving and resizing.
     pub animations: Animations,
+    /// `dwindle:`, the dwindle layout.
     pub dwindle: Dwindle,
+    /// `master:`, the master layout.
     pub master: Master,
+    /// `scrolling:`, the scrolling layout.
     pub scrolling: Scrolling,
+    /// `remap:`, the key remapper's layers.
     pub remap: Remap,
+    /// `launcher:`, the app launcher.
     pub launcher: Launcher,
+    /// `workspace_indicator:`, the workspace number that flashes up.
     pub workspace_indicator: WorkspaceIndicator,
     /// `super+shift+q: killactive`, added to (or overriding) the default binds unless
     /// `general.default_binds` is off. An empty value unbinds a default.
     pub binds: BTreeMap<String, Option<String>>,
+    /// Window rules, applied in order.
     pub rules: Vec<Rule>,
 }
 
@@ -138,6 +151,7 @@ impl Default for Config {
 }
 
 impl Config {
+    /// The layout settings, with every value within its limits.
     pub fn layout_settings(&self) -> LayoutSettings {
         LayoutSettings {
             gaps_in: self.general.gaps_in,
@@ -196,7 +210,9 @@ impl Config {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Theme {
+    /// The font family.
     pub font: String,
+    /// Window corner rounding.
     pub corners: Corners,
     /// The launcher's window.
     pub background: Color,
@@ -231,25 +247,38 @@ impl Default for Theme {
 /// The launcher's font, corners and colours, resolved against `theme`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LauncherStyle {
+    /// The font family.
     pub font: String,
+    /// Window corner rounding.
     pub corners: Corners,
+    /// The window.
     pub background: Color,
+    /// The window's outline.
     pub border: Color,
+    /// Text.
     pub foreground: Color,
+    /// Secondary text.
     pub dimmed: Color,
+    /// The selected row.
     pub selected: Color,
+    /// Text on the selected row.
     pub selected_foreground: Color,
 }
 
 /// The workspace indicator's font, corners and colours, resolved against `theme`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndicatorStyle {
+    /// The font family.
     pub font: String,
+    /// Corner rounding.
     pub corners: Corners,
+    /// The square.
     pub background: Color,
+    /// The workspace number.
     pub foreground: Color,
 }
 
+/// The window manager's main switches.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct General {
@@ -266,12 +295,15 @@ pub struct General {
     /// Each monitor has workspaces of its own, so `workspace 2` means workspace 2 on the
     /// monitor you are on. Off, the monitors are synced: switching workspace switches them all.
     pub independent_workspaces: bool,
+    /// The layout new workspaces start with (portrait monitors use `even`).
     pub layout: LayoutKind,
+    /// Draw a coloured border around tiled windows (Windows 11).
     pub borders: bool,
     /// Unset follows `theme.accent`.
     pub border_active: Option<Color>,
     /// Unset follows `theme.inactive`.
     pub border_inactive: Option<Color>,
+    /// Focus windows as they open.
     pub focus_new_windows: bool,
     /// Keep title bars on tiled windows.
     pub decorations: bool,
@@ -364,11 +396,15 @@ impl Default for Cursor {
     }
 }
 
+/// Easing for windows moving and resizing.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Animations {
+    /// Animate at all.
     pub enabled: bool,
+    /// How long a move or resize takes, in milliseconds.
     pub duration_ms: u64,
+    /// The cubic bezier's control points, `[x1, y1, x2, y2]`.
     pub bezier: [f32; 4],
 }
 
@@ -383,15 +419,18 @@ impl Default for Animations {
 }
 
 impl Animations {
+    /// The easing curve.
     pub const fn curve(&self) -> Bezier {
         let [x1, y1, x2, y2] = self.bezier;
         Bezier::new(x1, y1, x2, y2)
     }
 }
 
+/// The dwindle layout.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Dwindle {
+    /// The share of a new split given to the window that was there, from 0.1 to 0.9.
     pub split_ratio: f32,
 }
 
@@ -403,11 +442,15 @@ impl Default for Dwindle {
     }
 }
 
+/// The master layout.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Master {
+    /// The master column's share of the width, from 0.1 to 0.9.
     pub mfact: f32,
+    /// How many windows share the master column, at least 1.
     pub count: usize,
+    /// New windows become the master instead of joining the stack.
     pub new_is_master: bool,
 }
 
@@ -421,11 +464,15 @@ impl Default for Master {
     }
 }
 
+/// The scrolling layout.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Scrolling {
+    /// A new column's share of the width, from 0.1 to 1.0.
     pub proportion: f32,
+    /// The column widths `cycleproportion` steps through.
     pub proportion_presets: Vec<f32>,
+    /// When the focused column is centred.
     pub center_focused: CenterMode,
 }
 
@@ -448,6 +495,7 @@ pub struct Remap {
     /// Tap a dummy key before a layer's lone Alt or Win is released, so it doesn't open a menu
     /// or Start (the modifier guard).
     pub modifier_guard: bool,
+    /// Each layer, by name, mapping key names to actions.
     pub layers: BTreeMap<String, BTreeMap<String, String>>,
 }
 
@@ -470,11 +518,13 @@ pub struct Launcher {
     /// The most result rows shown at once. The window is as tall as its content, up to this;
     /// more results scroll.
     pub max_visible: usize,
+    /// Where the search box sits.
     pub search_position: SearchPosition,
     /// Show each app's icon.
     pub show_icons: bool,
     /// Shorter rows, without the app id under the name.
     pub compact: bool,
+    /// The most results listed.
     pub max_results: usize,
     /// Remember launches, for `sort_by_usage`.
     pub track_usage: bool,
@@ -582,8 +632,10 @@ impl Default for Launcher {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SearchPosition {
+    /// Above the results.
     #[default]
     Top,
+    /// Below the results.
     Bottom,
 }
 
@@ -592,7 +644,9 @@ pub enum SearchPosition {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorkspaceIndicator {
+    /// Show it at all.
     pub enabled: bool,
+    /// Where on the monitor it sits.
     pub position: IndicatorPosition,
     /// Pixels between the indicator and the edges of the work area it sits against, at 100%
     /// scaling. Unused when `position` is `center`.
@@ -607,6 +661,7 @@ pub struct WorkspaceIndicator {
     pub font: Option<String>,
     /// Font size in points.
     pub font_size: u32,
+    /// Bold digits.
     pub bold: bool,
     /// Unset follows `theme.corners`.
     pub corners: Option<Corners>,
@@ -642,15 +697,24 @@ impl Default for WorkspaceIndicator {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IndicatorPosition {
+    /// The middle.
     Center,
+    /// Top edge, centred.
     Top,
+    /// Top left corner.
     TopLeft,
+    /// Top right corner.
     TopRight,
+    /// Bottom edge, centred.
     Bottom,
+    /// Bottom left corner.
     BottomLeft,
+    /// Bottom right corner.
     #[default]
     BottomRight,
+    /// Left edge, centred.
     Left,
+    /// Right edge, centred.
     Right,
 }
 
@@ -658,9 +722,12 @@ pub enum IndicatorPosition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Corners {
+    /// Windows' normal rounding.
     #[default]
     Round,
+    /// Slightly rounded.
     Small,
+    /// No rounding.
     Square,
 }
 
@@ -668,14 +735,21 @@ pub enum Corners {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Rule {
+    /// Regex on the program's file name, e.g. `^code\.exe$`.
     pub exe: Option<String>,
+    /// Regex on the window class.
     pub class: Option<String>,
+    /// Regex on the title.
     pub title: Option<String>,
+    /// Float (`true`) or tile (`false`) the window.
     pub float: Option<bool>,
+    /// Open it on this workspace.
     pub workspace: Option<u8>,
+    /// Open it on this monitor, by index.
     pub monitor: Option<usize>,
     /// Force the title bar on or off for matching windows, tiled or floating.
     pub decorations: Option<bool>,
+    /// Leave the window alone entirely.
     pub ignore: bool,
 }
 
@@ -683,12 +757,16 @@ pub struct Rule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct Color {
+    /// Red.
     pub r: u8,
+    /// Green.
     pub g: u8,
+    /// Blue.
     pub b: u8,
 }
 
 impl Color {
+    /// The colour with these channels.
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
