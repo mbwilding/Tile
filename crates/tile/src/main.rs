@@ -1,6 +1,5 @@
 mod cli;
 mod daemon;
-mod desktops;
 mod install;
 mod launch;
 mod logging;

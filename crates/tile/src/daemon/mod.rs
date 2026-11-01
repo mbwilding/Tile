@@ -20,7 +20,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use tile_config::Loaded;
-use tile_core::{Command, LayoutKind, MonitorInfo, Rect, WindowId};
+use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, Rect, WindowId};
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
@@ -36,7 +36,6 @@ use tokio::{
 };
 
 use crate::{
-    desktops::Desktops,
     launch, logging,
     paths::{self, Restore},
     remap::{Notice, Remap},

@@ -5,6 +5,7 @@
 
 pub mod animation;
 pub mod command;
+pub mod desktops;
 pub mod geometry;
 pub mod layout;
 pub mod state;
@@ -12,6 +13,7 @@ pub mod state;
 use serde::{Deserialize, Serialize};
 
 pub use command::Command;
+pub use desktops::{DesktopId, Desktops};
 pub use geometry::{Direction, Rect};
 pub use layout::{LayoutKind, LayoutSettings};
 pub use state::{Effect, ManageOptions, MonitorInfo, State, WindowInfo};
