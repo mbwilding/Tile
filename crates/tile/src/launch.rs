@@ -83,6 +83,14 @@ pub fn activate(aumid: &str) {
     });
 }
 
+/// Starts a Store app from this process, so it keeps Tile's rights when Tile is elevated.
+pub fn activate_as_admin(aumid: &str) {
+    if !elevated() {
+        tracing::warn!("`{aumid}` can only start as administrator when Tile runs elevated");
+    }
+    activate_now(aumid);
+}
+
 /// Starts the Store app on a thread of its own, which sets up COM for it.
 fn activate_now(aumid: &str) {
     let aumid = aumid.to_owned();

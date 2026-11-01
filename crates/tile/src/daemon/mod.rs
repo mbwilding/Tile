@@ -457,7 +457,9 @@ impl Daemon {
                     LauncherEvent::Launch(id) => {
                         launch::exec(&format!("\"shell:AppsFolder\\{id}\""));
                     }
-                    LauncherEvent::LaunchAsAdmin(id) if id.contains('!') => launch::activate(&id),
+                    LauncherEvent::LaunchAsAdmin(id) if id.contains('!') => {
+                        launch::activate_as_admin(&id);
+                    }
                     LauncherEvent::LaunchAsAdmin(id) => {
                         tile_platform::run_as_admin(&format!("shell:AppsFolder\\{id}"));
                     }

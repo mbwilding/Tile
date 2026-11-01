@@ -3,7 +3,10 @@ use std::{collections::HashMap, path::Path};
 use tile_config::Color;
 use tile_core::{Rect, WindowId, WindowInfo};
 use uiautomation::{UIAutomation, patterns::UIWindowPattern, types::Handle};
-use winsafe::{self as w, co, prelude::Handle as _};
+use winsafe::{
+    self as w, co,
+    prelude::{Handle as _, shell_IShellItem2 as _},
+};
 
 use crate::{monitors::rect, mover::Insets};
 
@@ -182,6 +185,16 @@ pub fn focus_exe(exe: &str) -> bool {
     candidates.first().is_some_and(focus_hwnd)
 }
 
+/// The file a `shell:AppsFolder` item starts, like the target of its Start menu shortcut.
+/// `ShellExecute` ignores the `runas` verb on the virtual item itself, so this is what gets
+/// elevated.
+fn apps_folder_target(parsing_name: &str) -> Option<String> {
+    let item: w::IShellItem2 =
+        w::SHCreateItemFromParsingName(parsing_name, None::<&w::IBindCtx>).ok()?;
+    let path = item.GetString(&co::PKEY::Link_TargetParsingPath).ok()?;
+    std::path::Path::new(&path).is_file().then_some(path)
+}
+
 /// Starts a file, folder or `shell:` path as administrator, asking for consent unless Tile
 /// already runs elevated. Returns at once; a failure is logged.
 pub fn run_as_admin(target: &str) {
@@ -189,6 +202,11 @@ pub fn run_as_admin(target: &str) {
     // ShellExecute wants a single-threaded COM apartment of its own.
     std::thread::spawn(move || {
         let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
+        let target = if target.starts_with("shell:AppsFolder") {
+            apps_folder_target(&target).unwrap_or(target)
+        } else {
+            target
+        };
         if let Err(e) = w::HWND::NULL.ShellExecute("runas", &target, None, None, co::SW::SHOWNORMAL)
         {
             tracing::warn!("couldn't run `{target}` as administrator: {e}");
