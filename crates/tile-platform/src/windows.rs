@@ -12,7 +12,7 @@ use winsafe::{
 
 use crate::{
     frame::{Insets, Placement, set_frame},
-    gui::init_com,
+    gui::{colorref, init_com},
     monitors::rect,
 };
 
@@ -48,12 +48,9 @@ fn id_of(hwnd: &w::HWND) -> WindowId {
     WindowId(hwnd.ptr() as isize)
 }
 
-fn colorref(color: Option<Color>) -> w::COLORREF {
-    match color {
-        Some(c) => w::COLORREF::from_rgb(c.r, c.g, c.b),
-        // DWMWA_COLOR_DEFAULT (0xFFFFFFFF).
-        None => w::COLORREF::from(co::CLR::NONE),
-    }
+/// The DWM border colour for `color`; `None` is `DWMWA_COLOR_DEFAULT` (0xFFFFFFFF).
+fn border_colorref(color: Option<Color>) -> w::COLORREF {
+    color.map_or(w::COLORREF::from(co::CLR::NONE), colorref)
 }
 
 fn has(bits: isize, flag: u32) -> bool {
@@ -273,7 +270,6 @@ pub fn close_foreground() {
     }
 }
 
-/// Enumerates top-level windows, keeping the handles `keep` selects.
 /// The top-level windows for which `keep` returns true.
 pub fn enumerate(mut keep: impl FnMut(&w::HWND) -> bool) -> Vec<w::HWND> {
     let mut out = Vec::new();
@@ -454,7 +450,8 @@ impl Windows {
         let Some(hwnd) = self.handles.get(&id) else {
             return;
         };
-        if let Err(e) = hwnd.DwmSetWindowAttribute(w::DwmAttr::BorderColor(colorref(color))) {
+        if let Err(e) = hwnd.DwmSetWindowAttribute(w::DwmAttr::BorderColor(border_colorref(color)))
+        {
             tracing::trace!("border color not supported: {e}");
         }
     }
@@ -464,7 +461,7 @@ impl Windows {
     pub fn border_is(&self, id: WindowId, color: Option<Color>) -> Option<bool> {
         let hwnd = self.handles.get(&id)?;
         match hwnd.DwmGetWindowAttribute(co::DWMWA::BORDER_COLOR) {
-            Ok(w::DwmAttr::BorderColor(current)) => Some(current == colorref(color)),
+            Ok(w::DwmAttr::BorderColor(current)) => Some(current == border_colorref(color)),
             _ => None,
         }
     }
