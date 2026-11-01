@@ -126,6 +126,7 @@ impl Daemon {
                 if unchanged {
                     return;
                 }
+                tile_platform::set_antialiasing(self.loaded.config.theme.antialiasing);
                 self.launcher.set_settings(launcher_settings(&self.loaded));
                 self.indicator
                     .set_settings(indicator_settings(&self.loaded));

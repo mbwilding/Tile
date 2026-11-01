@@ -358,18 +358,20 @@ pub(super) fn paint(
             right: row.right - pad,
             ..row
         };
-        if config.compact {
+        if !config.two_lines() {
             text(dc, &fonts.title, fg, &title, bounds, left)?;
-            let used = {
-                let _font = dc.SelectObject(&*fonts.title)?;
-                dc.GetTextExtentPoint32(&title)?.cx
-            };
-            let after = w::RECT {
-                left: bounds.left + used + pad,
-                ..bounds
-            };
-            if after.left < after.right {
-                text(dc, small, dim, &subtitle, after, left)?;
+            if config.descriptions {
+                let used = {
+                    let _font = dc.SelectObject(&*fonts.title)?;
+                    dc.GetTextExtentPoint32(&title)?.cx
+                };
+                let after = w::RECT {
+                    left: bounds.left + used + pad,
+                    ..bounds
+                };
+                if after.left < after.right {
+                    text(dc, small, dim, &subtitle, after, left)?;
+                }
             }
         } else {
             let spacing = scale(2);

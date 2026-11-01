@@ -31,8 +31,8 @@ pub use drag::{DragEvent, WinDrag};
 pub use events::{WinEvent, WinEventHooks};
 pub use gui::{
     Mailbox, WindowThread, colorref, corner_preference, fill_round, fill_round_bordered, init_com,
-    make_font, mix, paint_buffered, scale, set_alpha, set_transparent, style_popup, text,
-    text_wrapped,
+    make_font, mix, paint_buffered, scale, set_alpha, set_antialiasing, set_transparent,
+    style_popup, text, text_wrapped,
 };
 pub use hotkeys::{HotkeyEvent, Hotkeys};
 pub use indicator::{Indicator, IndicatorSettings};

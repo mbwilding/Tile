@@ -113,7 +113,7 @@ what you type matches them (`vol`, `bluetooth`, `shut`). The bar's buttons list 
 | **Clock** | opens the date and time settings |
 | **System Properties**, **Environment Variables**, **Control Panel**, **Device Manager**, **Services** | open the classic Windows tools that Start's app list doesn't have |
 | **Lock**, **Sleep** | do it now |
-| **Sign out**, **Restart**, **Shut down** | ask for Enter again first, as they lose unsaved work |
+| **Sign out**, **Restart**, **Shut down** | do it now |
 
 The rows are read in the background when the launcher opens, so the current values show up a
 moment after it does. The device lists are what is plugged in and enabled right now; disabled
@@ -185,8 +185,7 @@ device's row opens Settings.
 
 **Switch user**, **Log out**, **Lock**, **Restart** and **Shut down**. Switch user leaves your
 session running and shows the sign-in screen (`tsdisconnect`). A click does it
-at once. Log out, Restart and Shut down lose unsaved work, so as rows (typed or selected with
-the keys) they ask for Enter twice. The window widens to hold the bar when it is wider than the
+at once, and so does Enter on a row. The window widens to hold the bar when it is wider than the
 launcher.
 
 ## Keys

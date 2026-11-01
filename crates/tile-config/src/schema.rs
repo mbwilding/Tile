@@ -231,6 +231,8 @@ pub struct Theme {
     pub font: String,
     /// Window corner rounding.
     pub corners: Corners,
+    /// Smooth the edges of the rounded shapes Tile draws (rows, buttons, popups).
+    pub antialiasing: bool,
     /// The launcher's window.
     pub background: Color,
     /// Text.
@@ -251,6 +253,7 @@ impl Default for Theme {
         Self {
             font: "Segoe UI".into(),
             corners: Corners::Round,
+            antialiasing: true,
             background: Color::rgb(0x1e, 0x1e, 0x2e),
             foreground: Color::rgb(0xcd, 0xd6, 0xf4),
             dimmed: Color::rgb(0x7f, 0x84, 0x9c),
@@ -556,9 +559,10 @@ pub struct Launcher {
     pub search_position: SearchPosition,
     /// Show each app's icon.
     pub show_icons: bool,
-    /// One line per row: a larger name with what the row is (an app's id, a command's
-    /// explanation) after it, instead of under it.
+    /// One line per row, with the description after the name instead of under it.
     pub compact: bool,
+    /// Show what each row is (an app's id, a command's explanation). Off, rows are just names.
+    pub descriptions: bool,
     /// The most results listed.
     pub max_results: usize,
     /// Remember launches, for `sort_by_usage`.
@@ -591,7 +595,7 @@ pub struct Launcher {
     pub selected: Option<Color>,
     /// Text on the selected row. Unset follows `theme.accent_foreground`.
     pub selected_foreground: Option<Color>,
-    /// Shown in the empty search box. Empty shows `Search apps, equations and commands`,
+    /// Shown in the empty search box. Empty shows `Search apps, actions, equations and commands`,
     /// leaving out what is switched off.
     pub placeholder: String,
     /// Show the value of a search that reads as a calculation (`12 * 3`, `sqrt(2)`) first;
@@ -614,18 +618,32 @@ pub struct Launcher {
 }
 
 impl Launcher {
+    /// Whether a row has a second line: the description under the name.
+    pub fn two_lines(&self) -> bool {
+        self.descriptions && !self.compact
+    }
+
     /// The text shown in the empty search box.
     pub fn placeholder_text(&self) -> String {
         if !self.placeholder.is_empty() {
             return self.placeholder.clone();
         }
-        match (self.calculator, self.commands) {
-            (true, true) => "Search apps, equations and commands",
-            (true, false) => "Search apps or equations",
-            (false, true) => "Search apps and commands",
-            (false, false) => "Search apps",
+        let mut things = vec!["apps"];
+        if self.system_items {
+            things.push("actions");
         }
-        .into()
+        if self.calculator {
+            things.push("equations");
+        }
+        if self.commands {
+            things.push("commands");
+        }
+        let last = things.pop().unwrap_or("apps");
+        if things.is_empty() {
+            format!("Search {last}")
+        } else {
+            format!("Search {} and {last}", things.join(", "))
+        }
     }
 }
 
@@ -637,6 +655,7 @@ impl Default for Launcher {
             search_position: SearchPosition::Top,
             show_icons: true,
             compact: true,
+            descriptions: false,
             max_results: 50,
             track_usage: true,
             sort_by_usage: true,

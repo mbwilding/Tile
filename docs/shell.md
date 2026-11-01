@@ -10,7 +10,7 @@ What Explorer would otherwise provide is covered like this:
 | Tray icons (Discord, Steam, ...) | Tile hosts the notification area; the [launcher](launcher.md#system-items-and-tray-icons) lists the icons and clicks them |
 | Volume, network, Wi-Fi, Bluetooth, battery, clock | Launcher rows that show and change them |
 | Start menu, search | The launcher |
-| Sign out, restart, shut down | Launcher rows (restart, shut down and sign out ask for Enter twice) |
+| Sign out, restart, shut down | Launcher rows |
 | Programs started at sign-in | Tile runs the `Run` and `RunOnce` keys and the Startup folders |
 | File Explorer windows | Unchanged |
 | Opening Settings, the Store and other Store apps | The shell process answers for them, [below](#settings-and-store-apps) |

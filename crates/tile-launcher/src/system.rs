@@ -105,11 +105,6 @@ pub enum Power {
 }
 
 impl Power {
-    /// Whether the launcher asks to press Enter again, because it would lose unsaved work.
-    pub const fn needs_confirmation(self) -> bool {
-        matches!(self, Self::SignOut | Self::Restart | Self::ShutDown)
-    }
-
     /// The command line that does it.
     pub const fn command_line(self) -> &'static str {
         match self {
@@ -494,12 +489,7 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         ("Restart", "reboot", Power::Restart),
         ("Shut down", "power off turn off", Power::ShutDown),
     ] {
-        let subtitle = if power.needs_confirmation() {
-            "Power. Enter twice to confirm"
-        } else {
-            "Power"
-        };
-        out.push(entry(title, subtitle, keywords, Action::Power(power)));
+        out.push(entry(title, "Power", keywords, Action::Power(power)));
     }
     out
 }
@@ -919,16 +909,6 @@ mod tests {
             ..Status::default()
         };
         assert_eq!(find("volume down", &quiet)[0].action, Action::SetVolume(0));
-    }
-
-    #[test]
-    fn only_data_losing_power_actions_ask_first() {
-        assert!(!Power::Lock.needs_confirmation());
-        assert!(!Power::Sleep.needs_confirmation());
-        assert!(!Power::SwitchUser.needs_confirmation());
-        assert!(Power::ShutDown.needs_confirmation());
-        assert!(Power::Restart.needs_confirmation());
-        assert!(Power::SignOut.needs_confirmation());
     }
 
     #[test]

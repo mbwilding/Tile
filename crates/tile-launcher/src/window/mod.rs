@@ -774,7 +774,6 @@ fn run(
                 && row != s.selected
             {
                 s.selected = row;
-                s.armed = None;
                 changed = true;
             }
             drop(s);

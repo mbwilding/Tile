@@ -22,6 +22,7 @@ general:
 theme:
   font: Segoe UI
   corners: round # round | small | square
+  antialiasing: true # smooth the edges of rounded shapes
   background: "#1e1e2e"
   foreground: "#cdd6f4"
   dimmed: "#7f849c" # secondary text
@@ -73,6 +74,7 @@ launcher:
   search_position: top # top | bottom
   show_icons: true
   compact: true # one line per row, the description after the name
+  descriptions: false # show what each row is, besides its name
   max_results: 50
   track_usage: true # remember launches
   sort_by_usage: true # recent first, often used win close matches
@@ -85,7 +87,7 @@ launcher:
   opacity: 1.0 # 0.1 to 1.0
   # background, border, foreground, dimmed, selected and selected_foreground
   # are unset and follow theme; set any of them to override it here
-  placeholder: "" # "" for "Search apps, equations and commands"
+  placeholder: "" # "" for "Search apps, actions, equations and commands"
   calculator: true # `12 * 3` shows = 36; Enter copies it
   commands: true # offer Tile dispatchers and running the text as a command line
   system_items: true # offer audio, microphone, network, Wi-Fi, Bluetooth, battery, power and tray icons in results

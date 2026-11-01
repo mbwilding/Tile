@@ -58,6 +58,7 @@ by default; set one there to override the theme for just that part.
 | --- | --- | --- |
 | `font` | `Segoe UI` | Font family. |
 | `corners` | `round` | Window corners: `round`, `small` or `square` (Windows 11). |
+| `antialiasing` | `true` | Smooth the edges of the rounded shapes Tile draws (launcher rows and buttons, notification popups). |
 | `background` | `"#1e1e2e"` | The launcher's window. |
 | `foreground` | `"#cdd6f4"` | Text. |
 | `dimmed` | `"#7f849c"` | Secondary text: the launcher's app ids and placeholder. |
@@ -128,7 +129,8 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 | `max_visible` | `6` | The most result rows shown at once. The window is exactly as tall as its content, up to this many rows, so it shrinks as you type; more results scroll. |
 | `search_position` | `top` | Where the search box sits: `top` or `bottom`. |
 | `show_icons` | `true` | Show each app's icon. |
-| `compact` | `true` | One line per row: a larger name with what the row is (an app's id, a command's explanation) after it, instead of under it. |
+| `compact` | `true` | One line per row, with the description after the name instead of under it. |
+| `descriptions` | `false` | Show what each row is (an app's id, a command's explanation). Off, rows are just names. |
 | `max_results` | `50` | The most apps listed. |
 | `track_usage` | `true` | Remember launches in `%LOCALAPPDATA%\Tile\launcher.json`. |
 | `sort_by_usage` | `true` | List recent launches first, and let often launched apps win close matches. |
@@ -145,7 +147,7 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 | `dimmed` | `theme.dimmed` | The app id line and the placeholder. |
 | `selected` | `theme.accent` | The selected row and the caret. |
 | `selected_foreground` | `theme.accent_foreground` | Text on the selected row. |
-| `placeholder` | `""` | Shown in the empty search box. Empty shows `Search apps, equations and commands`, leaving out the calculator or commands when they are off. |
+| `placeholder` | `""` | Shown in the empty search box. Empty shows `Search apps, actions, equations and commands`, leaving out what is switched off. |
 | `calculator` | `true` | Show the value of a search that reads as a calculation first; Enter copies it. See [calculator](launcher.md#calculator). |
 | `commands` | `true` | Offer Tile's dispatchers and running the text as a command line among the results. See [commands](launcher.md#commands). |
 | `system_items` | `true` | List the system items (volume and the audio devices, microphone, network, Wi-Fi, Bluetooth, battery, clock, power) and tray icons that match what is typed, after the apps. See [system items](launcher.md#system-items-and-tray-icons). |
@@ -250,6 +252,7 @@ general:
 theme:
   font: Segoe UI
   corners: round                # round | small | square
+  antialiasing: true             # smooth the edges of rounded shapes
   background: "#1e1e2e"
   foreground: "#cdd6f4"
   dimmed: "#7f849c"             # secondary text
@@ -301,6 +304,7 @@ launcher:
   search_position: top          # top | bottom
   show_icons: true
   compact: true                 # one line per row, the description after the name
+  descriptions: false           # show what each row is, besides its name
   max_results: 50
   track_usage: true             # remember launches
   sort_by_usage: true           # recent first, often used win close matches
@@ -313,7 +317,7 @@ launcher:
   opacity: 1.0                  # 0.1 to 1.0
   # background, border, foreground, dimmed, selected and selected_foreground
   # are unset and follow theme; set any of them to override it here
-  placeholder: ""                # "" for "Search apps, equations and commands"
+  placeholder: ""                # "" for "Search apps, actions, equations and commands"
   calculator: true              # `12 * 3` shows = 36; Enter copies it
   commands: true                # offer Tile dispatchers and running the text as a command line
   system_items: true            # offer audio, microphone, network, Wi-Fi, Bluetooth, battery, power and tray icons in results

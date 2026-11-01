@@ -144,10 +144,10 @@ impl Layout {
         let pad = scale(PAD);
         let gap = scale(GAP);
         let search_h = main + scale(24);
-        let (row, icon) = if config.compact {
-            (sizes.title + scale(18), scale(24))
-        } else {
+        let (row, icon) = if config.two_lines() {
             (main + small + scale(22), scale(32))
+        } else {
+            (sizes.title + scale(18), scale(24))
         };
         let icon = if config.show_icons { icon } else { 0 };
         let (left, right) = (client.left + pad, client.right - pad);
@@ -330,6 +330,7 @@ mod tests {
         let config = Config {
             bar: true,
             compact: false,
+            descriptions: true,
             ..Config::default()
         };
         let sizes = FontSizes::new(11, 96);
@@ -375,6 +376,7 @@ mod tests {
         let config = Config {
             bar: true,
             compact: false,
+            descriptions: true,
             ..Config::default()
         };
         let layout = Layout::new(&config, FontSizes::new(11, 96), 96, 3, client(560, 400));

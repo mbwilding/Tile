@@ -4,7 +4,7 @@
 use std::{
     sync::{
         Arc,
-        atomic::{AtomicIsize, Ordering},
+        atomic::{AtomicBool, AtomicIsize, Ordering},
         mpsc,
     },
     thread::{self, JoinHandle},
@@ -74,6 +74,114 @@ pub fn set_transparent(hwnd: &w::HWND, key: Color, alpha: u8) -> w::SysResult<()
     hwnd.SetLayeredWindowAttributes(colorref(key), alpha, co::LWA::COLORKEY | co::LWA::ALPHA)
 }
 
+static ANTIALIASING: AtomicBool = AtomicBool::new(true);
+
+/// Switches smooth edges on rounded shapes drawn by [`fill_round`] and [`fill_round_bordered`].
+pub fn set_antialiasing(on: bool) {
+    ANTIALIASING.store(on, Ordering::Relaxed);
+}
+
+/// How many times larger than the screen the corners are drawn before shrinking them.
+const SUPERSAMPLE: i32 = 4;
+
+/// Redraws the `r` pixel square at `at`, which is one corner of a rounded rectangle of
+/// `color`, at [`SUPERSAMPLE`] times the size over what is already there and shrinks it back, so
+/// the curve's edge blends with its surroundings. `right` and `bottom` say which corner it is.
+fn smooth_corner(
+    dc: &w::HDC,
+    at: w::POINT,
+    r: i32,
+    right: bool,
+    bottom: bool,
+    color: Color,
+) -> w::SysResult<()> {
+    let big = r * SUPERSAMPLE;
+    let scratch = dc.CreateCompatibleDC()?;
+    let bitmap = dc.CreateCompatibleBitmap(big, big)?;
+    let _bitmap = scratch.SelectObject(&*bitmap)?;
+    let (small, large) = (w::SIZE::with(r, r), w::SIZE::with(big, big));
+    scratch.StretchBlt(w::POINT::default(), large, dc, at, small, co::ROP::SRCCOPY)?;
+    let brush = w::HBRUSH::CreateSolidBrush(colorref(color))?;
+    let _brush = scratch.SelectObject(&*brush)?;
+    let pen = w::HPEN::CreatePen(co::PS::NULL, 1, colorref(color))?;
+    let _pen = scratch.SelectObject(&*pen)?;
+    // The whole rectangle, placed so this corner lands in the scratch square; the rest is clipped.
+    let left = if right { -big } else { 0 };
+    let top = if bottom { -big } else { 0 };
+    scratch.RoundRect(
+        w::RECT {
+            left,
+            top,
+            right: left + 2 * big + 1,
+            bottom: top + 2 * big + 1,
+        },
+        w::SIZE::with(2 * big, 2 * big),
+    )?;
+    let _mode = dc.SetStretchBltMode(co::STRETCH_MODE::HALFTONE)?;
+    dc.StretchBlt(
+        at,
+        small,
+        &scratch,
+        w::POINT::default(),
+        large,
+        co::ROP::SRCCOPY,
+    )
+}
+
+/// Fills `bounds` with a rounded rectangle whose corners have `radius`, with smooth corners.
+fn fill_smooth(dc: &w::HDC, bounds: w::RECT, radius: i32, color: Color) -> w::SysResult<()> {
+    let (width, height) = (bounds.right - bounds.left, bounds.bottom - bounds.top);
+    if width <= 0 || height <= 0 {
+        return Ok(());
+    }
+    let r = radius.clamp(0, width.min(height) / 2);
+    let brush = w::HBRUSH::CreateSolidBrush(colorref(color))?;
+    let fill = |left: i32, top: i32, right: i32, bottom: i32| {
+        if right > left && bottom > top {
+            dc.FillRect(
+                w::RECT {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                },
+                &brush,
+            )
+        } else {
+            Ok(())
+        }
+    };
+    // Everything but the four corner squares.
+    fill(bounds.left, bounds.top + r, bounds.right, bounds.bottom - r)?;
+    fill(
+        bounds.left + r,
+        bounds.top,
+        bounds.right - r,
+        bounds.top + r,
+    )?;
+    fill(
+        bounds.left + r,
+        bounds.bottom - r,
+        bounds.right - r,
+        bounds.bottom,
+    )?;
+    if r == 0 {
+        return Ok(());
+    }
+    for (right, bottom) in [(false, false), (true, false), (false, true), (true, true)] {
+        let at = w::POINT::with(
+            if right { bounds.right - r } else { bounds.left },
+            if bottom {
+                bounds.bottom - r
+            } else {
+                bounds.top
+            },
+        );
+        smooth_corner(dc, at, r, right, bottom, color)?;
+    }
+    Ok(())
+}
+
 /// Fills `bounds` with a `color` rounded rectangle, `radius` pixels on each corner. Shared by
 /// the launcher's cards and the notification popup, so both look like the same kind of window.
 pub fn fill_round(dc: &w::HDC, bounds: w::RECT, radius: i32, color: Color) -> w::SysResult<()> {
@@ -90,6 +198,21 @@ pub fn fill_round_bordered(
     border: Color,
     width: i32,
 ) -> w::SysResult<()> {
+    if ANTIALIASING.load(Ordering::Relaxed) {
+        // RoundRect's `radius` is the corner ellipse's diameter.
+        let corner = radius / 2;
+        if width > 0 {
+            fill_smooth(dc, bounds, corner, border)?;
+            let inset = w::RECT {
+                left: bounds.left + width,
+                top: bounds.top + width,
+                right: bounds.right - width,
+                bottom: bounds.bottom - width,
+            };
+            return fill_smooth(dc, inset, (corner - width).max(0), fill);
+        }
+        return fill_smooth(dc, bounds, corner, fill);
+    }
     let brush = w::HBRUSH::CreateSolidBrush(colorref(fill))?;
     let _brush = dc.SelectObject(&*brush)?;
     let style = if width > 0 {

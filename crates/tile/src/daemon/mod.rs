@@ -285,6 +285,7 @@ pub async fn run(
     let win_drag = WinDrag::start(drag_tx).context("failed to install the mouse hook")?;
     let tray = Tray::spawn(tray_tx);
     let registry = Registry::default();
+    tile_platform::set_antialiasing(loaded.config.theme.antialiasing);
     let launcher = Launcher::spawn(
         launcher_tx,
         launcher_settings(&loaded),

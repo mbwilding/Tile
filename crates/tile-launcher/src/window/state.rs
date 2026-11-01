@@ -15,7 +15,7 @@ use crate::{
     calc,
     input::Input,
     search::{self, App, CommandEntry, RankOptions, Usage},
-    system::{self, Action, Group, Power},
+    system::{self, Group},
 };
 
 /// A result row.
@@ -95,8 +95,6 @@ pub(super) struct State {
     pub(super) status: system::Status,
     /// The system rows matching the search.
     pub(super) system: Vec<system::Entry>,
-    /// A power action that needs Enter pressed again.
-    pub(super) armed: Option<Power>,
     /// While a tray icon's menu is up: the launcher stays open behind it.
     pub(super) menu: Option<MenuWatch>,
 }
@@ -130,7 +128,6 @@ impl State {
             panel: None,
             status: system::Status::default(),
             system: Vec::new(),
-            armed: None,
             menu: None,
         }
     }
@@ -170,7 +167,6 @@ impl State {
     pub(super) fn rank(&mut self) {
         let config = &self.settings.config;
         let query = self.query.text();
-        self.armed = None;
         self.selected = 0;
         self.scroll = 0;
         if let Some(group) = self.panel {
@@ -188,7 +184,6 @@ impl State {
             .calculator
             .then(|| calc::calculation(query))
             .flatten();
-        let is_sum = sum.is_some();
         let mut results: Vec<Row> = sum
             .map(Row::Calc)
             .into_iter()
@@ -233,9 +228,7 @@ impl State {
             // nothing else matched.
             let shell = rows.pop();
             results.extend(rows.into_iter().map(Row::Command));
-            if let Some(shell) = shell
-                && (results.is_empty() || !is_sum && query.trim().contains(char::is_whitespace))
-            {
+            if let Some(shell) = shell {
                 results.push(Row::Command(shell));
             }
         }
@@ -316,7 +309,6 @@ impl State {
         }
         let last = self.results.len() as isize - 1;
         self.selected = index.clamp(0, last) as usize;
-        self.armed = None;
         if self.selected < self.scroll {
             self.scroll = self.selected;
         } else if self.selected >= self.scroll + visible {
@@ -350,13 +342,6 @@ impl State {
                 let Some(entry) = self.system.get(*i) else {
                     return Picked::Nothing;
                 };
-                if let Action::Power(power) = entry.action
-                    && power.needs_confirmation()
-                    && self.armed != Some(power)
-                {
-                    self.armed = Some(power);
-                    return Picked::Edited;
-                }
                 LauncherEvent::System(entry.action.clone())
             }
             Some(Row::Calc(value)) => return Picked::Copy(calc::format(*value)),
@@ -415,13 +400,11 @@ impl State {
             }
             Row::System(i) => {
                 let entry = &self.system[*i];
-                let confirming = matches!(entry.action, Action::Power(p) if self.armed == Some(p));
-                let subtitle: &str = if confirming {
-                    "Press Enter again to confirm"
-                } else {
-                    &entry.subtitle
-                };
-                (entry.title.as_str().into(), subtitle.into(), None)
+                (
+                    entry.title.as_str().into(),
+                    entry.subtitle.as_str().into(),
+                    None,
+                )
             }
             Row::Command(CommandEntry::Dispatch(command)) => {
                 (command.to_string().into(), "Tile dispatcher".into(), None)

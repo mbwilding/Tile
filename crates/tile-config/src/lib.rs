@@ -327,15 +327,23 @@ mod tests {
     #[test]
     fn placeholder_follows_the_settings() {
         let mut launcher = Launcher::default();
-        let mut check = |calculator: bool, commands: bool, expected: &str| {
+        let mut check = |actions: bool, calculator: bool, commands: bool, expected: &str| {
+            launcher.system_items = actions;
             launcher.calculator = calculator;
             launcher.commands = commands;
             assert_eq!(launcher.placeholder_text(), expected);
         };
-        check(true, true, "Search apps, equations and commands");
-        check(true, false, "Search apps or equations");
-        check(false, true, "Search apps and commands");
-        check(false, false, "Search apps");
+        check(
+            true,
+            true,
+            true,
+            "Search apps, actions, equations and commands",
+        );
+        check(true, true, false, "Search apps, actions and equations");
+        check(false, true, false, "Search apps and equations");
+        check(false, false, true, "Search apps and commands");
+        check(true, false, false, "Search apps and actions");
+        check(false, false, false, "Search apps");
 
         let custom = Launcher {
             placeholder: "Find".into(),
