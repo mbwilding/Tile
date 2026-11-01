@@ -20,11 +20,13 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - run: cargo build --release -p tile
       - name: Version
         run: |
           $m = (Select-String -Path Cargo.toml -Pattern '^version = "(\d+)\.(\d+)\.\d+"').Matches[0]
-          "VERSION=$($m.Groups[1]).$($m.Groups[2]).${{ github.run_number }}" >> $env:GITHUB_ENV
+          $v = "$($m.Groups[1]).$($m.Groups[2]).${{ github.run_number }}"
+          "VERSION=$v" >> $env:GITHUB_ENV
+          "TILE_VERSION=$v" >> $env:GITHUB_ENV
+      - run: cargo build --release -p tile
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

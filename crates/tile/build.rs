@@ -19,6 +19,13 @@ fn main() {
         std::fs::write(&res, icon_resource()).expect("unable to write the icon resource");
         println!("cargo:rustc-link-arg-bins={}", res.display());
     }
+    // CI sets TILE_VERSION to the release version; local builds use the crate's.
+    let version = std::env::var("TILE_VERSION")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION"));
+    println!("cargo:rustc-env=TILE_VERSION={version}");
+    println!("cargo:rerun-if-env-changed=TILE_VERSION");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../tile-platform/src/tile_icon.rs");
 }

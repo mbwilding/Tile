@@ -16,7 +16,7 @@ use tile_config::Loaded;
 /// A dynamic tiling window manager and keyd-style key remapper for Windows. Without a command
 /// it runs the window manager; the commands control one that is running.
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version = env!("TILE_VERSION"), about)]
 struct Args {
     #[command(subcommand)]
     command: Option<cli::Cmd>,
