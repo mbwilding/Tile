@@ -128,7 +128,7 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 | `max_visible` | `6` | The most result rows shown at once. The window is exactly as tall as its content, up to this many rows, so it shrinks as you type; more results scroll. |
 | `search_position` | `top` | Where the search box sits: `top` or `bottom`. |
 | `show_icons` | `true` | Show each app's icon. |
-| `compact` | `false` | Shorter rows, without the app id under the name. |
+| `compact` | `true` | One line per row: a larger name with what the row is (an app's id, a command's explanation) after it, instead of under it. |
 | `max_results` | `50` | The most apps listed. |
 | `track_usage` | `true` | Remember launches in `%LOCALAPPDATA%\Tile\launcher.json`. |
 | `sort_by_usage` | `true` | List recent launches first, and let often launched apps win close matches. |
@@ -206,7 +206,7 @@ binds:
   super+z: ~                            # unbind the default Win+Z
 ```
 
-Launching, closing, locking, desktops, `reload`, the `toggle*` dispatchers and `exit` work even with tiling
+Launching (`exec`, `exechidden`, `focusorexec`), closing, locking, desktops, `reload`, the `toggle*` dispatchers and `exit` work even with tiling
 off or paused; the rest only run while Tile is on (the tray's Tile item). See
 [keybinds](keybinds.md) for the key names and every dispatcher.
 
@@ -300,7 +300,7 @@ launcher:
   max_visible: 6                # result rows shown at once; the window is as tall as its content
   search_position: top          # top | bottom
   show_icons: true
-  compact: false                # shorter rows, no app id line
+  compact: true                 # one line per row, the description after the name
   max_results: 50
   track_usage: true             # remember launches
   sort_by_usage: true           # recent first, often used win close matches

@@ -155,6 +155,18 @@ impl State {
         self.rank();
     }
 
+    /// Back to what a freshly opened launcher shows.
+    pub(super) fn reset(&mut self) {
+        self.query.clear();
+        self.surrogate = None;
+        self.mouse = None;
+        self.tray_hover = None;
+        self.bar_hover = None;
+        self.panel = None;
+        self.menu = None;
+        self.rank();
+    }
+
     pub(super) fn rank(&mut self) {
         let config = &self.settings.config;
         let query = self.query.text();
@@ -188,9 +200,32 @@ impl State {
             .collect();
         self.system.clear();
         if searching && config.system_items {
-            self.system = system::find(query, &self.status);
+            // An app that is listed already stands for its own system row or tray icon.
+            let listed = |name: &str| {
+                results.iter().any(|row| match row {
+                    Row::App(i) => {
+                        let app = self.all[*i].name.to_lowercase();
+                        let name = name.to_lowercase();
+                        name == app || name.starts_with(&format!("{app} "))
+                    }
+                    _ => false,
+                })
+            };
+            let mut system = system::find(query, &self.status);
+            system.retain(|e| !listed(&e.title));
+            let tray: Vec<Row> = self
+                .tray_rows(query)
+                .filter(|row| match row {
+                    Row::Tray(i) => {
+                        let item = &self.tray[*i];
+                        !listed(&item.name) && !self.runs_listed_app(&item.path, &results)
+                    }
+                    _ => true,
+                })
+                .collect();
+            self.system = system;
             results.extend((0..self.system.len()).map(Row::System));
-            results.extend(self.tray_rows(query));
+            results.extend(tray);
         }
         if searching && config.commands {
             let mut rows = search::commands(query);
@@ -205,6 +240,14 @@ impl State {
             }
         }
         self.results = results;
+    }
+
+    /// Whether one of the app `results` is the program at `path`.
+    fn runs_listed_app(&self, path: &str, results: &[Row]) -> bool {
+        !path.is_empty()
+            && results
+                .iter()
+                .any(|row| matches!(row, Row::App(i) if self.all[*i].id.eq_ignore_ascii_case(path)))
     }
 
     /// The rows for the tray icons matching `query`, best first.

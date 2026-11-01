@@ -143,7 +143,7 @@ pub enum Action {
     WifiConnect(String),
     /// Disconnect from the Wi-Fi network.
     WifiDisconnect,
-    /// Open a Settings page (an `ms-settings:` URI).
+    /// Open a Settings page (an `ms-settings:` URI) or a classic tool, by its command line.
     Open(&'static str),
     /// End the session or put the machine away.
     Power(Power),
@@ -462,6 +462,28 @@ pub fn entries(status: &Status) -> Vec<Entry> {
             format!("{clock}. Enter for date and time settings"),
             "time date calendar",
             Action::Open("ms-settings:dateandtime"),
+        ));
+    }
+    for (title, command, keywords) in [
+        (
+            "System Properties",
+            "SystemPropertiesAdvanced.exe",
+            "advanced performance startup recovery computer name remote",
+        ),
+        (
+            "Environment Variables",
+            "rundll32 sysdm.cpl,EditEnvironmentVariables",
+            "edit the system environment variables path env",
+        ),
+        ("Control Panel", "control.exe", "classic settings"),
+        ("Device Manager", "devmgmt.msc", "drivers hardware"),
+        ("Services", "services.msc", "windows services"),
+    ] {
+        out.push(entry(
+            title,
+            "Enter to open it",
+            keywords,
+            Action::Open(command),
         ));
     }
     for (title, keywords, power) in [
@@ -814,6 +836,11 @@ mod tests {
         assert_eq!(
             all,
             [
+                "System Properties",
+                "Environment Variables",
+                "Control Panel",
+                "Device Manager",
+                "Services",
                 "Lock",
                 "Switch user",
                 "Sleep",

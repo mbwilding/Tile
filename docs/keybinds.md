@@ -77,6 +77,7 @@ A `binds` value is `<dispatcher> [arguments]`. `tile dispatch` runs the same one
 | Dispatcher | Action |
 | --- | --- |
 | `exec <command line>` | *always*: start a program, a new instance every time |
+| `exechidden <command line>` | *always*: like `exec`, with no window at all, for a console program (`exechidden ecc toggle`) that Tile would otherwise tile |
 | `focusorexec <command line>` | *always*: focus a window of the command's program (pressing again moves to the next one), or start it if there is none |
 | `killactive` | *always*: close the focused window, like Alt+F4 |
 | `togglefloating` / `fullscreen` | toggle floating / fullscreen |

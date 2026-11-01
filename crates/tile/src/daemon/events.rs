@@ -3,7 +3,7 @@
 use tile_core::{Command, Effect, Rect, WindowId};
 use tile_ipc::{Incoming, Query, Request, Response};
 use tile_platform::{
-    TrayEvent, WinEvent, cursor_pos, desktops as vd, focus_desktop, foreground, is_shell_window,
+    TrayEvent, WinEvent, cursor_pos, desktops as vd, focus_desktop, is_shell_window,
 };
 use tokio::time::Instant;
 
@@ -134,8 +134,9 @@ impl Daemon {
                         self.desktops.current().set_info(id, info);
                         self.publish();
                     }
-                } else if foreground() == Some(id) {
-                    // Some apps only set a title after showing their window.
+                } else {
+                    // Some apps only set a title after showing their window, often while
+                    // something else has focus (Teams at sign-in).
                     self.try_manage(id);
                 }
             }

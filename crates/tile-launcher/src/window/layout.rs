@@ -58,6 +58,8 @@ const QUICK_BUTTONS: usize = 4;
 pub(super) struct FontSizes {
     /// The search box and the row titles.
     pub(super) main: i32,
+    /// The row titles when rows have no description under them.
+    pub(super) title: i32,
     /// The row subtitles and the tray icons' names.
     pub(super) small: i32,
     /// The bar's time.
@@ -77,6 +79,7 @@ impl FontSizes {
         let bar = main + scale(BAR_PADDING, dpi);
         Self {
             main,
+            title: main * 6 / 5,
             small: main * 4 / 5,
             time: bar * TIME_SHARE / SHARES,
             date: bar * DATE_SHARE / SHARES,
@@ -142,7 +145,7 @@ impl Layout {
         let gap = scale(GAP);
         let search_h = main + scale(24);
         let (row, icon) = if config.compact {
-            (main + scale(16), scale(20))
+            (sizes.title + scale(18), scale(24))
         } else {
             (main + small + scale(22), scale(32))
         };
@@ -308,6 +311,7 @@ mod tests {
             at_96,
             FontSizes {
                 main: 14,
+                title: 16,
                 small: 11,
                 time: 16,
                 date: 12,
@@ -325,6 +329,7 @@ mod tests {
     fn lays_out_the_bar_tray_search_and_list() {
         let config = Config {
             bar: true,
+            compact: false,
             ..Config::default()
         };
         let sizes = FontSizes::new(11, 96);
@@ -362,13 +367,14 @@ mod tests {
         assert_eq!(sides(layout.strip), (18, 18, 822, 18));
         assert_eq!(sides(layout.search), (18, 524, 822, 582));
         assert_eq!(sides(layout.list), (18, 18, 822, 512));
-        assert_eq!((layout.row, layout.icon), (46, 0));
+        assert_eq!((layout.row, layout.icon), (53, 0));
     }
 
     #[test]
     fn finds_what_is_under_a_point() {
         let config = Config {
             bar: true,
+            compact: false,
             ..Config::default()
         };
         let layout = Layout::new(&config, FontSizes::new(11, 96), 96, 3, client(560, 400));

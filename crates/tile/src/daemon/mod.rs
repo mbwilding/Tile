@@ -462,6 +462,13 @@ impl Daemon {
                         }
                     }
                     LauncherEvent::System(action) => self.run_system(action),
+                    // Windows hands focus to a window of another monitor when the launcher
+                    // closes over an empty one.
+                    LauncherEvent::Closed => {
+                        if self.desktops.current_ref().focused().is_none() {
+                            self.defocused_at = Some(Instant::now());
+                        }
+                    }
                 },
                 Some(incoming) = rx.ipc.recv() => self.on_ipc(incoming),
                 Some(()) = rx.config.recv() => reload_at = Some(Instant::now() + RELOAD_DEBOUNCE),

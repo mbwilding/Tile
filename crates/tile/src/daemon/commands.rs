@@ -134,6 +134,7 @@ impl Daemon {
             Command::ToggleDnd => self.toggle_dnd(),
             Command::Exit => self.quit = true,
             Command::Exec(line) => launch::exec(&line),
+            Command::ExecHidden(line) => launch::exec_hidden(&line),
             Command::FocusOrExec(line) => self.focus_or_exec(&line),
             Command::KillActive => close_foreground(),
             Command::Desktop(target) => vd::switch_desktop(target),

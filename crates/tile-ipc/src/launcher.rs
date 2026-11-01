@@ -23,8 +23,11 @@ const READ_TIMEOUT: Duration = Duration::from_secs(2);
 pub enum LaunchRequest {
     /// Run a command line, like the `exec` dispatcher.
     Exec {
-        /// The command line, run through `cmd /C start`.
+        /// The command line, run through `cmd /C start`, or with no window when `hidden`.
         command_line: String,
+        /// Run it with no window, like the `exechidden` dispatcher.
+        #[serde(default)]
+        hidden: bool,
     },
     /// Start a Store app by its app user model id, like `Microsoft.WindowsStore_8wekyb3d8bbwe!App`.
     Activate {
@@ -80,6 +83,11 @@ mod tests {
         for request in [
             LaunchRequest::Exec {
                 command_line: "notepad.exe".into(),
+                hidden: false,
+            },
+            LaunchRequest::Exec {
+                command_line: "ecc toggle".into(),
+                hidden: true,
             },
             LaunchRequest::Activate {
                 aumid: "Microsoft.WindowsStore_8wekyb3d8bbwe!App".into(),

@@ -67,6 +67,8 @@ pub enum LauncherEvent {
     },
     /// Carry out a system item's action.
     System(Action),
+    /// The launcher closed, however it did.
+    Closed,
 }
 
 /// The `launcher` config section with its `hide` patterns compiled and its look resolved.
@@ -252,6 +254,7 @@ fn run(
         process_dlg_msgs: false,
         ..Default::default()
     });
+    let closed = events.clone();
     let state = Rc::new(RefCell::new(State::new(
         settings, events, usage_path, registry,
     )));
@@ -277,9 +280,19 @@ fn run(
     });
 
     let hide = {
-        let wnd = wnd.clone();
+        let (wnd, state) = (wnd.clone(), state.clone());
         move || {
+            // Leave a fresh frame behind, or the next open flashes this session's selection
+            // before it paints.
+            if !wnd.hwnd().IsWindowVisible() {
+                return;
+            }
+            let reset = state.try_borrow_mut().map(|mut s| s.reset()).is_ok();
+            if reset {
+                redraw(wnd.hwnd(), true);
+            }
             wnd.hwnd().ShowWindow(co::SW::HIDE);
+            let _ = closed.send(LauncherEvent::Closed);
         }
     };
 
@@ -318,14 +331,7 @@ fn run(
                 .max(tray_width)
                 .max(bar_width)
                 .min(area.w);
-            s.query.clear();
-            s.surrogate = None;
-            s.mouse = None;
-            s.tray_hover = None;
-            s.bar_hover = None;
-            s.panel = None;
-            s.menu = None;
-            s.rank();
+            s.reset();
             // Centred for the full number of rows, so it keeps its top as it shrinks.
             let top = cy - s.height_for(s.max_rows()).min(area.h) / 2;
             let h = s.wanted_height().min(area.h);

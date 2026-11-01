@@ -556,7 +556,8 @@ pub struct Launcher {
     pub search_position: SearchPosition,
     /// Show each app's icon.
     pub show_icons: bool,
-    /// Shorter rows, without the app id under the name.
+    /// One line per row: a larger name with what the row is (an app's id, a command's
+    /// explanation) after it, instead of under it.
     pub compact: bool,
     /// The most results listed.
     pub max_results: usize,
@@ -635,7 +636,7 @@ impl Default for Launcher {
             max_visible: 6,
             search_position: SearchPosition::Top,
             show_icons: true,
-            compact: false,
+            compact: true,
             max_results: 50,
             track_usage: true,
             sort_by_usage: true,

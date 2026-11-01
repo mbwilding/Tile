@@ -9,6 +9,8 @@ use crate::{geometry::Direction, layout::LayoutKind};
 pub enum Command {
     /// Start a program from a command line, a new instance every time.
     Exec(String),
+    /// Run a command line with no window at all, for a console program that has nothing to show.
+    ExecHidden(String),
     /// Focus a window of the command's program, or run the command if there is none.
     FocusOrExec(String),
     /// Close the focused window, like Alt+F4.
@@ -119,6 +121,7 @@ impl fmt::Display for DesktopTarget {
 /// Every dispatcher, with a hint for its argument (empty if it takes none).
 pub const DISPATCHERS: &[(&str, &str)] = &[
     ("exec", "<command line>"),
+    ("exechidden", "<command line>"),
     ("focusorexec", "<command line>"),
     ("killactive", ""),
     ("togglefloating", ""),
@@ -162,6 +165,7 @@ impl Command {
         matches!(
             self,
             Self::Exec(_)
+                | Self::ExecHidden(_)
                 | Self::FocusOrExec(_)
                 | Self::KillActive
                 | Self::Desktop(_)
@@ -231,6 +235,10 @@ impl FromStr for Command {
         let n = name.as_str();
         Ok(match n {
             "exec" => Self::Exec(
+                rest.ok_or_else(|| ParseError::MissingArg(name.clone(), "a command line"))?
+                    .to_string(),
+            ),
+            "exechidden" => Self::ExecHidden(
                 rest.ok_or_else(|| ParseError::MissingArg(name.clone(), "a command line"))?
                     .to_string(),
             ),
@@ -313,6 +321,7 @@ impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Exec(cmd) => write!(f, "exec {cmd}"),
+            Self::ExecHidden(cmd) => write!(f, "exechidden {cmd}"),
             Self::FocusOrExec(cmd) => write!(f, "focusorexec {cmd}"),
             Self::KillActive => f.write_str("killactive"),
             Self::ToggleFloating => f.write_str("togglefloating"),
@@ -360,6 +369,7 @@ mod tests {
     fn parses_and_round_trips() {
         for input in [
             "exec wt.exe -p \"PowerShell\"",
+            "exechidden ecc toggle",
             "focusorexec code.cmd",
             "killactive",
             "movefocus l",

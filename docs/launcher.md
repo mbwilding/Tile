@@ -29,8 +29,8 @@ with their icons. The list is read again in the background each time the launche
 installs show up. Hide entries you never want (uninstallers, help files) with `launcher.hide`,
 regexes matched against the app's name or id.
 
-Each row shows the app name and, unless `compact` is on, its id: the AppUserModelID of a Store
-app or the path of a desktop program.
+Each row shows the app name and its id after it on the same line: the AppUserModelID of a Store
+app or the path of a desktop program. With `compact` off, rows are two lines, with the id under the name.
 
 ## Searching
 
@@ -111,6 +111,7 @@ what you type matches them (`vol`, `bluetooth`, `shut`). The bar's buttons list 
 | **Wi-Fi settings**, **Bluetooth devices** | open the Settings page, to join a network or to pair and connect a device |
 | **Battery: 80%** | opens the battery settings (only on a machine with a battery) |
 | **Clock** | opens the date and time settings |
+| **System Properties**, **Environment Variables**, **Control Panel**, **Device Manager**, **Services** | open the classic Windows tools that Start's app list doesn't have |
 | **Lock**, **Sleep** | do it now |
 | **Sign out**, **Restart**, **Shut down** | ask for Enter again first, as they lose unsaved work |
 

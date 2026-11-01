@@ -21,6 +21,22 @@ fn run(command_line: &str) {
     }
 }
 
+/// Runs a command line with no window, not even a console's: a console program has nothing to
+/// show and isn't tiled.
+fn run_hidden(command_line: &str) {
+    let result = tile_sys::hide_console(
+        std::process::Command::new("cmd")
+            .raw_arg(format!("/C {command_line}"))
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null()),
+    )
+    .spawn();
+    if let Err(e) = result {
+        tracing::error!("failed to run `{command_line}`: {e}");
+    }
+}
+
 fn elevated() -> bool {
     static ELEVATED: OnceLock<bool> = OnceLock::new();
     *ELEVATED.get_or_init(tile_platform::is_elevated)
@@ -46,18 +62,29 @@ async fn send_to_launcher(request: &LaunchRequest) -> std::io::Result<()> {
 
 /// Runs a command line as the normal user. Must be called inside the Tokio runtime.
 pub fn exec(command_line: &str) {
+    exec_with(command_line, false);
+}
+
+/// Like [`exec`], with no window at all.
+pub fn exec_hidden(command_line: &str) {
+    exec_with(command_line, true);
+}
+
+fn exec_with(command_line: &str, hidden: bool) {
+    let start = move |line: &str| if hidden { run_hidden(line) } else { run(line) };
     if !elevated() {
-        run(command_line);
+        start(command_line);
         return;
     }
     let command_line = command_line.to_owned();
     tokio::spawn(async move {
         let request = LaunchRequest::Exec {
             command_line: command_line.clone(),
+            hidden,
         };
         if let Err(e) = send_to_launcher(&request).await {
             tracing::warn!("no launcher ({e}); running `{command_line}` as administrator");
-            run(&command_line);
+            start(&command_line);
         }
     });
 }
@@ -174,7 +201,14 @@ pub async fn serve() -> anyhow::Result<()> {
 /// Carries out a launch request. Returns `false` for [`LaunchRequest::Exit`].
 fn handle(request: LaunchRequest) -> bool {
     match request {
-        LaunchRequest::Exec { command_line } => run(&command_line),
+        LaunchRequest::Exec {
+            command_line,
+            hidden: false,
+        } => run(&command_line),
+        LaunchRequest::Exec {
+            command_line,
+            hidden: true,
+        } => run_hidden(&command_line),
         LaunchRequest::Activate { aumid } => activate_now(&aumid),
         LaunchRequest::Exit => return false,
     }

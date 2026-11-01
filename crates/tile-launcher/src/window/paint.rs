@@ -15,6 +15,8 @@ use crate::system::{format_date, format_time};
 /// The launcher's fonts, at the sizes of a [`FontSizes`].
 struct Fonts {
     main: DeleteObjectGuard<w::HFONT>,
+    /// Larger, for row titles with no description.
+    title: DeleteObjectGuard<w::HFONT>,
     small: DeleteObjectGuard<w::HFONT>,
     /// Bold, for the bar's time, which sits over its date within the bar's height.
     bold: DeleteObjectGuard<w::HFONT>,
@@ -36,6 +38,7 @@ impl Fonts {
                 };
                 Self {
                     main: plain(),
+                    title: plain(),
                     small: plain(),
                     bold: plain(),
                     date: plain(),
@@ -48,6 +51,7 @@ impl Fonts {
     fn in_face(face: &str, sizes: FontSizes) -> w::SysResult<Self> {
         Ok(Self {
             main: make_font(face, sizes.main, false)?,
+            title: make_font(face, sizes.title, false)?,
             small: make_font(face, sizes.small, false)?,
             bold: make_font(face, sizes.time, true)?,
             date: make_font(face, sizes.date, false)?,
@@ -355,7 +359,18 @@ pub(super) fn paint(
             ..row
         };
         if config.compact {
-            text(dc, main, fg, &title, bounds, left)?;
+            text(dc, &fonts.title, fg, &title, bounds, left)?;
+            let used = {
+                let _font = dc.SelectObject(&*fonts.title)?;
+                dc.GetTextExtentPoint32(&title)?.cx
+            };
+            let after = w::RECT {
+                left: bounds.left + used + pad,
+                ..bounds
+            };
+            if after.left < after.right {
+                text(dc, small, dim, &subtitle, after, left)?;
+            }
         } else {
             let spacing = scale(2);
             let block = sizes.main + spacing + sizes.small;
