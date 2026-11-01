@@ -438,9 +438,13 @@ impl Daemon {
                 Some(event) = rx.drags.recv() => self.on_drag(event),
                 Some(event) = rx.tray.recv() => self.on_tray(event),
                 Some(event) = rx.launcher.recv() => match event {
+                    // A Store app's id has a `!`. `shell:AppsFolder` can't start one without
+                    // Explorer, so it is started through the activation manager.
+                    LauncherEvent::Launch(id) if id.contains('!') => launch::activate(&id),
                     LauncherEvent::Launch(id) => {
                         launch::exec(&format!("\"shell:AppsFolder\\{id}\""));
                     }
+                    LauncherEvent::LaunchAsAdmin(id) if id.contains('!') => launch::activate(&id),
                     LauncherEvent::LaunchAsAdmin(id) => {
                         tile_platform::run_as_admin(&format!("shell:AppsFolder\\{id}"));
                     }

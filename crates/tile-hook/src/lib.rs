@@ -5,9 +5,12 @@
 //! safe API.
 
 pub mod backdrop;
+pub mod frame;
 mod icon;
+pub mod immersive;
 pub mod notify;
 pub mod system;
+pub mod uwp;
 pub mod wifi;
 
 pub use icon::{Icon, monitor_dpi, render_hicon, shell_icon};

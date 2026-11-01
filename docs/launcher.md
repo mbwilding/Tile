@@ -51,6 +51,7 @@ Before anything is typed the list shows `pinned` apps first, in their order, the
 
 **Right click** an app for a menu with **Open** and **Run as administrator**, or press
 **Shift+Enter** on the selected app. Windows asks for consent unless Tile already runs elevated.
+Store apps can't be elevated, so for those it behaves like Open.
 
 ## Calculator
 
@@ -60,7 +61,7 @@ value to the clipboard and closes the launcher. Apps that match the same text ar
 A search counts as a calculation when it has a digit and is more than a bare number, so `7zip`
 or `42` stay app searches. It understands:
 
-- `+`, `-`, `*` (or `x` or `Ã—`), `/` (or `Ã·`), `%` (remainder) and `^` (or `**`), with
+- `+`, `-`, `*` (or `x` or `×`), `/` (or `÷`), `%` (remainder) and `^` (or `**`), with
   brackets; spaces don't matter, so `5x5` and `5 * 5` are the same
 - numbers like `1.5`, `1_000`, `2.5e3` and hex `0x1f` (`0x` is always hex, never times zero)
 - `pi`, `tau` and `e`

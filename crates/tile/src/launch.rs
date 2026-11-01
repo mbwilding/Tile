@@ -28,6 +28,24 @@ fn elevated() -> bool {
     *ELEVATED.get_or_init(tile_platform::is_elevated)
 }
 
+/// How many times a request waits for the launcher to start (it can come up a moment after an
+/// elevated Tile at sign-in) and how long between tries.
+const LAUNCHER_TRIES: u32 = 20;
+const LAUNCHER_RETRY: Duration = Duration::from_millis(250);
+
+/// Sends `request` to the launcher, waiting a few seconds for it to appear.
+async fn send_to_launcher(request: &LaunchRequest) -> std::io::Result<()> {
+    let mut last = Ok(());
+    for _ in 0..LAUNCHER_TRIES {
+        last = launcher::send(request).await;
+        if last.is_ok() {
+            break;
+        }
+        tokio::time::sleep(LAUNCHER_RETRY).await;
+    }
+    last
+}
+
 /// Runs a command line as the normal user. Must be called inside the Tokio runtime.
 pub fn exec(command_line: &str) {
     if !elevated() {
@@ -39,9 +57,38 @@ pub fn exec(command_line: &str) {
         let request = LaunchRequest::Exec {
             command_line: command_line.clone(),
         };
-        if let Err(e) = launcher::send(&request).await {
+        if let Err(e) = send_to_launcher(&request).await {
             tracing::warn!("no launcher ({e}); running `{command_line}` as administrator");
             run(&command_line);
+        }
+    });
+}
+
+/// Starts a Store app by its app user model id as the normal user. Must be called inside the
+/// Tokio runtime.
+pub fn activate(aumid: &str) {
+    if !elevated() {
+        activate_now(aumid);
+        return;
+    }
+    let aumid = aumid.to_owned();
+    tokio::spawn(async move {
+        let request = LaunchRequest::Activate {
+            aumid: aumid.clone(),
+        };
+        if let Err(e) = send_to_launcher(&request).await {
+            tracing::warn!("no launcher ({e}); starting `{aumid}` as administrator");
+            activate_now(&aumid);
+        }
+    });
+}
+
+/// Starts the Store app on a thread of its own, which sets up COM for it.
+fn activate_now(aumid: &str) {
+    let aumid = aumid.to_owned();
+    std::thread::spawn(move || {
+        if let Err(e) = tile_hook::uwp::activate(&aumid) {
+            tracing::warn!("{e}");
         }
     });
 }
@@ -76,10 +123,13 @@ pub async fn serve_for_tile() -> anyhow::Result<bool> {
     }
     let server = LaunchServer::bind()?;
     tracing::info!("launcher started, waiting for Tile");
+    // As the shell, this process answers for Store apps the way Explorer would.
+    tile_hook::uwp::start();
     let mut serving = tokio::spawn(async move {
         loop {
             match server.next().await {
                 Ok(LaunchRequest::Exec { command_line }) => run(&command_line),
+                Ok(LaunchRequest::Activate { aumid }) => activate_now(&aumid),
                 Ok(LaunchRequest::Exit) => break,
                 Err(e) => tracing::debug!("bad launch request: {e}"),
             }
@@ -114,9 +164,15 @@ pub async fn serve() -> anyhow::Result<()> {
     }
     let server = LaunchServer::bind()?;
     tracing::info!("launcher started");
+    // Restarting Tile replaces the sign-in copy of this process with this one, so it answers for
+    // Store apps whenever Tile is the shell.
+    if tile_platform::is_sign_in_shell() {
+        tile_hook::uwp::start();
+    }
     loop {
         match server.next().await {
             Ok(LaunchRequest::Exec { command_line }) => run(&command_line),
+            Ok(LaunchRequest::Activate { aumid }) => activate_now(&aumid),
             Ok(LaunchRequest::Exit) => break,
             Err(e) => tracing::debug!("bad launch request: {e}"),
         }

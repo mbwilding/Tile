@@ -13,6 +13,7 @@ What Explorer would otherwise provide is covered like this:
 | Sign out, restart, shut down | Launcher rows (restart, shut down and sign out ask for Enter twice) |
 | Programs started at sign-in | Tile runs the `Run` and `RunOnce` keys and the Startup folders |
 | File Explorer windows | Unchanged |
+| Opening Settings, the Store and other Store apps | The shell process answers for them, [below](#settings-and-store-apps) |
 
 ## Turning it on
 
@@ -74,14 +75,57 @@ logs it to `launcher.log`.
   tray balloons are not shown.
 - **Alt+Tab, Task View and snapping** are Explorer's; they may be missing or odd. Tile's
   workspaces replace most of that.
-- **Some Store apps** that expect Explorer's shell experience host may not start.
 - **Win+E** and the Win key shortcuts that Explorer handles stop working. Bind your own, for
   example `super+e: exec explorer.exe`.
 
 Opening a folder with `explorer.exe C:\path` gives a window on its own when folder windows run
-in a separate process, which the Shell switch sets up. `explorer.exe` with no path may
-start the desktop and taskbar again, depending on the Windows build; if the taskbar appears,
-end `explorer.exe` from Task Manager.
+in a separate process, which the Shell switch sets up.
+
+## Settings and Store apps
+
+Settings, the Microsoft Store, `ms-settings:` links and other Store apps need the shell's help to
+open: Windows starts them through `sihost.exe`, which then waits for the shell to say the app's
+window is ready. Explorer answers; with no Explorer a launch hangs for 45 seconds and fails with
+error 0x80040900 (or "class not registered" or a "File system error").
+
+When Windows starts Tile as the shell (`tile.exe --shell`, the copy that runs with your normal
+rights), that process answers instead. It creates the same component Explorer does, the shell's
+`UwpWindowLifecycleManager`, on a CoreMessaging session of its own. Nothing else of Explorer runs.
+This is on whenever Tile is your sign-in shell, and it stands aside if
+Explorer owns the taskbar.
+
+A Store app's window starts hidden by the shell and has no title bar, so the same process also
+finds each new one, asks `ApplicationFrameHost` for a frame (the window with the title bar and
+close button), puts the app in it, lifts the hiding, keeps the app the size of its frame and keeps
+Windows from freezing the app while it has no visible window. Lifting the hiding needs access
+Windows only gives the shell window's owner, so the process registers a hidden window as the shell
+window. It also registers a stand-in for the `ImmersiveShell` class, which Store apps ask for, that
+gives them no services.
+
+The frame host reports the close button, `Alt+F4` and the system menu's Close to this process,
+which asks the app to close (and ends it if it hasn't after three seconds); the frame goes with it.
+
+Without Explorer nothing tells a Store app how big its window is, so one would lay itself out for
+the whole monitor and never follow its frame. The same process therefore sends each app its
+frame's size, through the shell's window management service, whenever it changes.
+
+Known limit: some images that come from the shell are missing, such as the device picture on
+Settings' System page.
+
+It rests on undocumented parts of Windows 11 (found from build 26100) and a Windows update may
+change them. If it can't start, `launcher.log` says why and Store apps behave as they would
+without it: they hang and fail. Everything else keeps working. Plain programs never need it
+(`snippingtool.exe /clip`, `control bthprops.cpl`, `ncpa.cpl` and `mmsys.cpl` always work).
+
+The launcher starts a Store app by asking Windows' activation manager for it by id, from the
+process with your normal rights. It doesn't use `shell:AppsFolder` for these (the way Start would),
+because that route asks for a COM class only Explorer registers and fails with "class not
+registered". Plain programs still start the usual way. A launch that arrives before that process
+is up waits a few seconds for it instead of running as administrator.
+
+It runs in the helper process that starts programs with your normal rights: the copy Windows
+starts at sign-in, and the one Tile starts again when it restarts, as long as Tile is your
+sign-in shell. So updating Tile with `cargo deploy` needs no sign-out.
 
 ## Getting out of trouble
 

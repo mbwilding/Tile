@@ -20,6 +20,10 @@ pub enum LaunchRequest {
     Exec {
         command_line: String,
     },
+    /// Start a Store app by its app user model id, like `Microsoft.WindowsStore_8wekyb3d8bbwe!App`.
+    Activate {
+        aumid: String,
+    },
     Exit,
 }
 
@@ -63,5 +67,37 @@ impl LaunchServer {
                 return serde_json::from_str(&line).map_err(io::Error::other);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn requests_round_trip_as_json_lines() {
+        for request in [
+            LaunchRequest::Exec {
+                command_line: "notepad.exe".into(),
+            },
+            LaunchRequest::Activate {
+                aumid: "Microsoft.WindowsStore_8wekyb3d8bbwe!App".into(),
+            },
+            LaunchRequest::Exit,
+        ] {
+            let json = serde_json::to_string(&request).unwrap();
+            assert!(!json.contains('\n'));
+            assert_eq!(
+                serde_json::from_str::<LaunchRequest>(&json).unwrap(),
+                request
+            );
+        }
+        assert_eq!(
+            serde_json::to_string(&LaunchRequest::Activate {
+                aumid: "a!b".into()
+            })
+            .unwrap(),
+            r#"{"type":"activate","aumid":"a!b"}"#
+        );
     }
 }

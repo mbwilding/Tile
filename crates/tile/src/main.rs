@@ -63,6 +63,7 @@ fn main() -> anyhow::Result<()> {
     settings::init(&config_path);
     if args.launcher {
         let _guard = logging::init("launcher.log", args.log.as_deref());
+        log_panics();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
@@ -76,6 +77,7 @@ fn main() -> anyhow::Result<()> {
         args.log.as_deref(),
     );
     if helper {
+        log_panics();
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?;
@@ -94,7 +96,10 @@ fn main() -> anyhow::Result<()> {
     // Never leave windows hidden or without title bars, even if we crash.
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        tracing::error!("panic: {info}");
+        tracing::error!(
+            "panic: {info}\n{}",
+            std::backtrace::Backtrace::force_capture()
+        );
         paths::load_restore().apply();
         previous(info);
     }));
@@ -118,4 +123,17 @@ fn main() -> anyhow::Result<()> {
         tracing::error!("{e:#}");
     }
     result
+}
+
+/// Writes a panic and where it happened to the log before the process goes down.
+fn log_panics() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(
+            "panic: {info}
+{}",
+            std::backtrace::Backtrace::force_capture()
+        );
+        previous(info);
+    }));
 }

@@ -30,7 +30,7 @@ pub use launcher::{Launcher, LauncherEvent, LauncherSettings};
 pub use lock::{GRANT_SCRIPT, lock_disabled, lock_workstation, set_lock_disabled};
 pub use monitors::monitors;
 pub use mover::{Animation, Insets, Mover};
-pub use sign_in::{installed_exe, set_shell as set_sign_in_shell};
+pub use sign_in::{installed_exe, is_shell as is_sign_in_shell, set_shell as set_sign_in_shell};
 pub use startup::{commands as startup_commands, first_this_session as first_startup_this_session};
 pub use system::{apply as apply_system_action, command_line as system_command_line};
 pub use token::{is_elevated, user_sid};

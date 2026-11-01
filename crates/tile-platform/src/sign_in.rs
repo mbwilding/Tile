@@ -53,6 +53,18 @@ fn delete_value(key: &str, name: &str) -> Result<(), String> {
     }
 }
 
+/// Whether Windows starts Tile as this user's shell at sign-in.
+pub fn is_shell() -> bool {
+    match w::HKEY::CURRENT_USER.RegGetValue(
+        Some(WINLOGON_KEY),
+        Some(SHELL_VALUE),
+        co::RRF::RT_REG_SZ,
+    ) {
+        Ok(w::RegistryValue::Sz(text)) => text.to_lowercase().contains("tile.exe"),
+        _ => false,
+    }
+}
+
 /// Makes `exe` (with `--shell`) the user's shell from the next sign-in, or with `None` puts
 /// Explorer back, if the shell is Tile's.
 pub fn set_shell(exe: Option<&Path>) -> Result<(), String> {
