@@ -1,13 +1,18 @@
 //! Popups for Windows toast notifications, styled like the launcher's cards: a rounded,
 //! bordered panel per notification, up to `notifications.max_visible` stacked at once, the rest
 //! queued. Each popup counts down with a thin progress bar, pausing while the pointer hovers it;
-//! a click dismisses it early. Like the launcher, it runs on its own thread with its window made
-//! up front, and never takes focus.
+//! a click dismisses it early and brings the posting app to the front, if it has an AUMID. Like
+//! the launcher, it runs on its own thread with its window made up front, and never takes focus.
+//!
+//! This can only bring the app forward, not open whatever the notification was actually about:
+//! `UserNotificationListener` carries the app, title and body, not the launch arguments the real
+//! toast would have activated the app with, and no other app can legitimately reach those either.
 //!
 //! The posting app's icon is drawn from its AUMID through `tile_shell::shell_icon`, the same
 //! `shell:AppsFolder` lookup the launcher uses for its own rows, so a notification shows the
 //! identical icon Windows shows elsewhere for that app. A notification with no AUMID, or one
-//! `shell_icon` can't resolve, shows with no icon rather than guessing at one another way.
+//! `shell_icon` can't resolve, shows with no icon rather than guessing at one another way: its
+//! app name goes back to being a line in the text column instead of a caption under the icon.
 
 use std::{
     cell::RefCell,
@@ -41,9 +46,11 @@ const BAR_GAP: u32 = 10;
 /// The posting app's icon, square, at 100% scaling. Bigger than the launcher's row icons: with no
 /// list of rows to fit several of, there's room to make it the card's visual anchor, the way
 /// Windows' own toasts do.
-const ICON_SIZE: u32 = 48;
-/// Space between the icon and the text column, at 100% scaling.
-const ICON_GAP: u32 = 14;
+const ICON_SIZE: u32 = 56;
+/// Space between the icon column and the text column, at 100% scaling.
+const ICON_GAP: u32 = 16;
+/// Space between the icon and its app name caption below it, at 100% scaling.
+const CAPTION_GAP: u32 = 6;
 /// Space between the title and the body text, at 100% scaling: enough to read as two separate
 /// lines of hierarchy rather than one run-on block.
 const TITLE_GAP: u32 = 4;
@@ -76,10 +83,15 @@ enum Request {
 pub struct Toast(WindowThread<Request>);
 
 impl Toast {
-    /// Starts the toast thread.
-    pub fn spawn(settings: ToastSettings) -> Self {
+    /// Starts the toast thread. `on_click` is called, with the clicked notification, when a card
+    /// is clicked to dismiss it, so the caller can bring its app to the front; it runs on the
+    /// toast thread, so it must not block.
+    pub fn spawn(
+        settings: ToastSettings,
+        on_click: impl Fn(Notification) + Send + 'static,
+    ) -> Self {
         Self(WindowThread::spawn("toast", move |requests, mailbox| {
-            run(settings, requests, mailbox);
+            run(settings, requests, mailbox, on_click);
         }))
     }
 
@@ -250,8 +262,10 @@ struct State {
     /// started the stack.
     area: Rect,
     dpi: u32,
-    font: Option<DeleteObjectGuard<w::HFONT>>,
-    small_font: Option<DeleteObjectGuard<w::HFONT>>,
+    /// Keyed by exact pixel size and weight, since the title, body and app name caption are each
+    /// a different size: a two-slot cache keyed only by weight would hand the wrong size back to
+    /// whichever of those asks second.
+    fonts: HashMap<(i32, bool), DeleteObjectGuard<w::HFONT>>,
     icons: IconCache,
 }
 
@@ -265,30 +279,68 @@ impl State {
     }
 
     fn font(&mut self, px: i32, bold: bool) -> &w::HFONT {
-        let slot = if bold {
-            &mut self.font
-        } else {
-            &mut self.small_font
-        };
-        if slot.is_none() {
-            let face = self.settings.style.font.clone();
-            *slot = Some(make_font(&face, px, bold).unwrap_or_else(|e| {
+        let face = &self.settings.style.font;
+        self.fonts.entry((px, bold)).or_insert_with(|| {
+            make_font(face, px, bold).unwrap_or_else(|e| {
                 tracing::warn!("toast font `{face}`: {e}");
                 w::HFONT::CreateFontIndirect(&w::LOGFONT::default())
                     .expect("the default font exists")
-            }));
-        }
-        slot.as_ref().expect("the font was just made")
+            })
+        })
     }
 
-    /// A card's full height, before any shrinking: room for the app name (unless switched off),
-    /// the title, up to [`BODY_LINES`] lines of body text, and the countdown bar.
+    /// The title's pixel size: bold, the card's largest text.
+    fn title_px(&self) -> i32 {
+        self.scale(16)
+    }
+
+    /// The body text and app name's pixel size, when the app name sits in the text column (no
+    /// icon to put it under).
+    fn small_px(&self) -> i32 {
+        self.scale(13)
+    }
+
+    /// The app name caption's pixel size, when it sits centred under the icon instead.
+    fn caption_px(&self) -> i32 {
+        self.scale(11)
+    }
+
+    /// A line of the card's main text (the title or a line of body text).
+    fn line_h(&self) -> i32 {
+        self.scale(22)
+    }
+
+    /// A line of the app name caption under the icon: smaller than [`Self::line_h`], to match
+    /// [`Self::caption_px`].
+    fn caption_line_h(&self) -> i32 {
+        self.scale(18)
+    }
+
+    /// The icon's side length, as drawn.
+    fn icon_px(&self) -> i32 {
+        self.scale(ICON_SIZE)
+    }
+
+    /// The icon column's height: just the icon, or the icon with its app name caption under it.
+    fn icon_block_h(&self) -> i32 {
+        if self.config().show_app_name {
+            self.icon_px() + self.scale(CAPTION_GAP) + self.caption_line_h()
+        } else {
+            self.icon_px()
+        }
+    }
+
+    /// A card's full height, before any shrinking: room for whichever is taller, the icon with
+    /// its caption or the text block (app name, unless switched off, the title, and up to
+    /// [`BODY_LINES`] lines of body text, since a card with no icon puts the app name there
+    /// instead), plus the countdown bar. One height covers every card, since a card's icon can
+    /// come and go as it scrolls through the stack.
     fn card_height(&self) -> i32 {
-        let line = self.scale(20);
         let padding = self.scale(16);
-        let rows = i32::from(self.config().show_app_name) + 1 + BODY_LINES;
+        let text_rows = i32::from(self.config().show_app_name) + 1 + BODY_LINES;
+        let text_h = self.line_h() * text_rows + self.scale(TITLE_GAP);
         let bar = self.scale(BAR_GAP + BAR_HEIGHT);
-        padding * 2 + line * rows + self.scale(TITLE_GAP) + bar
+        padding * 2 + text_h.max(self.icon_block_h()) + bar
     }
 
     /// Moves cards from the queue into `visible`, up to `max_visible`. The first one promoted
@@ -360,7 +412,12 @@ fn style_window(hwnd: &w::HWND, settings: &ToastSettings) {
     style_popup(hwnd, settings.style.corners, settings.style.border);
 }
 
-fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mailbox<Request>) {
+fn run(
+    settings: ToastSettings,
+    requests: mpsc::Receiver<Request>,
+    mailbox: Mailbox<Request>,
+    on_click: impl Fn(Notification) + Send + 'static,
+) {
     // For the posting apps' icons, which come from the shell.
     let _com = init_com();
     let wnd = gui::WindowMain::new(gui::WindowMainOpts {
@@ -380,8 +437,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
         visible: Vec::new(),
         area: Rect::default(),
         dpi: 96,
-        font: None,
-        small_font: None,
+        fonts: HashMap::new(),
         icons: IconCache::default(),
     }));
 
@@ -418,8 +474,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
             let dpi = tile_shell::monitor_dpi(cx, cy);
             if dpi != s.dpi {
                 s.dpi = dpi;
-                s.font = None;
-                s.small_font = None;
+                s.fonts.clear();
                 s.icons.clear();
             }
             let width = s.config().width.clamp(120, 2000);
@@ -490,8 +545,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                     Request::Settings(settings) => {
                         let mut s = state.borrow_mut();
                         s.settings = *settings;
-                        s.font = None;
-                        s.small_font = None;
+                        s.fonts.clear();
                         changed = true;
                     }
                     Request::Quit => w::PostQuitMessage(0),
@@ -520,10 +574,11 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
         move |p| {
             let mut s = state.borrow_mut();
             if let Some(i) = s.hit(p.coords.x, p.coords.y) {
-                s.visible.remove(i);
+                let card = s.visible.remove(i);
                 s.refill();
                 s.evict_icons();
                 drop(s);
+                on_click(card.notification);
                 relayout();
             }
             Ok(())
@@ -543,16 +598,16 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                 let border_width = s.scale(s.config().border_width);
                 let radius = s.scale(12);
                 let padding = s.scale(16);
-                let line = s.scale(20);
-                // `make_font` takes a pixel height directly, so these are plain pixel sizes like
-                // `line` above, not points: a leftover `pt`-to-`px` conversion here was shrinking
-                // both by a quarter for no reason.
-                let title_px = s.scale(14);
-                let small_px = s.scale(12);
+                let line = s.line_h();
+                let title_px = s.title_px();
+                let small_px = s.small_px();
+                let caption_px = s.caption_px();
+                let caption_line = s.caption_line_h();
                 let bar_h = s.scale(BAR_HEIGHT);
                 let bar_gap = s.scale(BAR_GAP);
-                let icon_px = s.scale(ICON_SIZE);
+                let icon_px = s.icon_px();
                 let icon_gap = s.scale(ICON_GAP);
+                let caption_gap = s.scale(CAPTION_GAP);
                 let title_gap = s.scale(TITLE_GAP);
                 let rows: Vec<PaintRow> = s
                     .visible
@@ -588,15 +643,44 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                     )?;
                     let text_top = row.top + padding;
                     let body_bottom = row.bottom - padding - bar_gap - bar_h;
-                    // The icon is vertically centred on the text block (app name, title and body,
-                    // but not the countdown bar below it), so it reads as that block's anchor
-                    // whatever mix of those lines a given card actually shows.
-                    let icon = aumid
-                        .as_deref()
-                        .and_then(|aumid| s.icons.get(aumid, icon_px));
+                    // With an icon, the app name sits centred under it instead of as a line of
+                    // its own, so the icon doubles as that caption's anchor: the two are drawn
+                    // as one block, vertically centred on the title and body (but not the
+                    // countdown bar below them), so it reads as their anchor whatever mix of
+                    // those lines a given card actually shows. With no icon to resolve, the app
+                    // name goes back to being the text column's first line instead, so the
+                    // identity it carries is never silently dropped.
+                    let icon = match aumid.as_deref() {
+                        Some(aumid) => s.icons.get(aumid, icon_px),
+                        None => None,
+                    };
+                    // Read before `icon` (borrowed from `s.icons`) is used below: a plain `bool`
+                    // needed after the `s.font` calls further down, which `icon` itself, with
+                    // `s` still borrowed for it, could not survive past.
+                    let has_icon = icon.is_some();
                     let text_left = if let Some(icon) = icon {
-                        let icon_y = text_top + ((body_bottom - text_top - icon_px) / 2).max(0);
-                        icon.draw(dc.ptr() as isize, row.left + padding, icon_y, icon_px);
+                        let block_h = if show_app_name {
+                            icon_px + caption_gap + caption_line
+                        } else {
+                            icon_px
+                        };
+                        let block_top = text_top + ((body_bottom - text_top - block_h) / 2).max(0);
+                        icon.draw(dc.ptr() as isize, row.left + padding, block_top, icon_px);
+                        if show_app_name {
+                            text(
+                                dc,
+                                s.font(caption_px, false),
+                                style.dimmed,
+                                &app,
+                                w::RECT {
+                                    left: row.left + padding,
+                                    top: block_top + icon_px + caption_gap,
+                                    right: row.left + padding + icon_px,
+                                    bottom: block_top + block_h,
+                                },
+                                co::DT::CENTER,
+                            )?;
+                        }
                         row.left + padding + icon_px + icon_gap
                     } else {
                         row.left + padding
@@ -608,7 +692,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                         right: row.right - padding,
                         bottom,
                     };
-                    if show_app_name {
+                    if show_app_name && !has_icon {
                         text(
                             dc,
                             s.font(small_px, false),
@@ -735,8 +819,7 @@ mod tests {
             visible: Vec::new(),
             area: Rect::default(),
             dpi: 96,
-            font: None,
-            small_font: None,
+            fonts: HashMap::new(),
             icons: IconCache::default(),
         };
         for app in ["one", "two", "three"] {
