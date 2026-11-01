@@ -1,5 +1,6 @@
 //! The operating system's services that Tile reads or drives: audio, power, network, Wi-Fi and
-//! Bluetooth, the single-instance mutex, the console, and window messages.
+//! Bluetooth, the single-instance mutex, the console, starting processes, window messages and
+//! safe handles for raw window handles.
 //!
 //! Like the other low-level crates, it holds `unsafe` and exposes a safe API.
 
@@ -8,5 +9,15 @@ mod process;
 pub mod wifi;
 mod window;
 
-pub use process::{Instance, detach_console, on_console_close, single_instance};
-pub use window::{post_app, post_close, unwatch_sessions, watch_sessions};
+pub use process::{
+    CREATE_NO_WINDOW, Instance, detach_console, hide_console, on_console_close, single_instance,
+    spawn_detached,
+};
+pub use window::{
+    class_name, hwnd, pid_of, post_app, post_close, unwatch_sessions, watch_sessions,
+};
+
+/// `text` as a NUL-terminated UTF-16 string.
+fn wide(text: &str) -> Vec<u16> {
+    text.encode_utf16().chain([0]).collect()
+}
