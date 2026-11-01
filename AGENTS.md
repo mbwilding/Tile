@@ -7,11 +7,14 @@ Tile is a Windows tiling window manager with a built-in key remapper, written in
 
 ```powershell
 cargo fmt --all
-cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+python -m yamllint --strict .
 ```
 
-All three must be clean. `unsafe` is allowed only in `tile-input`, `tile-shell` and `tile-sys`,
+All four must be clean, as CI runs them with warnings denied. `yamllint` is only needed when a
+YAML file changed; on Windows it also reports CRLF line endings, which CI's LF checkout doesn't
+have. `unsafe` is allowed only in `tile-input`, `tile-shell` and `tile-sys`,
 each block with a `// SAFETY:` comment.
 
 ## Documentation

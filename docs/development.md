@@ -3,7 +3,7 @@
 ```powershell
 cargo build --workspace
 cargo test --workspace
-cargo clippy --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
 
