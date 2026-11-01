@@ -17,12 +17,11 @@ impl Daemon {
             launch::exec(&line);
         } else {
             let what = format!("{action:?}");
-            let failed = what.clone();
             let spawned = std::thread::Builder::new()
                 .name("system action".into())
                 .spawn(move || {
                     if !tile_launcher::apply_system_action(&action) {
-                        tracing::warn!("couldn't do {failed}");
+                        tracing::warn!("couldn't do {action:?}");
                     }
                 });
             if let Err(e) = spawned {
@@ -77,8 +76,6 @@ impl Daemon {
             .set_disable_start_menu(self.loaded.config.general.disable_start_menu);
     }
 
-    /// `focusorexec`: focuses a window of the command's program if there is one, otherwise
-    /// runs the command.
     /// Focuses a window Tile manages, switching to its workspace first.
     pub(super) fn focus_managed(&mut self, id: WindowId) {
         let effects = self.desktops.with_owner(id, |s| s.window_focused(id));
@@ -89,6 +86,8 @@ impl Daemon {
         }
     }
 
+    /// `focusorexec`: focuses a window of the command's program if there is one, otherwise
+    /// runs the command.
     pub(super) fn focus_or_exec(&mut self, command: &str) {
         let exe = Path::new(program(command))
             .file_name()
