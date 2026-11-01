@@ -31,8 +31,6 @@ impl Daemon {
         }
     }
 
-    /// Installs the binds. While tiling is off or paused only those that
-    /// [work while paused](Command::works_while_paused) fire.
     /// In shell mode the launcher is how everything starts, so it is always bound: a bind of
     /// yours if there is one, else Win+R or, if that is taken, Win+D.
     pub(super) fn shell_launcher_bind(&self) -> Option<(tile_config::Keybind, Command)> {
@@ -50,6 +48,8 @@ impl Daemon {
         })
     }
 
+    /// Installs the binds. While tiling is off or paused only those that
+    /// [work while paused](Command::works_while_paused) fire.
     pub(super) fn install_binds(&mut self) {
         self.hotkeys.set_paused(self.paused || !self.tiling);
         // Without the takeover, Windows would lock *and* run the bind.
