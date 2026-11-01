@@ -150,8 +150,8 @@ right clicks it, which also leaves the launcher open.
 ## The bar
 
 At the top of the launcher is a bar (`bar: false` hides it). On the left it shows the time in
-bold with seconds, ticking while the launcher is open, and the date; they never change to show
-anything else. On the right are icon buttons, drawn with Windows' own icons (Segoe Fluent Icons,
+bold with seconds, ticking while the launcher is open, with the date under it; they never change
+to show anything else. The bar is no taller for it, so both are a little smaller. On the right are icon buttons, drawn with Windows' own icons (Segoe Fluent Icons,
 or Segoe MDL2 Assets on an older Windows): four that open controls, then five for the session.
 
 ### Controls

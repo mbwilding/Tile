@@ -203,15 +203,16 @@ fn mix(a: Color, b: Color, amount: u16) -> Color {
 struct Fonts {
     main: DeleteObjectGuard<w::HFONT>,
     small: DeleteObjectGuard<w::HFONT>,
-    /// The main font in bold, for the bar's time.
+    /// Bold, for the bar's time, which sits over its date within the bar's height.
     bold: DeleteObjectGuard<w::HFONT>,
-    /// Between the two, for the bar's date.
+    /// Smaller, for the bar's date.
     date: DeleteObjectGuard<w::HFONT>,
     /// Windows' icon font, for the bar's buttons.
     icons: DeleteObjectGuard<w::HFONT>,
     /// Pixel heights.
     main_px: i32,
     small_px: i32,
+    time_px: i32,
     date_px: i32,
 }
 
@@ -545,7 +546,8 @@ impl State {
             let config = &self.settings.config;
             let main_px = (config.font_size.clamp(6, 48) * self.dpi / 72) as i32;
             let small_px = main_px * 4 / 5;
-            let date_px = main_px * 9 / 10;
+            let bar_h = main_px + self.scale(16);
+            let (time_px, date_px) = (bar_h * 11 / 20, bar_h * 8 / 20);
             let face = &self.settings.style.font;
             let font = |face: &str, px: i32, bold: bool| {
                 let mut lf = w::LOGFONT::new_face(-px, face);
@@ -559,11 +561,12 @@ impl State {
                 Ok::<_, co::ERROR>(Fonts {
                     main: font(face, main_px, false)?,
                     small: font(face, small_px, false)?,
-                    bold: font(face, main_px, true)?,
+                    bold: font(face, time_px, true)?,
                     date: font(face, date_px, false)?,
                     icons: font(icon_face(), main_px * 12 / 10, false)?,
                     main_px,
                     small_px,
+                    time_px,
                     date_px,
                 })
             })();
@@ -585,7 +588,8 @@ impl State {
                 icons: plain(),
                 main_px: 16,
                 small_px: 13,
-                date_px: 14,
+                time_px: 17,
+                date_px: 12,
             }
         })
     }
@@ -754,10 +758,10 @@ impl State {
     }
 
     /// The width the bar needs for its clock, date and buttons.
-    fn bar_width(&self, main_px: i32, date_px: i32) -> i32 {
+    fn bar_width(&self, main_px: i32, time_px: i32, date_px: i32) -> i32 {
         let button = main_px + self.scale(16);
         let buttons = BAR_BUTTONS.len() as i32 * (button + self.scale(6)) + self.scale(14);
-        let clock = (12 * main_px + 24 * date_px) * 11 / 20;
+        let clock = (8 * time_px).max(24 * date_px) * 11 / 20;
         2 * self.scale(12) + clock + self.scale(16) + buttons
     }
 
@@ -1136,12 +1140,12 @@ fn run(
             // The icon handles of the last time may have been reused for other images.
             s.icons.retain(|key, _| !key.starts_with("hicon:"));
             let tray_width = s.tray.len() as i32 * s.scale(36) + 2 * s.scale(12);
-            let (main_px, date_px) = {
+            let (main_px, time_px, date_px) = {
                 let fonts = s.fonts();
-                (fonts.main_px, fonts.date_px)
+                (fonts.main_px, fonts.time_px, fonts.date_px)
             };
             let bar_width = if s.config().bar {
-                s.bar_width(main_px, date_px)
+                s.bar_width(main_px, time_px, date_px)
             } else {
                 0
             };
@@ -1907,20 +1911,18 @@ fn paint_with(s: &mut State, fonts: &Fonts, dc: &w::HDC, client: w::RECT) -> w::
         let bar = layout.bar;
         let inset = s.scale(6);
         let bold = &*fonts.bold;
-        let time_width = {
-            let _font = dc.SelectObject(bold)?;
-            dc.GetTextExtentPoint32(&time)?.cx
-        };
+        let split = bar.top + (bar.bottom - bar.top) * 11 / 20;
+        let buttons_left = layout.buttons.first().map_or(bar.right, |b| b.left);
         let time_area = w::RECT {
             left: bar.left + inset,
+            right: buttons_left - pad,
+            bottom: split,
             ..bar
         };
         text(dc, bold, style.foreground, &time, time_area, left)?;
-        let buttons_left = layout.buttons.first().map_or(bar.right, |b| b.left);
         let date_area = w::RECT {
-            left: bar.left + inset + time_width + pad,
-            right: buttons_left - pad,
-            ..bar
+            top: split,
+            ..time_area
         };
         text(dc, &fonts.date, style.dimmed, &date, date_area, left)?;
         let idle = mix(style.background, style.foreground, 20);
