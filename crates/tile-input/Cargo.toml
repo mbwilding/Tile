@@ -21,6 +21,7 @@ windows-sys = { workspace = true, features = [
 # is sound in a `// SAFETY:` comment.
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }

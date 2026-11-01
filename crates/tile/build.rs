@@ -1,3 +1,6 @@
+//! Embeds the manifest and the icon in `Tile.exe`, writes `Tile.ico` beside it and sets the
+//! version it reports.
+
 use embed_manifest::{embed_manifest, manifest::DpiAwareness, new_manifest};
 
 #[path = "../tile-platform/src/tile_icon.rs"]

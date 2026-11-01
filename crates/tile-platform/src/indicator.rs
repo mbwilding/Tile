@@ -23,7 +23,9 @@ const FRAME_MS: u32 = 15;
 /// The `workspace_indicator` config section, with its look resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct IndicatorSettings {
+    /// The section as configured.
     pub config: Config,
+    /// Its look, with the theme filled in.
     pub style: IndicatorStyle,
 }
 

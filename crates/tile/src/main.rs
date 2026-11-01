@@ -1,3 +1,6 @@
+//! `Tile.exe`: the window manager and key remapper (the daemon), its command line, the launcher
+//! helper and the watchdog, chosen by the arguments.
+
 mod cli;
 mod daemon;
 mod install;

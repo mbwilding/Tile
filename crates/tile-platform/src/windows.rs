@@ -19,7 +19,9 @@ use crate::{
 /// A window that passed the manageability checks.
 #[derive(Debug, Clone)]
 pub struct Discovered {
+    /// The window.
     pub id: WindowId,
+    /// Its title, class and program, for rules.
     pub info: WindowInfo,
     /// Owned dialogs and fixed-size windows should float by default.
     pub floating_hint: bool,
@@ -27,12 +29,14 @@ pub struct Discovered {
     pub rect: Rect,
 }
 
+/// Why [`Windows::place`] couldn't move a window.
 #[derive(Debug)]
 pub enum PlaceError {
     /// The window no longer exists.
     Gone,
     /// The window belongs to an elevated process; we can't move it.
     AccessDenied,
+    /// Windows refused for another reason.
     Other(w::co::ERROR),
 }
 
@@ -292,6 +296,7 @@ impl Default for Windows {
 }
 
 impl Windows {
+    /// Knows no windows yet.
     pub fn new() -> Self {
         Self {
             handles: HashMap::new(),
@@ -301,6 +306,7 @@ impl Windows {
         }
     }
 
+    /// Whether the window's handle is held, from discovering it until it is forgotten.
     pub fn contains(&self, id: WindowId) -> bool {
         self.handles.contains_key(&id)
     }
@@ -329,15 +335,18 @@ impl Windows {
         Some(found)
     }
 
+    /// Lets go of the window's handle, when it is no longer managed.
     pub fn forget(&mut self, id: WindowId) {
         self.handles.remove(&id);
         self.insets.remove(&id);
     }
 
+    /// The window's title, class and program as they are now.
     pub fn info(&self, id: WindowId) -> Option<WindowInfo> {
         self.handles.get(&id).map(info_of)
     }
 
+    /// The window's visible frame, without the invisible resize borders.
     pub fn frame(&self, id: WindowId) -> Option<Rect> {
         self.handles.get(&id).and_then(frame_of)
     }
@@ -350,6 +359,7 @@ impl Windows {
         Some(measure_insets(insets, id, handles.get(&id)?))
     }
 
+    /// Whether the window still exists.
     pub fn is_alive(&self, id: WindowId) -> bool {
         self.handles.get(&id).is_some_and(w::HWND::IsWindow)
     }
@@ -396,12 +406,14 @@ impl Windows {
         })
     }
 
+    /// Shows the window without activating it. Returns at once.
     pub fn show(&self, id: WindowId) {
         if let Some(hwnd) = self.handles.get(&id) {
             let _ = hwnd.ShowWindowAsync(co::SW::SHOWNA);
         }
     }
 
+    /// Hides the window. Returns at once.
     pub fn hide(&self, id: WindowId) {
         if let Some(hwnd) = self.handles.get(&id) {
             let _ = hwnd.ShowWindowAsync(co::SW::HIDE);
@@ -561,6 +573,7 @@ pub fn foreground() -> Option<WindowId> {
     w::HWND::GetForegroundWindow().map(|h| id_of(&h))
 }
 
+/// Where the pointer is, in physical screen pixels.
 pub fn cursor_pos() -> (i32, i32) {
     w::GetCursorPos().map(|p| (p.x, p.y)).unwrap_or_default()
 }
