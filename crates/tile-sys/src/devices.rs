@@ -159,6 +159,78 @@ pub fn default_device(flow: Flow) -> Option<String> {
     }
 }
 
+/// An audio output or input device that is plugged in and enabled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioDevice {
+    /// The endpoint id Windows knows it by.
+    pub id: String,
+    /// Like `Headphones (RME Babyface Pro)`.
+    pub name: String,
+    /// Whether it is the one in use.
+    pub default: bool,
+}
+
+const DEVICES_KEY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio";
+/// The device's kind (`Headphones`) and the hardware it is on (`RME Babyface Pro`).
+const KIND_VALUE: &str = "{a45c254e-df1c-4efd-8020-67d146a850e0},2";
+const HARDWARE_VALUE: &str = "{b3f8fa53-0004-438e-9003-51a46e139bfc},6";
+/// `DeviceState` of one that is plugged in and enabled.
+const ACTIVE: u32 = 1;
+
+/// The active audio devices of a kind, by name, with the one in use marked. Windows keeps them
+/// in the registry; there is nothing to ask for their names that doesn't need COM property
+/// stores.
+pub fn audio_devices(flow: Flow) -> Vec<AudioDevice> {
+    use winsafe::{self as w, co};
+
+    let text = |key: &str, name: &str| match w::HKEY::LOCAL_MACHINE.RegGetValue(
+        Some(key),
+        Some(name),
+        co::RRF::RT_REG_SZ,
+    ) {
+        Ok(w::RegistryValue::Sz(text)) => Some(text),
+        _ => None,
+    };
+    let (folder, prefix) = match flow {
+        Flow::Output => ("Render", "{0.0.0.00000000}"),
+        Flow::Input => ("Capture", "{0.0.1.00000000}"),
+    };
+    let base = format!(r"{DEVICES_KEY}\{folder}");
+    let Ok(key) =
+        w::HKEY::LOCAL_MACHINE.RegOpenKeyEx(Some(&base), co::REG_OPTION::default(), co::KEY::READ)
+    else {
+        return Vec::new();
+    };
+    let Ok(names) = key.RegEnumKeyEx() else {
+        return Vec::new();
+    };
+    let names: Vec<String> = names.filter_map(std::result::Result::ok).collect();
+    let default = default_device(flow);
+    let mut out: Vec<AudioDevice> = names
+        .into_iter()
+        .filter_map(|guid| {
+            let state = key.RegGetValue(Some(&guid), Some("DeviceState"), co::RRF::RT_REG_DWORD);
+            if !matches!(state, Ok(w::RegistryValue::Dword(ACTIVE))) {
+                return None;
+            }
+            let properties = format!(r"{base}\{guid}\Properties");
+            let kind = text(&properties, KIND_VALUE)?;
+            let name = match text(&properties, HARDWARE_VALUE) {
+                Some(hardware) => format!("{kind} ({hardware})"),
+                None => kind,
+            };
+            let id = format!("{prefix}.{guid}");
+            Some(AudioDevice {
+                default: default.as_deref() == Some(id.as_str()),
+                id,
+                name,
+            })
+        })
+        .collect();
+    out.sort_by_key(|a| a.name.to_lowercase());
+    out
+}
+
 /// The class of the system's audio policy, which the sound settings use to change the default
 /// device.
 const CLSID_POLICY_CONFIG: GUID = GUID::from_u128(0x870af99c_171d_4f9e_af0d_e63df40c2bc9);
@@ -395,6 +467,24 @@ mod tests {
             })
             .join()
             .expect("a read panicked");
+        }
+    }
+
+    /// The machine decides what exists, so this checks the shape: at most one device in use per
+    /// direction, and every id in the form Windows uses.
+    #[test]
+    fn lists_audio_devices_with_one_in_use() {
+        for (devices, prefix) in [
+            (audio_devices(Flow::Output), "{0.0.0."),
+            (audio_devices(Flow::Input), "{0.0.1."),
+        ] {
+            assert!(devices.iter().filter(|d| d.default).count() <= 1);
+            assert!(
+                devices
+                    .iter()
+                    .all(|d| d.id.starts_with(prefix) && !d.name.is_empty())
+            );
+            println!("{devices:?}");
         }
     }
 

@@ -4,7 +4,6 @@
 use std::{
     os::windows::process::CommandExt,
     path::Path,
-    process::Stdio,
     sync::OnceLock,
     time::{Duration, Instant},
 };
@@ -107,19 +106,6 @@ pub fn open(path: &Path) {
 
 /// How long `tile --shell` waits for the sign-in task to start Tile.
 const SHELL_WAIT: Duration = Duration::from_secs(30);
-
-/// Whether `tile install` registered the sign-in task, which starts Tile elevated.
-pub fn sign_in_task_exists() -> bool {
-    tile_sys::hide_console(
-        std::process::Command::new("schtasks")
-            .args(["/query", "/tn", "Tile"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null()),
-    )
-    .status()
-    .is_ok_and(|status| status.success())
-}
 
 /// `tile --shell` without admin rights: serves launch requests like `--launcher` for the
 /// elevated Tile the sign-in task starts. Returns `true` when asked to exit, and `false` if no

@@ -28,26 +28,20 @@ use tile_ipc::{
     install::{self as pipes, Report, ReportListener},
     launcher::{self, LaunchRequest},
 };
-use winsafe::{self as w, co, prelude::*};
+use tile_platform::{EXE, install_dir, registry};
+use winsafe::{self as w, co};
+
+use crate::task;
 
 /// How long a running Tile or launcher may take to exit.
 const EXIT_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long the elevated step may take once the UAC prompt was accepted.
 const ELEVATED_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// The scheduled task that starts Tile.
-const TASK: &str = "Tile";
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const LAUNCHER_RUN_VALUE: &str = "Tile launcher";
-/// The `Run` value earlier, non-elevated installs used for Tile itself.
-const OLD_RUN_VALUE: &str = "Tile";
-/// The scheduled task of Key, the standalone remapper Tile absorbed.
-const KEY_TASK: &str = "Key";
 const ENV_KEY: &str = "Environment";
 const PATH_VALUE: &str = "Path";
-
-/// The program `install` copies.
-const EXE: &str = "Tile.exe";
 
 /// The admin part of `install` / `uninstall`.
 #[derive(Debug, Clone, clap::Subcommand)]
@@ -61,21 +55,6 @@ pub enum Step {
     },
     /// Remove the task and the programs.
     Uninstall,
-}
-
-/// `C:\Program Files\Tile`. Tile runs elevated, so it must live where only admins can write.
-fn install_dir() -> PathBuf {
-    std::env::var_os("ProgramFiles")
-        .map_or_else(|| PathBuf::from(r"C:\Program Files"), PathBuf::from)
-        .join("Tile")
-}
-
-/// `%LOCALAPPDATA%\Programs\Tile`, where earlier versions installed Tile.
-fn old_install_dir() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Programs")
-        .join("Tile")
 }
 
 /// `C:\Program Files\Key`, where Key was installed.
@@ -116,14 +95,15 @@ pub async fn install() -> anyhow::Result<()> {
         user: current_user()?,
     })
     .await?;
-    let tile = dir.join("Tile.exe");
-    set_run(
+    let tile = dir.join(EXE);
+    registry::set_sz(
+        RUN_KEY,
         LAUNCHER_RUN_VALUE,
-        Some(&tile_platform::headless_command(&tile, "--launcher")),
+        &tile_platform::headless_command(&tile, "--launcher"),
     )
     .context("failed to register the launcher to start at sign-in")?;
     set_on_path(&dir, true)?;
-    remove_old_install();
+    let _ = set_on_path(&key_install_dir(), false);
     start_detached(&tile, &["--launcher"]).context("failed to start the launcher")?;
     println!("Installed. {note}");
     println!("`tile` is on your PATH in terminals started after your next sign-in.");
@@ -134,13 +114,13 @@ pub async fn install() -> anyhow::Result<()> {
 pub async fn uninstall() -> anyhow::Result<()> {
     stop_tile().await?;
     stop_launcher().await?;
-    set_run(LAUNCHER_RUN_VALUE, None).context("failed to remove the launcher from sign-in")?;
+    registry::delete_value(RUN_KEY, LAUNCHER_RUN_VALUE)
+        .context("failed to remove the launcher from sign-in")?;
     let dir = install_dir();
     set_on_path(&dir, false)?;
-    remove_old_install();
     let was_shell = tile_platform::is_sign_in_shell();
     tile_platform::set_sign_in_shell(None)
-        .map_err(|e| anyhow::anyhow!("failed to restore Explorer as the sign-in shell: {e}"))?;
+        .context("failed to restore Explorer as the sign-in shell")?;
     println!("Removing {} (needs admin rights)...", dir.display());
     run_elevated(&Step::Uninstall).await?;
     if was_shell && !tile_shell::notify::taskbar_exists() {
@@ -214,21 +194,20 @@ fn run_step(step: &Step) -> anyhow::Result<String> {
     match step {
         Step::Install { source, user } => {
             copy_programs(source, &dir)?;
-            register_task(&dir.join("Tile.exe"), user)
-                .context("failed to register the sign-in task")?;
-            delete_task(KEY_TASK).context("failed to remove Key's sign-in task")?;
+            task::register(&dir.join(EXE), user).context("failed to register the sign-in task")?;
+            task::delete(task::KEY).context("failed to remove Key's sign-in task")?;
             remove_programs(&key_install_dir())?;
             // We run as administrator: started by us, Tile is too. Unless the prompt was
             // answered with another account, whose desktop it must not start on.
             if current_user()?.eq_ignore_ascii_case(user) {
-                start_detached(&dir.join("Tile.exe"), &[]).context("failed to start Tile")?;
+                start_detached(&dir.join(EXE), &[]).context("failed to start Tile")?;
                 Ok("Tile is running as administrator and starts at sign-in.".into())
             } else {
                 Ok("Tile starts as administrator at your next sign-in.".into())
             }
         }
         Step::Uninstall => {
-            delete_task(TASK).context("failed to remove the sign-in task")?;
+            task::delete(task::TILE).context("failed to remove the sign-in task")?;
             remove_programs(&dir)?;
             Ok(String::new())
         }
@@ -271,63 +250,6 @@ fn remove_programs(dir: &Path) -> anyhow::Result<()> {
             .with_context(|| format!("failed to delete {}", dir.display()))?;
         }
         _ => {}
-    }
-    Ok(())
-}
-
-fn task_service() -> anyhow::Result<w::ITaskService> {
-    let service = w::CoCreateInstance::<w::ITaskService>(
-        &co::CLSID::TaskScheduler,
-        None::<&w::IUnknown>,
-        co::CLSCTX::INPROC_SERVER,
-    )?;
-    service.Connect(None, None, None, None)?;
-    Ok(service)
-}
-
-/// Registers the task that starts `exe` elevated when `user` signs in.
-fn register_task(exe: &Path, user: &str) -> anyhow::Result<()> {
-    let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED)?;
-    let service = task_service()?;
-    let folder = service.GetFolder("\\")?;
-    let task = service.NewTask()?;
-    task.get_Principal()?
-        .put_RunLevel(co::TASK_RUNLEVEL::HIGHEST)?;
-    // The defaults would stop Tile after 3 days or on battery, and run it at low priority.
-    let settings = task.get_Settings()?;
-    settings.put_DisallowStartIfOnBatteries(false)?;
-    settings.put_StopIfGoingOnBatteries(false)?;
-    settings.put_ExecutionTimeLimit("PT0S")?;
-    settings.put_MultipleInstances(co::TASK_INSTANCES::IGNORE_NEW)?;
-    settings.put_Priority(4)?;
-    let trigger = task
-        .get_Triggers()?
-        .Create(co::TASK_TRIGGER_TYPE2::LOGON)?
-        .QueryInterface::<w::ILogonTrigger>()?;
-    trigger.put_UserId(user)?;
-    let action = task
-        .get_Actions()?
-        .Create(co::TASK_ACTION_TYPE::EXEC)?
-        .QueryInterface::<w::IExecAction>()?;
-    action.put_Path(&tile_platform::conhost().to_string_lossy())?;
-    action.put_Arguments(&format!("--headless \"{}\"", exe.display()))?;
-    folder.RegisterTaskDefinition(
-        Some(TASK),
-        &task,
-        co::TASK_CREATION::CREATE_OR_UPDATE,
-        Some(user),
-        None,
-        co::TASK_LOGON::INTERACTIVE_TOKEN,
-        None,
-    )?;
-    Ok(())
-}
-
-fn delete_task(name: &str) -> anyhow::Result<()> {
-    let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED)?;
-    let folder = task_service()?.GetFolder("\\")?;
-    if folder.GetTask(name).is_ok() {
-        folder.DeleteTask(name)?;
     }
     Ok(())
 }
@@ -410,46 +332,10 @@ async fn wait_until_stopped<F: Future<Output = bool>>(
     Ok(())
 }
 
-/// Removes what earlier, per-user versions installed (their `Run` value, `PATH` entry and
-/// folder) and Key's `PATH` entry.
-fn remove_old_install() {
-    let old = old_install_dir();
-    let _ = set_on_path(&key_install_dir(), false);
-    let _ = set_run(OLD_RUN_VALUE, None);
-    let _ = set_on_path(&old, false);
-    let _ = fs::remove_dir_all(&old);
-}
-
 /// Starts `exe` with [`tile_sys::spawn_detached`], so it outlives us (e.g. when `cargo run` ends
 /// its job on exit).
 fn start_detached(exe: &Path, args: &[&str]) -> io::Result<()> {
     tile_sys::spawn_detached(exe, args).map(drop)
-}
-
-fn io_error(e: co::ERROR) -> io::Error {
-    io::Error::from_raw_os_error(e.raw() as i32)
-}
-
-/// Sets the user's `Run` value `name` to `command`, or removes it with `None`.
-fn set_run(name: &str, command: Option<&str>) -> io::Result<()> {
-    match command {
-        Some(command) => w::HKEY::CURRENT_USER.RegSetKeyValue(
-            Some(RUN_KEY),
-            Some(name),
-            w::RegistryValue::Sz(command.to_owned()),
-        ),
-        None => w::HKEY::CURRENT_USER
-            .RegOpenKeyEx(Some(RUN_KEY), co::REG_OPTION::default(), co::KEY::SET_VALUE)
-            .and_then(|key| key.RegDeleteValue(Some(name)))
-            .or_else(|e| {
-                if e == co::ERROR::FILE_NOT_FOUND {
-                    Ok(())
-                } else {
-                    Err(e)
-                }
-            }),
-    }
-    .map_err(io_error)
 }
 
 /// Adds `dir` to (`present`) or removes it from the user's `PATH`, keeping its other entries
@@ -472,7 +358,6 @@ fn set_on_path(dir: &Path, present: bool) -> anyhow::Result<()> {
     };
     w::HKEY::CURRENT_USER
         .RegSetKeyValue(Some(ENV_KEY), Some(PATH_VALUE), value)
-        .map_err(io_error)
         .context("failed to update your PATH")
 }
 
@@ -596,9 +481,8 @@ mod tests {
     }
 
     #[test]
-    fn the_folders_follow_the_install_dir() {
-        assert!(install_dir().ends_with("Tile"));
+    fn keys_folder_sits_beside_tiles() {
         assert!(key_install_dir().ends_with("Key"));
-        assert!(old_install_dir().ends_with("Programs/Tile"));
+        assert_eq!(key_install_dir().parent(), install_dir().parent());
     }
 }

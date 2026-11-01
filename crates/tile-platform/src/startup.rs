@@ -6,6 +6,8 @@ use std::{fs, path::PathBuf};
 
 use winsafe::{self as w, co};
 
+use crate::registry;
+
 const CURRENT: &str = r"Software\Microsoft\Windows\CurrentVersion";
 /// Where Task Manager and Settings record which startup programs are switched off.
 const APPROVED: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved";
@@ -104,11 +106,8 @@ pub fn commands() -> Vec<String> {
         for (name, command) in values(&root, &once) {
             tracing::debug!("startup: {root_name} RunOnce {name}");
             out.push(quote_program(&command));
-            let removed = root
-                .RegOpenKeyEx(Some(&once), co::REG_OPTION::default(), co::KEY::SET_VALUE)
-                .and_then(|key| key.RegDeleteValue(Some(&name)));
-            if let Err(e) = removed {
-                tracing::debug!("couldn't remove RunOnce value {name}: {e}");
+            if let Err(e) = registry::delete_value_in(&root, &once, &name) {
+                tracing::debug!("{e}");
             }
         }
     }

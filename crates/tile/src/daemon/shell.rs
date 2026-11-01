@@ -49,7 +49,9 @@ impl Daemon {
         } else if exe.exists() {
             tile_platform::set_sign_in_shell(Some(&exe))
         } else {
-            Err("Tile isn't installed (run `tile install`)".to_owned())
+            Err(std::io::Error::other(
+                "Tile isn't installed (run `tile install`)",
+            ))
         };
         if let Err(e) = result {
             tracing::warn!("couldn't change the sign-in shell, so Explorer still starts: {e}");

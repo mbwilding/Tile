@@ -49,19 +49,7 @@ impl Daemon {
             "Win+L needs a one-time permission; asking Windows (UAC). Win+L binds wait until then"
         );
         let script = paths::data_dir().join("grant-win-l.ps1");
-        let written = std::fs::create_dir_all(paths::data_dir())
-            .and_then(|()| std::fs::write(&script, tile_platform::GRANT_SCRIPT));
-        if let Err(e) = written {
-            tracing::error!("could not write {}: {e}", script.display());
-            return;
-        }
-        let spawned = tile_sys::hide_console(
-            std::process::Command::new("powershell")
-                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-                .arg(&script),
-        )
-        .spawn();
-        if let Err(e) = spawned {
+        if let Err(e) = tile_platform::request_lock_permission(&script) {
             tracing::error!("could not request Win+L permission: {e}");
         }
     }
