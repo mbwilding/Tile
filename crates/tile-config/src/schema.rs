@@ -749,7 +749,7 @@ impl Default for Notifications {
     fn default() -> Self {
         Self {
             enabled: None,
-            position: IndicatorPosition::BottomRight,
+            position: IndicatorPosition::TopRight,
             gap: 16,
             width: 340,
             duration_ms: 5000,
