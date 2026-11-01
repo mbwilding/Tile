@@ -65,3 +65,67 @@ impl Layout for Monocle {
         Some(self.windows[next])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const A: WindowId = WindowId(1);
+    const B: WindowId = WindowId(2);
+    const C: WindowId = WindowId(3);
+
+    fn filled(ids: &[WindowId]) -> (Monocle, LayoutSettings) {
+        let s = LayoutSettings::default();
+        let mut m = Monocle::default();
+        for id in ids {
+            m.insert(*id, None, Rect::default(), &s);
+        }
+        (m, s)
+    }
+
+    #[test]
+    fn every_window_fills_the_area_inside_the_outer_gap() {
+        let (mut m, s) = filled(&[A, B]);
+        let tiles = m.arrange(Rect::new(0, 0, 1000, 800), None, &s);
+        let expected = Rect::new(0, 0, 1000, 800).shrink(s.gaps_out);
+        assert_eq!(tiles.len(), 2);
+        assert!(tiles.iter().all(|t| t.rect == expected && t.visible));
+    }
+
+    #[test]
+    fn windows_keep_insertion_order_and_can_be_removed() {
+        let (mut m, _) = filled(&[A, B, C]);
+        assert_eq!(m.windows(), vec![A, B, C]);
+        assert!(m.contains(B));
+        m.remove(B);
+        assert_eq!(m.windows(), vec![A, C]);
+        assert!(!m.contains(B));
+    }
+
+    #[test]
+    fn swap_exchanges_positions_and_ignores_strangers() {
+        let (mut m, _) = filled(&[A, B, C]);
+        m.swap(A, C);
+        assert_eq!(m.windows(), vec![C, B, A]);
+        m.swap(A, WindowId(99));
+        assert_eq!(m.windows(), vec![C, B, A]);
+    }
+
+    #[test]
+    fn neighbours_cycle_and_wrap() {
+        let (m, _) = filled(&[A, B, C]);
+        assert_eq!(m.neighbor(A, Direction::Right, &[]), Some(B));
+        assert_eq!(m.neighbor(C, Direction::Down, &[]), Some(A));
+        assert_eq!(m.neighbor(A, Direction::Left, &[]), Some(C));
+        assert_eq!(m.neighbor(B, Direction::Up, &[]), Some(A));
+        assert_eq!(m.neighbor(WindowId(99), Direction::Right, &[]), None);
+    }
+
+    #[test]
+    fn a_lone_window_has_no_neighbour_and_resize_does_nothing() {
+        let (mut m, s) = filled(&[A]);
+        assert_eq!(m.neighbor(A, Direction::Right, &[]), None);
+        m.resize(A, 50, 50, Rect::new(0, 0, 100, 100), &s);
+        assert_eq!(m.windows(), vec![A]);
+    }
+}

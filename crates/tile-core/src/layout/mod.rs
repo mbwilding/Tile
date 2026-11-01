@@ -273,3 +273,145 @@ impl LayoutState {
         self.inner_mut().move_window(id, dir, tiles)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const A: WindowId = WindowId(1);
+    const B: WindowId = WindowId(2);
+    const C: WindowId = WindowId(3);
+    const AREA: Rect = Rect {
+        x: 0,
+        y: 0,
+        w: 1000,
+        h: 800,
+    };
+
+    fn filled(kind: LayoutKind) -> (LayoutState, LayoutSettings) {
+        let s = LayoutSettings::default();
+        let mut l = LayoutState::new(kind, &s);
+        let mut prev = None;
+        for id in [A, B, C] {
+            l.insert(id, prev, AREA, &s);
+            prev = Some(id);
+        }
+        (l, s)
+    }
+
+    #[test]
+    fn kinds_cycle_through_all_and_wrap() {
+        let mut kind = LayoutKind::ALL[0];
+        let mut seen = Vec::new();
+        for _ in 0..LayoutKind::ALL.len() {
+            seen.push(kind);
+            kind = kind.next();
+        }
+        assert_eq!(seen, LayoutKind::ALL.to_vec());
+        assert_eq!(kind, LayoutKind::ALL[0]);
+    }
+
+    #[test]
+    fn kinds_parse_and_print_their_names() {
+        for kind in LayoutKind::ALL {
+            assert_eq!(kind.to_string().parse::<LayoutKind>(), Ok(kind));
+        }
+        assert_eq!("Scroller".parse::<LayoutKind>(), Ok(LayoutKind::Scrolling));
+        assert_eq!("MASTER".parse::<LayoutKind>(), Ok(LayoutKind::Master));
+        assert!("grid".parse::<LayoutKind>().is_err());
+    }
+
+    #[test]
+    fn a_new_layout_reports_its_kind_and_starts_empty() {
+        let s = LayoutSettings::default();
+        for kind in LayoutKind::ALL {
+            let l = LayoutState::new(kind, &s);
+            assert_eq!(l.kind(), kind);
+            assert!(l.windows().is_empty());
+        }
+    }
+
+    #[test]
+    fn every_layout_tracks_inserted_and_removed_windows() {
+        for kind in LayoutKind::ALL {
+            let (mut l, s) = filled(kind);
+            let mut windows = l.windows();
+            windows.sort_by_key(|w| w.0);
+            assert_eq!(windows, vec![A, B, C], "{kind}");
+            assert!(l.contains(B));
+            l.remove(B);
+            assert!(!l.contains(B), "{kind}");
+            let tiles = l.arrange(AREA, Some(A), &s);
+            assert!(tiles.iter().all(|t| t.id != B), "{kind}");
+        }
+    }
+
+    #[test]
+    fn converting_keeps_every_window() {
+        for from in LayoutKind::ALL {
+            for to in LayoutKind::ALL {
+                let (l, s) = filled(from);
+                let converted = l.convert(to, AREA, &s);
+                assert_eq!(converted.kind(), to);
+                let mut windows = converted.windows();
+                windows.sort_by_key(|w| w.0);
+                assert_eq!(windows, vec![A, B, C], "{from} to {to}");
+            }
+        }
+    }
+
+    #[test]
+    fn arranged_tiles_stay_inside_the_area() {
+        for kind in LayoutKind::ALL {
+            let (mut l, s) = filled(kind);
+            for t in l.arrange(AREA, Some(A), &s).iter().filter(|t| t.visible) {
+                assert!(t.rect.x >= AREA.x && t.rect.y >= AREA.y, "{kind}");
+                assert!(t.rect.x + t.rect.w <= AREA.x + AREA.w, "{kind}");
+                assert!(t.rect.y + t.rect.h <= AREA.y + AREA.h, "{kind}");
+            }
+        }
+    }
+
+    #[test]
+    fn swapping_exchanges_two_windows() {
+        for kind in [LayoutKind::Dwindle, LayoutKind::Master, LayoutKind::Even] {
+            let (mut l, s) = filled(kind);
+            let rect_of = |l: &mut LayoutState, id| {
+                l.arrange(AREA, Some(A), &s)
+                    .iter()
+                    .find(|t| t.id == id)
+                    .map(|t| t.rect)
+            };
+            let (a, c) = (rect_of(&mut l, A), rect_of(&mut l, C));
+            l.swap(A, C);
+            assert_eq!(rect_of(&mut l, A), c, "{kind}");
+            assert_eq!(rect_of(&mut l, C), a, "{kind}");
+        }
+    }
+
+    #[test]
+    fn moving_a_window_stops_at_the_edge() {
+        let (mut l, s) = filled(LayoutKind::Even);
+        let tiles = l.arrange(AREA, Some(A), &s);
+        assert!(!l.move_window(A, Direction::Left, &tiles));
+        assert!(l.move_window(A, Direction::Right, &tiles));
+        assert_eq!(l.windows(), vec![B, A, C]);
+    }
+
+    #[test]
+    fn resizing_changes_the_arrangement() {
+        let (mut l, s) = filled(LayoutKind::Dwindle);
+        let before = l.arrange(AREA, Some(A), &s);
+        l.resize(A, 100, 0, AREA, &s);
+        assert_ne!(before, l.arrange(AREA, Some(A), &s));
+    }
+
+    #[test]
+    fn default_settings_are_sane() {
+        let s = LayoutSettings::default();
+        assert!(s.independent_workspaces);
+        assert!((0.0..=1.0).contains(&s.dwindle_split_ratio));
+        assert!(s.scrolling_presets.iter().all(|p| *p > 0.0 && *p <= 1.0));
+        assert_eq!(CenterMode::default(), CenterMode::OnOverflow);
+    }
+}

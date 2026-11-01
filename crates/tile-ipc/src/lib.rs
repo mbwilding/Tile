@@ -218,4 +218,83 @@ mod tests {
             }
         ));
     }
+
+    fn json(value: &impl Serialize) -> String {
+        serde_json::to_string(value).unwrap()
+    }
+
+    #[test]
+    fn subscribe_and_every_query_round_trip() {
+        assert_eq!(json(&Request::Subscribe), r#"{"type":"subscribe"}"#);
+        assert!(matches!(
+            serde_json::from_str::<Request>(r#"{"type":"subscribe"}"#),
+            Ok(Request::Subscribe)
+        ));
+        for (name, query) in [
+            ("monitors", Query::Monitors),
+            ("workspaces", Query::Workspaces),
+            ("windows", Query::Windows),
+            ("active_window", Query::ActiveWindow),
+        ] {
+            assert_eq!(json(&query), format!("\"{name}\""));
+            let request = format!(r#"{{"type":"query","what":"{name}"}}"#);
+            assert!(matches!(
+                serde_json::from_str::<Request>(&request),
+                Ok(Request::Query { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn responses_have_a_stable_shape() {
+        assert_eq!(json(&Response::Ok), r#"{"type":"ok"}"#);
+        assert_eq!(
+            json(&Response::Error {
+                message: "no".into()
+            }),
+            r#"{"type":"error","message":"no"}"#
+        );
+        assert_eq!(
+            json(&Response::ActiveWindow { window: None }),
+            r#"{"type":"active_window","window":null}"#
+        );
+        assert_eq!(
+            json(&Response::Monitors { monitors: vec![] }),
+            r#"{"type":"monitors","monitors":[]}"#
+        );
+    }
+
+    #[test]
+    fn events_round_trip() {
+        let events = [
+            Event::Workspace { id: 3 },
+            Event::ActiveWindow {
+                id: Some(42),
+                title: Some("t".into()),
+                exe: None,
+            },
+            Event::Layout {
+                layout: LayoutKind::Scrolling,
+            },
+        ];
+        for event in events {
+            let wrapped = json(&Response::Event {
+                event: event.clone(),
+            });
+            match serde_json::from_str::<Response>(&wrapped).unwrap() {
+                Response::Event { event: back } => assert_eq!(back, event),
+                other => panic!("{other:?}"),
+            }
+        }
+        assert_eq!(
+            json(&Event::Workspace { id: 3 }),
+            r#"{"kind":"workspace","id":3}"#
+        );
+    }
+
+    #[test]
+    fn garbage_is_not_a_request() {
+        assert!(serde_json::from_str::<Request>("not json").is_err());
+        assert!(serde_json::from_str::<Request>(r#"{"type":"nope"}"#).is_err());
+    }
 }
