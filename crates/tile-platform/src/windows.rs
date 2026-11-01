@@ -318,14 +318,13 @@ impl Windows {
         found
     }
 
-    /// Checks a single window reported by an event. Safe handles can only be obtained from
-    /// enumeration, so the raw value is matched against `EnumWindows`.
+    /// Checks a single window reported by an event.
     pub fn discover(&mut self, raw: isize) -> Option<Discovered> {
         let id = WindowId(raw);
         if self.handles.contains_key(&id) {
             return None;
         }
-        let hwnd = enumerate(|h| id_of(h) == id).into_iter().next()?;
+        let hwnd = tile_sys::hwnd(raw)?;
         let found = examine(&hwnd, self.own_pid)?;
         self.handles.insert(id, hwnd);
         Some(found)
@@ -559,16 +558,15 @@ fn set_caption(hwnd: &w::HWND, on: bool) -> bool {
 /// Puts back windows a previous instance changed: re-adds title bars and re-shows hidden
 /// windows. Used on startup, from the panic hook and by the watchdog process.
 pub fn restore_windows(hidden: &[isize], undecorated: &[isize]) {
-    let matches = |h: &w::HWND| {
-        let raw = h.ptr() as isize;
-        hidden.contains(&raw) || undecorated.contains(&raw)
-    };
-    for hwnd in enumerate(matches) {
-        let raw = hwnd.ptr() as isize;
-        if undecorated.contains(&raw) {
+    for &raw in undecorated {
+        if let Some(hwnd) = tile_sys::hwnd(raw) {
             set_caption(&hwnd, true);
         }
-        if hidden.contains(&raw) && !hwnd.IsWindowVisible() {
+    }
+    for &raw in hidden {
+        if let Some(hwnd) = tile_sys::hwnd(raw)
+            && !hwnd.IsWindowVisible()
+        {
             let _ = hwnd.ShowWindowAsync(co::SW::SHOWNA);
         }
     }
@@ -591,10 +589,7 @@ pub fn is_shell_window(raw: isize) -> bool {
         "XamlExplorerHostIslandWindow",
         "Windows.UI.Core.CoreWindow",
     ];
-    enumerate(|h| h.ptr() as isize == raw)
-        .first()
-        .and_then(|h| h.GetClassName().ok())
-        .is_some_and(|class| SHELL_CLASSES.contains(&class.as_str()))
+    tile_sys::class_name(raw).is_some_and(|class| SHELL_CLASSES.contains(&class.as_str()))
 }
 
 /// The current foreground window's raw handle.

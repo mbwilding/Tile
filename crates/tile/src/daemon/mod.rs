@@ -13,7 +13,6 @@ mod shell;
 
 use std::{
     collections::{HashMap, HashSet},
-    os::windows::process::CommandExt,
     path::PathBuf,
     time::Duration,
 };
@@ -212,9 +211,6 @@ fn consume(map: &mut HashMap<WindowId, (u32, Instant)>, id: WindowId) -> bool {
 /// Starts `tile --watchdog <pid>`: a detached process that undoes our window changes
 /// when this process exits for any reason, including being killed.
 fn spawn_watchdog() {
-    const DETACHED_PROCESS: u32 = 0x0000_0008;
-    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
     let exe = match std::env::current_exe() {
         Ok(exe) => exe,
         Err(e) => {
@@ -223,18 +219,7 @@ fn spawn_watchdog() {
         }
     };
     let pid = std::process::id().to_string();
-    let launch = |flags: u32| {
-        std::process::Command::new(&exe)
-            .args(["--watchdog", &pid])
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .creation_flags(flags)
-            .spawn()
-    };
-    let base = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
-    // Escape our job object if allowed, so killing the job doesn't take the watchdog too.
-    match launch(base | CREATE_BREAKAWAY_FROM_JOB).or_else(|_| launch(base)) {
+    match tile_sys::spawn_detached(&exe, &["--watchdog", &pid]) {
         Ok(child) => tracing::debug!("watchdog started (pid {})", child.id()),
         Err(e) => tracing::warn!("failed to start watchdog: {e}"),
     }

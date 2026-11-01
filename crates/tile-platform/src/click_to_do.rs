@@ -4,7 +4,7 @@
 //! This flips the same per-user switch as Settings → Privacy & security → Click to Do. Windows
 //! announces every flip, so Tile switches it off once and leaves it off.
 
-use std::{os::windows::process::CommandExt, path::Path, process::Command};
+use std::{path::Path, process::Command};
 
 use winsafe::{self as w, co};
 
@@ -12,7 +12,6 @@ const KEY: &str = r"Software\Microsoft\Windows\Shell\ClickToDo";
 const VALUE: &str = "DisableClickToDo";
 const EXE: &str =
     r"C:\Windows\SystemApps\MicrosoftWindows.Client.CoreAI_cw5n1h2txyewy\ClickToDo.exe";
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Whether this PC has Click to Do at all.
 pub fn click_to_do_available() -> bool {
@@ -36,10 +35,9 @@ pub fn disable_click_to_do() -> bool {
         return false;
     }
     // The running instance doesn't notice the switch.
-    let killed = Command::new("taskkill")
-        .args(["/IM", "ClickToDo.exe", "/F"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn();
+    let killed =
+        tile_sys::hide_console(Command::new("taskkill").args(["/IM", "ClickToDo.exe", "/F"]))
+            .spawn();
     if let Err(e) = killed {
         tracing::debug!("could not stop Click to Do: {e}");
     }

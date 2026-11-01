@@ -46,11 +46,6 @@ const KEY_TASK: &str = "Key";
 const ENV_KEY: &str = "Environment";
 const PATH_VALUE: &str = "Path";
 
-const DETACHED_PROCESS: u32 = 0x0000_0008;
-const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
-const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
-const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-
 /// The program `install` copies.
 const EXE: &str = "Tile.exe";
 
@@ -268,14 +263,12 @@ fn copy_programs(source: &Path, dir: &Path) -> anyhow::Result<()> {
 fn remove_programs(dir: &Path) -> anyhow::Result<()> {
     match fs::remove_dir_all(dir) {
         Err(e) if e.kind() != io::ErrorKind::NotFound && dir.exists() => {
-            Command::new("cmd")
-                .raw_arg(format!(
-                    "/C ping -n 3 127.0.0.1 >nul & rmdir /S /Q \"{}\"",
-                    dir.display()
-                ))
-                .creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW)
-                .spawn()
-                .with_context(|| format!("failed to delete {}", dir.display()))?;
+            tile_sys::hide_console(Command::new("cmd").raw_arg(format!(
+                "/C ping -n 3 127.0.0.1 >nul & rmdir /S /Q \"{}\"",
+                dir.display()
+            )))
+            .spawn()
+            .with_context(|| format!("failed to delete {}", dir.display()))?;
         }
         _ => {}
     }
@@ -427,22 +420,10 @@ fn remove_old_install() {
     let _ = fs::remove_dir_all(&old);
 }
 
-/// Starts `exe` without a console and outside our job object if allowed, so it outlives us
-/// (e.g. when `cargo run` kills its job on exit).
+/// Starts `exe` with [`tile_sys::spawn_detached`], so it outlives us (e.g. when `cargo run` ends
+/// its job on exit).
 fn start_detached(exe: &Path, args: &[&str]) -> io::Result<()> {
-    let launch = |flags: u32| {
-        Command::new(exe)
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .creation_flags(flags)
-            .spawn()
-    };
-    let base = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
-    launch(base | CREATE_BREAKAWAY_FROM_JOB)
-        .or_else(|_| launch(base))
-        .map(drop)
+    tile_sys::spawn_detached(exe, args).map(drop)
 }
 
 fn io_error(e: co::ERROR) -> io::Error {

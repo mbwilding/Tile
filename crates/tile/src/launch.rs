@@ -13,11 +13,10 @@ use tile_ipc::launcher::{self, LaunchRequest, LaunchServer};
 
 /// Runs a command line through `start`, detached and without a console window.
 fn run(command_line: &str) {
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let result = std::process::Command::new("cmd")
-        .raw_arg(format!("/C start \"\" {command_line}"))
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn();
+    let result = tile_sys::hide_console(
+        std::process::Command::new("cmd").raw_arg(format!("/C start \"\" {command_line}")),
+    )
+    .spawn();
     if let Err(e) = result {
         tracing::error!("failed to run `{command_line}`: {e}");
     }
@@ -111,15 +110,15 @@ const SHELL_WAIT: Duration = Duration::from_secs(30);
 
 /// Whether `tile install` registered the sign-in task, which starts Tile elevated.
 pub fn sign_in_task_exists() -> bool {
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    std::process::Command::new("schtasks")
-        .args(["/query", "/tn", "Tile"])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(CREATE_NO_WINDOW)
-        .status()
-        .is_ok_and(|status| status.success())
+    tile_sys::hide_console(
+        std::process::Command::new("schtasks")
+            .args(["/query", "/tn", "Tile"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null()),
+    )
+    .status()
+    .is_ok_and(|status| status.success())
 }
 
 /// `tile --shell` without admin rights: serves launch requests like `--launcher` for the

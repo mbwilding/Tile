@@ -7,14 +7,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tile_input::{Decision, Input, MouseEvent, MouseHandler, MouseHook};
+use tile_input::{Decision, MouseEvent, MouseHandler, MouseHook};
 use tokio::sync::mpsc;
 use winsafe::{self as w, co};
 
-use crate::{
-    hotkeys::{SILENT_VK, WIN_USED},
-    windows::is_shell_window,
-};
+use crate::{hotkeys::WIN_USED, windows::is_shell_window};
 
 /// Reported when a Win+left-button drag begins and ends. The window is moved by the hook
 /// itself, so the daemon only needs to know when to keep its hands off and where it was dropped.
@@ -99,16 +96,7 @@ impl Dragger {
         });
         WIN_USED.store(true, Ordering::Relaxed);
         // Stops Win's release opening the Start menu.
-        tile_input::send(&[
-            Input::Vk {
-                vk: SILENT_VK,
-                up: false,
-            },
-            Input::Vk {
-                vk: SILENT_VK,
-                up: true,
-            },
-        ]);
+        tile_input::tap_silent();
         let _ = self.tx.send(DragEvent::Start { window: raw });
         Decision::Block
     }

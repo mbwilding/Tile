@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tile_input::{Decision, Handler, Input, KeyboardHook, RawKey, Waker};
+use tile_input::{Decision, Handler, Input, KeyboardHook, RawKey, SILENT_TAP, Waker};
 use tile_remap::{Config, Engine, Key, KeyEvent, Out};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -34,10 +34,6 @@ const PANIC: [Key; 3] = [Key::BACKSPACE, Key::ESC, Key::ENTER];
 
 /// The Shift Windows fakes around numpad keys while Num Lock is on (`E0 2A` / `E0 36`).
 const FAKE_SHIFTS: [Key; 2] = [Key::new(0x2A, true), Key::new(0x36, true)];
-
-/// An unassigned virtual key: tapping it does nothing but stops a lone Alt or Win counting as
-/// tapped.
-const GUARD_VK: u16 = 0xE8;
 
 struct Remapper {
     engine: Engine,
@@ -86,16 +82,7 @@ fn send(out: &[Out]) {
         .flat_map(|&o| match o {
             Out::Press(key) => vec![scan(key, false)],
             Out::Release(key) => vec![scan(key, true)],
-            Out::Guard => vec![
-                Input::Vk {
-                    vk: GUARD_VK,
-                    up: false,
-                },
-                Input::Vk {
-                    vk: GUARD_VK,
-                    up: true,
-                },
-            ],
+            Out::Guard => SILENT_TAP.to_vec(),
         })
         .collect();
     let sent = tile_input::send(&inputs);

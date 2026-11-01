@@ -76,10 +76,7 @@ pub struct Mover {
 impl Mover {
     /// Starts a mover for the top-level window with this handle value.
     pub fn spawn(raw: isize) -> Option<Self> {
-        // Safe handles only come from enumeration; take our own one for the worker thread.
-        let hwnd = crate::windows::enumerate(|h| h.ptr() as isize == raw)
-            .into_iter()
-            .next()?;
+        let hwnd = tile_sys::hwnd(raw)?;
         let shared = Arc::new(Shared::default());
         let worker = shared.clone();
         thread::Builder::new()
