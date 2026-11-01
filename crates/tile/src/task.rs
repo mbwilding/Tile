@@ -39,13 +39,15 @@ pub fn register(exe: &Path, user: &str) -> anyhow::Result<()> {
     let task = service.NewTask()?;
     task.get_Principal()?
         .put_RunLevel(co::TASK_RUNLEVEL::HIGHEST)?;
-    // The defaults would stop Tile after 3 days or on battery, and run it at low priority.
+    // The defaults would stop Tile after 3 days or on battery.
     let settings = task.get_Settings()?;
     settings.put_DisallowStartIfOnBatteries(false)?;
     settings.put_StopIfGoingOnBatteries(false)?;
     settings.put_ExecutionTimeLimit("PT0S")?;
     settings.put_MultipleInstances(co::TASK_INSTANCES::IGNORE_NEW)?;
-    settings.put_Priority(4)?;
+    // 7 is NORMAL_PRIORITY_CLASS, what explorer.exe itself runs at; nothing about being the
+    // shell asks for more.
+    settings.put_Priority(7)?;
     let trigger = task
         .get_Triggers()?
         .Create(co::TASK_TRIGGER_TYPE2::LOGON)?
