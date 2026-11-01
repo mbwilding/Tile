@@ -1922,6 +1922,7 @@ fn paint_with(s: &mut State, fonts: &Fonts, dc: &w::HDC, client: w::RECT) -> w::
         text(dc, bold, style.foreground, &time, time_area, left)?;
         let date_area = w::RECT {
             top: split,
+            bottom: bar.bottom,
             ..time_area
         };
         text(dc, &fonts.date, style.dimmed, &date, date_area, left)?;
