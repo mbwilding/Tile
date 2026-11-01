@@ -18,6 +18,11 @@ Aliases in `.cargo/config.toml`:
 | `cargo deploy` | `cargo run --release -p tile -- install` | installs the build from `cargo release` |
 | `cargo deploy-dev` | `cargo run -p tile -- install` | installs the debug build from `cargo build --workspace` |
 
+`scripts/send-test-toast.ps1` posts a real Windows toast notification as an installed app (for
+testing [notification popups](windows-integration.md#notifications), including their icon). Run
+it with Windows PowerShell (`powershell`), not PowerShell 7, which can't load the WinRT types it
+needs.
+
 ## Project layout
 
 | Crate | Purpose |
