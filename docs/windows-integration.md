@@ -124,6 +124,16 @@ Management key that Windows gives the shell window's owner. It tells the app its
 `UniversalAppModelInProc`'s `SetBounds` and `SetVisibleBounds`, which only answer the shell
 process. See [shell mode](shell.md#settings-and-store-apps).
 
+UAC asks on the secure desktop straight away only when the program asking for admin rights is
+in front, or the window in front carries the `AllowConsentToStealFocus` property (Explorer's
+desktop, taskbar and Run box do). Otherwise `consent.exe` makes a minimised window of class
+`$$$Secure UAP Dummy Window Class For Interim Dialog`, flashes it on the taskbar and waits for
+it to be restored, however long that takes. While Tile hosts the notification area it looks for
+that window every quarter second and restores it with `SwitchToThisWindow`, which has Windows
+post the `SC_RESTORE` a taskbar click would (a plain message from Tile is refused: the window
+belongs to a SYSTEM process). It gives up on one after five tries. See
+[shell mode](shell.md#uac-prompts).
+
 ## The workspace indicator
 
 The [workspace indicator](configuration.md#workspace_indicator) is a topmost layered popup made

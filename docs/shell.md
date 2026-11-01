@@ -14,6 +14,7 @@ What Explorer would otherwise provide is covered like this:
 | Programs started at sign-in | Tile runs the `Run` and `RunOnce` keys and the Startup folders |
 | File Explorer windows | Unchanged |
 | Opening Settings, the Store and other Store apps | The shell process answers for them, [below](#settings-and-store-apps) |
+| The flashing taskbar button of a UAC prompt | Tile brings the prompt up itself, [below](#uac-prompts) |
 
 ## Turning it on
 
@@ -129,6 +130,24 @@ is up waits a few seconds for it instead of running as administrator.
 It runs in the helper process that starts programs with your normal rights: the copy Windows
 starts at sign-in, and the one Tile starts again when it restarts, as long as Tile is your
 sign-in shell. So updating Tile with `cargo deploy` needs no sign-out.
+
+## UAC prompts
+
+When a program asks for admin rights while its window isn't in front (an installer that restarts
+itself elevated, a background updater, a program Tile starts), Windows doesn't show the prompt
+at once. It puts a flashing "User Account Control" button on the taskbar and waits for you to
+click it. With no taskbar there is nothing to click, so the prompt never appears and the program
+waits. While Tile hosts the notification area it presses that button for you: the prompt comes
+up on the secure desktop as soon as it is asked for, the same prompt you would get by clicking.
+It still needs your consent; nothing is approved for you.
+
+If a prompt still doesn't come up, `tile.log` says whether Tile saw one waiting ("showing a UAC
+prompt that was waiting for a taskbar click").
+
+The SmartScreen warning for a downloaded program ("Windows protected your PC", the blue window)
+is a Store app that Windows starts for the check, so it needs the same support as
+[Settings and Store apps](#settings-and-store-apps). When Tile frames it, `launcher.log` lists
+`framed Microsoft.Windows.Apprep.ChxApp_cw5n1h2txyewy!App`.
 
 ## Getting out of trouble
 
