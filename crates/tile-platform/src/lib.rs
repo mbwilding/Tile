@@ -7,6 +7,7 @@ mod click_to_do;
 pub mod desktops;
 mod drag;
 mod events;
+mod frame;
 mod gui;
 mod hotkeys;
 mod indicator;
@@ -32,7 +33,7 @@ pub use hotkeys::{HotkeyEvent, Hotkeys};
 pub use indicator::{Indicator, IndicatorSettings};
 pub use lock::{GRANT_SCRIPT, lock_disabled, lock_workstation, set_lock_disabled};
 pub use monitors::{monitors, rect};
-pub use mover::{Animation, Insets, Mover};
+pub use mover::{Animation, Mover};
 pub use sign_in::{
     conhost, headless_command, installed_exe, is_shell as is_sign_in_shell,
     set_shell as set_sign_in_shell,
