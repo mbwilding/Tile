@@ -10,6 +10,7 @@ How Tile fits in with Windows, and what it changes.
 | `%LOCALAPPDATA%\Tile\logs` | Daily log files, while logging is on |
 | `%LOCALAPPDATA%\Tile\restore.json` | What to undo if Tile dies, while it runs |
 | `%LOCALAPPDATA%\Tile\launcher.json` | The [launcher](launcher.md)'s launch history, while `launcher.track_usage` is on |
+| `%LOCALAPPDATA%\Tile\grant-win-l.ps1` | The script that asks once for permission to manage the [Win+L](#winl) policy, when it is admin-only |
 | `C:\Program Files\Tile` | The installed programs |
 
 ## The tray
