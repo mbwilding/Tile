@@ -10,7 +10,7 @@
 #endif
 
 #ifndef IconFile
-  #define IconFile "..	argetelease	ile.ico"
+  #define IconFile "..\target\release\tile.ico"
 #endif
 
 [Setup]
