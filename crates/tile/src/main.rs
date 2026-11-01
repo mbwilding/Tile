@@ -21,7 +21,7 @@ struct Args {
     #[command(subcommand)]
     command: Option<cli::Cmd>,
     /// Config file to use instead of %APPDATA%\Tile\config.yml.
-    #[arg(long, short)]
+    #[arg(long, short, global = true)]
     config: Option<PathBuf>,
     /// Log filter, e.g. `info` or `tile=debug`; also switches logging on. `RUST_LOG` takes
     /// precedence. Without either, the tray's Logging setting decides (default off, `info`).
@@ -55,10 +55,7 @@ fn watchdog(pid: u32) {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     if let Some(command) = args.command {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        return runtime.block_on(cli::run(command));
+        return runtime()?.block_on(cli::run(command, args.config));
     }
     // Started without a terminal (sign-in, a task, Explorer), there is no console to keep.
     tile_sys::detach_console();
@@ -73,11 +70,8 @@ fn main() -> anyhow::Result<()> {
     let log_switch = settings::load(&config_path).log;
     if args.launcher {
         let _guard = logging::init("launcher.log", args.log.as_deref(), log_switch);
-        log_panics();
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        return runtime.block_on(launch::serve());
+        log_panics(None);
+        return runtime()?.block_on(launch::serve());
     }
     // Signed in as the shell without admin rights while the sign-in task starts an elevated
     // Tile: serve it as the launcher, and take over only if the task never starts Tile.
@@ -88,11 +82,8 @@ fn main() -> anyhow::Result<()> {
         log_switch,
     );
     if helper {
-        log_panics();
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
-        if runtime.block_on(launch::serve_for_tile())? {
+        log_panics(None);
+        if runtime()?.block_on(launch::serve_for_tile())? {
             return Ok(());
         }
         tracing::warn!("the sign-in task didn't start Tile; running it here");
@@ -105,15 +96,7 @@ fn main() -> anyhow::Result<()> {
     tile_sys::on_console_close(|| paths::load_restore().apply());
 
     // Never leave windows hidden or without title bars, even if we crash.
-    let previous = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        tracing::error!(
-            "panic: {info}\n{}",
-            std::backtrace::Backtrace::force_capture()
-        );
-        paths::load_restore().apply();
-        previous(info);
-    }));
+    log_panics(Some(|| paths::load_restore().apply()));
 
     if let Err(e) = tile_config::create_if_missing(&config_path) {
         tracing::warn!("could not create {}: {e}", config_path.display());
@@ -126,25 +109,32 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    let result = runtime.block_on(daemon::run(config_path, loaded, config_error, args.shell));
+    let result = runtime()?.block_on(daemon::run(config_path, loaded, config_error, args.shell));
     if let Err(e) = &result {
         tracing::error!("{e:#}");
     }
     result
 }
 
-/// Writes a panic and where it happened to the log before the process goes down.
-fn log_panics() {
+/// The single-threaded Tokio runtime every mode of Tile runs on.
+fn runtime() -> std::io::Result<tokio::runtime::Runtime> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+}
+
+/// Writes a panic and where it happened to the log before the process goes down, then runs
+/// `cleanup`.
+fn log_panics(cleanup: Option<fn()>) {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         tracing::error!(
-            "panic: {info}
-{}",
+            "panic: {info}\n{}",
             std::backtrace::Backtrace::force_capture()
         );
+        if let Some(cleanup) = cleanup {
+            cleanup();
+        }
         previous(info);
     }));
 }
