@@ -4,11 +4,10 @@ use std::{
     collections::HashSet,
     io,
     sync::mpsc,
-    thread::JoinHandle,
     time::{Duration, Instant},
 };
 
-use tile_input::{Decision, Handler, Input, RawKey, Waker};
+use tile_input::{Decision, Handler, Input, KeyboardHook, RawKey, Waker};
 use tile_remap::{Config, Engine, Key, KeyEvent, Out};
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -192,7 +191,7 @@ impl Drop for Remapper {
 pub struct Remap {
     commands: mpsc::Sender<Command>,
     waker: Waker,
-    thread: JoinHandle<()>,
+    hook: KeyboardHook,
 }
 
 impl Remap {
@@ -204,13 +203,13 @@ impl Remap {
         notices: UnboundedSender<Notice>,
     ) -> io::Result<Self> {
         let (commands, command_rx) = mpsc::channel();
-        let (waker, thread) = tile_input::spawn("remap hook", move || {
+        let hook = tile_input::spawn("remap hook", move || {
             Remapper::new(config, paused, command_rx, notices)
         })?;
         Ok(Self {
             commands,
-            waker,
-            thread,
+            waker: hook.waker(),
+            hook,
         })
     }
 
@@ -223,6 +222,6 @@ impl Remap {
     /// Removes the hook, releasing every key the remapper holds.
     pub fn stop(self) {
         self.send(Command::Quit);
-        let _ = self.thread.join();
+        drop(self.hook);
     }
 }

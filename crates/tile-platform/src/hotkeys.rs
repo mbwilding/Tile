@@ -203,7 +203,7 @@ impl Hotkeys {
             tx,
             chords: HashMap::new(),
         };
-        tile_input::spawn("hotkey hook", move || matcher)?;
+        tile_input::spawn("hotkey hook", move || matcher)?.detach();
         Ok(hotkeys)
     }
 
