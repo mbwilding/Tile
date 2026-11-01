@@ -8,7 +8,7 @@ use winsafe::{self as w, co, guard::DeleteObjectGuard};
 
 use super::{
     layout::{BAR_BUTTONS, BarAction, FontSizes},
-    state::{RowIcon, State},
+    state::{DEFAULT_GLYPH, RowIcon, State},
 };
 use crate::system::{format_date, format_time};
 
@@ -24,6 +24,8 @@ struct Fonts {
     date: DeleteObjectGuard<w::HFONT>,
     /// Windows' icon font, for the bar's buttons.
     icons: DeleteObjectGuard<w::HFONT>,
+    /// The icon font again, for the pictures of rows that have none of their own.
+    row_icons: DeleteObjectGuard<w::HFONT>,
 }
 
 impl Fonts {
@@ -43,6 +45,7 @@ impl Fonts {
                     bold: plain(),
                     date: plain(),
                     icons: plain(),
+                    row_icons: plain(),
                 }
             })
         })
@@ -56,6 +59,7 @@ impl Fonts {
             bold: make_font(face, sizes.time, true)?,
             date: make_font(face, sizes.date, false)?,
             icons: make_font(icon_face(), sizes.icons, false)?,
+            row_icons: make_font(icon_face(), sizes.row_icons, false)?,
         })
     }
 }
@@ -340,16 +344,32 @@ pub(super) fn paint(
         let mut x = row.left + pad;
         if layout.icon > 0 {
             let y = top + (layout.row - layout.icon) / 2;
-            match icon {
+            let glyph = match icon {
                 Some(RowIcon::App(id)) => {
                     if let Some(icon) = icons.app(id, layout.icon) {
                         icon.draw(dc.ptr() as isize, x, y, layout.icon);
+                        None
+                    } else {
+                        Some(DEFAULT_GLYPH)
                     }
                 }
                 Some(RowIcon::Tray(image)) => {
                     image.draw(dc.ptr() as isize, x, y, layout.icon);
+                    None
                 }
-                None => {}
+                Some(RowIcon::Glyph(glyph)) => Some(glyph),
+                None => Some(DEFAULT_GLYPH),
+            };
+            if let Some(glyph) = glyph {
+                let slot = w::RECT {
+                    left: x,
+                    top: y,
+                    right: x + layout.icon,
+                    bottom: y + layout.icon,
+                };
+                let mut buf = [0; 4];
+                let glyph = glyph.encode_utf8(&mut buf);
+                text(dc, &fonts.row_icons, fg, glyph, slot, centred)?;
             }
             x += layout.icon + pad;
         }

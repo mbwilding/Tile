@@ -29,6 +29,10 @@ with their icons. The list is read again in the background each time the launche
 installs show up. Hide entries you never want (uninstallers, help files) with `launcher.hide`,
 regexes matched against the app's name or id.
 
+Rows with no picture of their own get a symbol from Windows' icon font: a prompt for a command
+line to run, a keyboard for a Tile dispatcher, a calculator for a sum, one per kind for the system
+items, and a generic app for an app or tray icon whose icon is missing.
+
 Each row shows the app name and its id after it on the same line: the AppUserModelID of a Store
 app or the path of a desktop program. With `compact` off, rows are two lines, with the id under the name.
 

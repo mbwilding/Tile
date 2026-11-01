@@ -68,6 +68,8 @@ pub(super) struct FontSizes {
     pub(super) date: i32,
     /// The bar buttons' icons.
     pub(super) icons: i32,
+    /// The glyphs standing in for a row's missing picture.
+    pub(super) row_icons: i32,
     /// The bar's height, and its square buttons' width.
     pub(super) bar: i32,
 }
@@ -84,6 +86,7 @@ impl FontSizes {
             time: bar * TIME_SHARE / SHARES,
             date: bar * DATE_SHARE / SHARES,
             icons: main * 12 / 10,
+            row_icons: main * 16 / 10,
             bar,
         }
     }
@@ -316,6 +319,7 @@ mod tests {
                 time: 16,
                 date: 12,
                 icons: 16,
+                row_icons: 22,
                 bar: 30,
             }
         );

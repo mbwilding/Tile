@@ -119,6 +119,22 @@ impl Power {
     }
 }
 
+impl Action {
+    /// The glyph, in Windows' icon font, that stands for the action.
+    pub const fn glyph(&self) -> char {
+        match self {
+            Self::SetVolume(_) | Self::Mute(_) | Self::SwitchDevice(_) => '\u{E767}',
+            Self::SetMicVolume(_) | Self::MuteMic(_) => '\u{E720}',
+            Self::SetRadio(RadioKind::Bluetooth, _) => '\u{E702}',
+            Self::SetRadio(RadioKind::Wifi, _) | Self::WifiConnect(_) | Self::WifiDisconnect => {
+                '\u{E701}'
+            }
+            Self::Open(_) => '\u{E713}',
+            Self::Power(_) => '\u{E7E8}',
+        }
+    }
+}
+
 /// What picking a system row does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {

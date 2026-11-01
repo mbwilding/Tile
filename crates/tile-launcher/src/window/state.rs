@@ -37,7 +37,16 @@ pub(super) enum RowIcon<'a> {
     /// The app with this `shell:AppsFolder` id.
     App(&'a str),
     Tray(&'a IconImage),
+    /// A character of Windows' icon font, for a row with no picture of its own.
+    Glyph(char),
 }
+
+/// The glyph of a row whose picture is missing: a generic app.
+pub(super) const DEFAULT_GLYPH: char = '\u{ECAA}';
+/// The glyphs of a command line to run, a Tile dispatcher and a calculation.
+const RUN_GLYPH: char = '\u{E756}';
+const DISPATCH_GLYPH: char = '\u{E765}';
+const CALC_GLYPH: char = '\u{E8EF}';
 
 /// What picking a row did.
 pub(super) enum Picked {
@@ -395,7 +404,11 @@ impl State {
                 (
                     item.name.as_str().into(),
                     "Tray icon. Enter clicks it, Shift+Enter or right click opens its menu".into(),
-                    item.icon.as_ref().map(RowIcon::Tray),
+                    Some(
+                        item.icon
+                            .as_ref()
+                            .map_or(RowIcon::Glyph(DEFAULT_GLYPH), RowIcon::Tray),
+                    ),
                 )
             }
             Row::System(i) => {
@@ -403,32 +416,38 @@ impl State {
                 (
                     entry.title.as_str().into(),
                     entry.subtitle.as_str().into(),
-                    None,
+                    Some(RowIcon::Glyph(entry.action.glyph())),
                 )
             }
-            Row::Command(CommandEntry::Dispatch(command)) => {
-                (command.to_string().into(), "Tile dispatcher".into(), None)
-            }
-            Row::Command(CommandEntry::Name(name)) => {
-                ((*name).into(), "Tile dispatcher".into(), None)
-            }
+            Row::Command(CommandEntry::Dispatch(command)) => (
+                command.to_string().into(),
+                "Tile dispatcher".into(),
+                Some(RowIcon::Glyph(DISPATCH_GLYPH)),
+            ),
+            Row::Command(CommandEntry::Name(name)) => (
+                (*name).into(),
+                "Tile dispatcher".into(),
+                Some(RowIcon::Glyph(DISPATCH_GLYPH)),
+            ),
             Row::Command(CommandEntry::Complete { name, args }) => (
                 format!("{name} {args}").into(),
                 "Tile dispatcher: Enter to add the argument".into(),
-                None,
+                Some(RowIcon::Glyph(DISPATCH_GLYPH)),
             ),
             Row::Command(CommandEntry::Invalid { name, args, error }) => (
                 format!("{name} {args}").trim_end().to_owned().into(),
                 format!("Tile dispatcher: {error}").into(),
-                None,
+                Some(RowIcon::Glyph(DISPATCH_GLYPH)),
             ),
-            Row::Command(CommandEntry::Shell(line)) => {
-                (line.as_str().into(), "Run command".into(), None)
-            }
+            Row::Command(CommandEntry::Shell(line)) => (
+                line.as_str().into(),
+                "Run command".into(),
+                Some(RowIcon::Glyph(RUN_GLYPH)),
+            ),
             Row::Calc(value) => (
                 format!("= {}", calc::format(*value)).into(),
                 "Enter to copy".into(),
-                None,
+                Some(RowIcon::Glyph(CALC_GLYPH)),
             ),
         }
     }
