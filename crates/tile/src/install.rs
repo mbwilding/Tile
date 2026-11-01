@@ -148,10 +148,23 @@ pub async fn uninstall() -> anyhow::Result<()> {
     let dir = install_dir();
     set_on_path(&dir, false)?;
     remove_old_install();
+    let was_shell = tile_platform::is_sign_in_shell();
+    tile_platform::set_sign_in_shell(None)
+        .map_err(|e| anyhow::anyhow!("failed to restore Explorer as the sign-in shell: {e}"))?;
     println!("Removing {} (needs admin rights)...", dir.display());
     run_elevated(&Step::Uninstall).await?;
+    if was_shell && !tile_shell::notify::taskbar_exists() {
+        start_explorer().context("failed to start Explorer")?;
+    }
     println!("Uninstalled. Your config (%APPDATA%\\Tile) and logs were kept.");
     Ok(())
+}
+
+/// Starts Explorer as the desktop shell, for when Tile was the shell and has just stopped.
+fn start_explorer() -> io::Result<()> {
+    let windows =
+        std::env::var_os("SystemRoot").map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from);
+    start_detached(&windows.join("explorer.exe"), &[])
 }
 
 /// Runs `step` in a `tile` started through UAC and waits for its report: a note to show
