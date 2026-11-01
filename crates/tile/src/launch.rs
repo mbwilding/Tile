@@ -62,9 +62,22 @@ pub fn exec(command_line: &str) {
     });
 }
 
-/// Starts a Store app by its app user model id as the normal user. Must be called inside the
-/// Tokio runtime.
-pub fn activate(aumid: &str) {
+/// Starts an app Start lists by its `shell:AppsFolder` id, as the normal user or, with `admin`,
+/// as administrator. Must be called inside the Tokio runtime.
+pub fn start_app(id: &str, admin: bool) {
+    // A Store app's id has a `!`. `shell:AppsFolder` can't start one without Explorer, so it is
+    // started through the activation manager.
+    let store = id.contains('!');
+    match (store, admin) {
+        (true, false) => activate(id),
+        (true, true) => activate_as_admin(id),
+        (false, false) => exec(&format!("\"shell:AppsFolder\\{id}\"")),
+        (false, true) => tile_platform::run_as_admin(&format!("shell:AppsFolder\\{id}")),
+    }
+}
+
+/// Starts a Store app by its app user model id as the normal user.
+fn activate(aumid: &str) {
     if !elevated() {
         activate_now(aumid);
         return;
@@ -82,7 +95,7 @@ pub fn activate(aumid: &str) {
 }
 
 /// Starts a Store app from this process, so it keeps Tile's rights when Tile is elevated.
-pub fn activate_as_admin(aumid: &str) {
+fn activate_as_admin(aumid: &str) {
     if !elevated() {
         tracing::warn!("`{aumid}` can only start as administrator when Tile runs elevated");
     }
