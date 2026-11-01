@@ -104,5 +104,6 @@ A `binds` value is `<dispatcher> [arguments]`. `tile dispatch` runs the same one
 | `reload` / `togglepause` / `exit` | reload the config / pause both tiling and remapping (or resume both) / quit |
 | `toggletile` / `toggleremap` | pause or resume the window manager / the key remapper on its own, like the tray's Tile and Remap items |
 | `toggleshell` / `togglelog` | switch [shell mode](shell.md) / logging on or off, like the tray's Shell and Log items |
+| `togglednd` | mute or unmute notification popups, without touching Windows' own notification settings |
 
 Directions can also be written `left`, `right`, `up` and `down`.

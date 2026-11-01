@@ -210,13 +210,14 @@ impl Config {
     /// The notification popup's look: `theme`'s window colours, since unlike the indicator it
     /// isn't an accent to pick out, just a window like the launcher's.
     pub fn notification_style(&self) -> NotificationStyle {
-        let theme = &self.theme;
+        let (theme, n) = (&self.theme, &self.notifications);
         NotificationStyle {
             font: theme.font.clone(),
             corners: theme.corners,
             background: theme.background,
             foreground: theme.foreground,
             dimmed: theme.dimmed,
+            border: n.border.unwrap_or(theme.accent),
         }
     }
 }
@@ -307,6 +308,8 @@ pub struct NotificationStyle {
     pub foreground: Color,
     /// The app name and body text.
     pub dimmed: Color,
+    /// The card's outline.
+    pub border: Color,
 }
 
 /// The window manager's main switches.
@@ -726,7 +729,7 @@ impl Default for WorkspaceIndicator {
 
 /// Popups for Windows toast notifications, read through `UserNotificationListener` since shell
 /// mode has nowhere else to show them.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Notifications {
     /// Show a popup for each new notification. Unset (the default) follows shell mode: on while
@@ -743,6 +746,16 @@ pub struct Notifications {
     pub duration_ms: u64,
     /// How long it takes to fade out after that, in milliseconds.
     pub fade_ms: u64,
+    /// How many popups are shown stacked at once; the rest wait their turn.
+    pub max_visible: u32,
+    /// Show the posting app's name above the title.
+    pub show_app_name: bool,
+    /// Unset follows `theme.accent`.
+    pub border: Option<Color>,
+    /// The border's thickness in pixels at 100% scaling. 0 draws no border.
+    pub border_width: u32,
+    /// Mutes, or changes the duration of, notifications from apps whose name matches.
+    pub filter: Vec<NotificationFilter>,
 }
 
 impl Default for Notifications {
@@ -754,8 +767,26 @@ impl Default for Notifications {
             width: 340,
             duration_ms: 5000,
             fade_ms: 400,
+            max_visible: 3,
+            show_app_name: true,
+            border: None,
+            border_width: 1,
+            filter: Vec::new(),
         }
     }
+}
+
+/// Mutes, or overrides the duration of, notifications from apps matching `app`. The first
+/// matching entry wins. Modelled on [`Rule`]'s matching, for the same regex conventions.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct NotificationFilter {
+    /// Regex on the posting app's display name, e.g. `^Spotify$`.
+    pub app: Option<String>,
+    /// Drop matching notifications instead of showing a popup for them.
+    pub mute: bool,
+    /// Overrides `notifications.duration_ms` for matching notifications.
+    pub duration_ms: Option<u64>,
 }
 
 /// Where on the monitor's work area the workspace indicator sits.
