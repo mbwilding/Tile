@@ -28,7 +28,8 @@ binds, so they see keys as remapped: a home-row `Win` works for `Win+` binds.
 | `Win+1`…`Win+9` / add `Shift` | switch to / move window to workspace 1 to 9 |
 | `Win+,` / `Win+.` | focus monitor left / right |
 | `Win+S` | flip the dwindle split |
-| `Win+R` / `Win+C` | scrolling: next column width / centre column |
+| `Win+R` | open the [app launcher](launcher.md) |
+| `Win+Ctrl+R` / `Win+C` | scrolling: next column width / centre column |
 | `Win+[` / `Win+]` / `Win+\` | scrolling: merge into left / right column, split out |
 | `Win+Ctrl+Shift+Left/Right` | move window to previous / next virtual desktop |
 | `Win+Ctrl+P` | show window on all desktops (it floats) |

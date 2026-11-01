@@ -7,12 +7,12 @@ It opens on Tile's focused monitor, which is right even when that monitor has no
 tiling off or paused, it opens on the monitor of the focused window (whatever that window is), or
 else the monitor under the pointer.
 
-Open it with the `launcher` dispatcher. It isn't bound by default; bind it in your config, for
-example to `Win+R` (a bound `Win` key replaces Windows' own shortcut, here the Run dialog):
+Open it with the `launcher` dispatcher, which is bound to `Win+R` by default (a bound `Win` key
+replaces Windows' own shortcut, here the Run dialog). To use another key, bind it in your config:
 
 ```yaml
 binds:
-  super+r: launcher
+  super+space: launcher
 ```
 
 `tile dispatch launcher` opens it too. It works with tiling off or paused. Pressing the bind

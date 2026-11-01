@@ -76,7 +76,8 @@ const DEFAULT_BINDS: &[(&str, &str)] = &[
     ("super+comma", "focusmonitor l"),
     ("super+period", "focusmonitor r"),
     ("super+s", "togglesplit"),
-    ("super+r", "cycleproportion"),
+    ("super+r", "launcher"),
+    ("super+ctrl+r", "cycleproportion"),
     ("super+c", "centercolumn"),
     ("super+bracketleft", "consumewindow l"),
     ("super+bracketright", "consumewindow r"),
@@ -266,9 +267,6 @@ pub struct General {
     pub default_binds: bool,
     /// Remap keys with the `remap` layers.
     pub remap: bool,
-    /// Bind the launcher to `Win+R` (or `Win+D` if that is taken) when no bind opens it, with
-    /// tiling on or off. In shell mode the launcher is bound whatever this says.
-    pub launcher: bool,
     /// Space between neighbouring tiled windows.
     pub gaps_in: i32,
     /// Space between tiled windows and the monitor edge.
@@ -302,7 +300,6 @@ impl Default for General {
             tiling: true,
             default_binds: true,
             remap: true,
-            launcher: true,
             gaps_in: 10,
             gaps_out: 10,
             independent_workspaces: true,
