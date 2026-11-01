@@ -1,4 +1,4 @@
-; Builds Tile-Setup.exe: `iscc /DAppVersion=1.2.3 /DSourceExe=..\target\release\tile.exe installer\tile.iss`.
+; Builds Tile-Setup-<version>.exe: `iscc /DAppVersion=1.2.3 /DSourceExe=..\target\release\tile.exe installer\tile.iss`.
 ; Setup runs as the signed-in user and only hands over to `tile install` / `tile uninstall`,
 ; which do the real work (the UAC step, the sign-in task, the user's registry values).
 
@@ -20,7 +20,7 @@ DefaultDirName={localappdata}\Tile Setup
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir=..\target\installer
-OutputBaseFilename=Tile-Setup
+OutputBaseFilename=Tile-Setup-{#AppVersion}
 UninstallDisplayName=Tile
 UninstallDisplayIcon={app}\tile.exe
 Compression=lzma2

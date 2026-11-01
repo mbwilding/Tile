@@ -75,7 +75,7 @@ installed `tile` installs the build in `.\target\release`). Running programs nev
 update, since the old files are moved aside and deleted on the next install. `tile uninstall`
 stops Tile and undoes all of that, keeping your config and logs.
 
-Each release also has `Tile-Setup.exe`, which runs `tile install` for you and adds Tile to Apps &
+Each release also has `Tile-Setup-<version>.exe`, which runs `tile install` for you and adds Tile to Apps &
 features, where Uninstall runs `tile uninstall`. It is built from `installer/tile.iss` (Inno Setup).
 
 To try a build without installing:
