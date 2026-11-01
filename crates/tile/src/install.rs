@@ -118,6 +118,7 @@ pub async fn uninstall() -> anyhow::Result<()> {
         .context("failed to remove the launcher from sign-in")?;
     let dir = install_dir();
     set_on_path(&dir, false)?;
+    let _ = set_on_path(&key_install_dir(), false);
     let was_shell = tile_platform::is_sign_in_shell();
     tile_platform::set_sign_in_shell(None)
         .context("failed to restore Explorer as the sign-in shell")?;

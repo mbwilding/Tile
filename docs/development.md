@@ -27,18 +27,19 @@ Aliases in `.cargo/config.toml`:
 | `tile-config` | YAML schema, keybind parsing, window rules, the tray switches and file watching (tested against `docs/` and `examples/`) |
 | `tile-ipc` | Named-pipe JSON protocol |
 | `tile-launcher` | The app launcher: the search, calculator and system items (tested), and its window |
-| `tile-platform` | Win32 for the window manager: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the workspace indicator, the sign-in programs, virtual desktops |
+| `tile-platform` | Win32 for the window manager: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the workspace indicator, the sign-in shell and programs, virtual desktops, Win+L and Click to Do, the current user's registry values and where Tile is installed |
 | `tile-input` | The low-level keyboard and mouse hooks, `SendInput` and hiding the pointer |
 | `tile-shell` | What Explorer provides, for shell mode: the notification area host (`Shell_TrayWnd`), the black backdrop, shell icons and the Store app frames |
-| `tile-sys` | Volume, battery, network, Wi-Fi and Bluetooth, the single-instance mutex, the console, starting detached processes, window messages and safe handles for raw window handles |
-| `tile` | The program (`Tile.exe`): the daemon, the command line and install/uninstall |
+| `tile-sys` | Volume, audio devices, battery, network, Wi-Fi and Bluetooth, the single-instance mutex, the console, starting detached processes, window messages and safe handles for raw window handles |
+| `tile` | The program (`Tile.exe`): the daemon, the command line, install/uninstall and its scheduled task |
 
 The crates layer upward: `tile-core`, `tile-remap` and `tile-config` know nothing of Windows;
 `tile-input`, `tile-shell` and `tile-sys` are the raw Win32 calls; `tile-platform` and
 `tile-launcher` build on them; `tile` joins everything in the daemon.
 
 All `unsafe` lives in `tile-input`, `tile-shell` and `tile-sys`, each block with a `// SAFETY:`
-comment; every other crate has `unsafe_code = "forbid"`. The rest of Win32 goes through safe
+comment; every other crate has `unsafe_code = "forbid"`. Every crate warns on `missing_docs`, so
+CI fails on a public item without a doc comment. The rest of Win32 goes through safe
 wrappers:
 [`winsafe`](https://crates.io/crates/winsafe),
 [`wineventhook`](https://crates.io/crates/wineventhook),
