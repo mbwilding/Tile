@@ -16,7 +16,8 @@ pub use rules::{RuleOutcome, Rules};
 pub(crate) use schema::default_binds;
 pub use schema::{
     Animations, Color, Config, Corners, Cursor, General, IndicatorPosition, IndicatorStyle,
-    Launcher, LauncherStyle, Remap, Rule, SearchPosition, Shell, Theme, Tray, WorkspaceIndicator,
+    Launcher, LauncherStyle, NotificationStyle, Notifications, Remap, Rule, SearchPosition, Shell,
+    Theme, Tray, WorkspaceIndicator,
 };
 pub use watch::watch;
 

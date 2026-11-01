@@ -20,6 +20,7 @@ mod sign_in;
 mod smartscreen;
 mod startup;
 mod tile_icon;
+mod toast;
 mod token;
 mod tray;
 mod windows;
@@ -45,6 +46,7 @@ pub use smartscreen::{
     request_smartscreen_permission, set_smartscreen_disabled, smartscreen_overridden,
 };
 pub use startup::{commands as startup_commands, first_this_session as first_startup_this_session};
+pub use toast::{Toast, ToastSettings};
 pub use token::{is_elevated, user_sid};
 pub use tray::{Tray, TrayEvent};
 pub use windows::{
