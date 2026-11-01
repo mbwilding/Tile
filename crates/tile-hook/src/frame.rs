@@ -50,7 +50,7 @@ use windows_sys::Win32::{
         CreateWindowExW, DispatchMessageW, EnumChildWindows, EnumWindows, GetClassNameW,
         GetClientRect, GetParent, GetSystemMetrics, GetWindowTextW, GetWindowThreadProcessId,
         IsWindow, MsgWaitForMultipleObjects, PM_REMOVE, PeekMessageW, PostMessageW, QS_ALLINPUT,
-        SM_CXSCREEN, SM_CYSCREEN, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+        SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
         SetWindowTextW, ShowWindow, TranslateMessage, WM_CLOSE,
     },
 };
@@ -641,8 +641,12 @@ impl Framer {
             };
             if let Some(f) = self.frames.iter_mut().find(|f| found && f.frame == window) {
                 f.closing.get_or_insert_with(Instant::now);
-                // SAFETY: a plain message post to the app's window.
-                unsafe { PostMessageW(f.app, WM_CLOSE, 0, 0) };
+                // SAFETY: a plain hide of the frame and message post to the app's window.
+                unsafe {
+                    // Gone at once; the app gets its grace period to exit out of sight.
+                    ShowWindow(f.frame, SW_HIDE);
+                    PostMessageW(f.app, WM_CLOSE, 0, 0);
+                }
             }
         }
         if self.statics.is_none() {
