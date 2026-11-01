@@ -8,13 +8,13 @@
 
 use windows::{
     Win32::{
-        Foundation::{BOOL, CLASS_E_NOAGGREGATION, E_NOINTERFACE},
+        Foundation::{CLASS_E_NOAGGREGATION, E_NOINTERFACE},
         System::Com::{
             CLSCTX_LOCAL_SERVER, CoRegisterClassObject, IClassFactory, IClassFactory_Impl,
             IServiceProvider, IServiceProvider_Impl, REGCLS_MULTIPLEUSE,
         },
     },
-    core::{GUID, IUnknown, Interface, Result, implement},
+    core::{BOOL, GUID, IUnknown, Interface, Ref, Result, implement},
 };
 
 /// `CLSID_ImmersiveShell`.
@@ -51,11 +51,11 @@ struct Factory;
 impl IClassFactory_Impl for Factory_Impl {
     fn CreateInstance(
         &self,
-        outer: Option<&IUnknown>,
+        outer: Ref<IUnknown>,
         interface: *const GUID,
         object: *mut *mut core::ffi::c_void,
     ) -> Result<()> {
-        if outer.is_some() {
+        if !outer.is_null() {
             return Err(CLASS_E_NOAGGREGATION.into());
         }
         let services: IServiceProvider = Services.into();

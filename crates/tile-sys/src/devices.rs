@@ -4,7 +4,6 @@
 //! Each call initialises COM on the calling thread for its own duration, so call them from a
 //! worker thread, not one with a message loop.
 
-use std::ffi::c_void;
 use windows::{
     Devices::{
         Bluetooth::{BluetoothConnectionStatus, BluetoothDevice},
@@ -13,8 +12,8 @@ use windows::{
     },
     Win32::{
         Media::Audio::{
-            Endpoints::IAudioEndpointVolume, IMMDeviceEnumerator, MMDeviceEnumerator, eCapture,
-            eConsole, eRender,
+            EDataFlow, Endpoints::IAudioEndpointVolume, IMMDevice, IMMDeviceEnumerator,
+            MMDeviceEnumerator, eCapture, eConsole, eRender,
         },
         Networking::NetworkListManager::{
             INetwork, INetworkListManager, NLM_CONNECTIVITY_IPV4_INTERNET,
@@ -25,9 +24,11 @@ use windows::{
             CoInitializeEx, CoTaskMemFree, CoUninitialize,
         },
     },
-    core::{GUID, IUnknown, Interface, PCWSTR},
+    core::{GUID, IUnknown, IUnknown_Vtbl, PCWSTR, Result, interface},
 };
 use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+
+use crate::wide;
 
 /// Keeps COM initialised on this thread until dropped.
 struct Com(bool);
@@ -59,12 +60,14 @@ impl Drop for Com {
 /// Which way audio goes: out to speakers and headphones, or in from a microphone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Flow {
+    /// To speakers and headphones.
     Output,
+    /// From a microphone.
     Input,
 }
 
 impl Flow {
-    fn data_flow(self) -> windows::Win32::Media::Audio::EDataFlow {
+    fn data_flow(self) -> EDataFlow {
         match self {
             Self::Output => eRender,
             Self::Input => eCapture,
@@ -77,19 +80,26 @@ impl Flow {
 pub struct Volume {
     /// 0 to 100.
     pub percent: u8,
+    /// Whether it is muted, whatever its volume.
     pub muted: bool,
 }
 
-fn endpoint(flow: Flow) -> Option<IAudioEndpointVolume> {
-    // SAFETY: plain COM calls on interfaces this function owns; COM is initialised by the
-    // caller's `Com` guard.
+/// The default device for `flow`. COM must be initialised, as a `Com` guard does.
+fn default_device_of(flow: Flow) -> Option<IMMDevice> {
+    // SAFETY: plain COM calls on interfaces this function owns.
     unsafe {
         let enumerator: IMMDeviceEnumerator =
             CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let device = enumerator
+        enumerator
             .GetDefaultAudioEndpoint(flow.data_flow(), eConsole)
-            .ok()?;
-        device
+            .ok()
+    }
+}
+
+fn endpoint(flow: Flow) -> Option<IAudioEndpointVolume> {
+    // SAFETY: a plain COM call on the device; COM is initialised by the caller's `Com` guard.
+    unsafe {
+        default_device_of(flow)?
             .Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None)
             .ok()
     }
@@ -139,13 +149,9 @@ pub fn set_muted(flow: Flow, muted: bool) -> bool {
 /// The endpoint id (`{0.0.0.00000000}.{guid}`) of the default device, as the system keeps it.
 pub fn default_device(flow: Flow) -> Option<String> {
     let _com = Com::init();
-    // SAFETY: plain COM calls; the id string is COM memory we free once after copying it.
+    let device = default_device_of(flow)?;
+    // SAFETY: a plain COM call; the id string is COM memory we free once after copying it.
     unsafe {
-        let enumerator: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
-        let device = enumerator
-            .GetDefaultAudioEndpoint(flow.data_flow(), eConsole)
-            .ok()?;
         let id = device.GetId().ok()?;
         let text = id.to_string().ok();
         CoTaskMemFree(Some(id.0.cast_const().cast()));
@@ -153,51 +159,61 @@ pub fn default_device(flow: Flow) -> Option<String> {
     }
 }
 
-/// The class and interface of the system's audio policy, which the sound settings use to change
-/// the default device. It has no public header, so it is called through its vtable.
+/// The class of the system's audio policy, which the sound settings use to change the default
+/// device.
 const CLSID_POLICY_CONFIG: GUID = GUID::from_u128(0x870af99c_171d_4f9e_af0d_e63df40c2bc9);
-const IID_POLICY_CONFIG: GUID = GUID::from_u128(0xf8679f50_850a_41cf_9c72_430f290290c8);
-/// `IPolicyConfig::SetDefaultEndpoint`'s place in the vtable.
-const SET_DEFAULT_ENDPOINT: usize = 13;
+
+/// `IPolicyConfig`, which has no public header. It has had this layout since Vista; the methods
+/// before `SetDefaultEndpoint` are placeholders that keep it in its slot.
+#[interface("F8679F50-850A-41CF-9C72-430F290290C8")]
+unsafe trait IPolicyConfig: IUnknown {
+    fn _get_mix_format(&self);
+    fn _get_device_format(&self);
+    fn _reset_device_format(&self);
+    fn _set_device_format(&self);
+    fn _get_processing_period(&self);
+    fn _set_processing_period(&self);
+    fn _get_share_mode(&self);
+    fn _set_share_mode(&self);
+    fn _get_property_value(&self);
+    fn _set_property_value(&self);
+    fn set_default_endpoint(&self, id: PCWSTR, role: i32) -> Result<()>;
+}
 
 /// Makes the device with this endpoint id the default for every role (default, media and
 /// communications). Returns whether Windows accepted it.
 pub fn set_default_device(id: &str) -> bool {
     let _com = Com::init();
-    let wide: Vec<u16> = id.encode_utf16().chain([0]).collect();
-    // SAFETY: the object is created and released here; `IPolicyConfig` is a COM interface whose
-    // vtable has `SetDefaultEndpoint(this, id, role)` at the slot used, as it has on every Windows
-    // since Vista; `wide` is NUL-terminated and outlives the calls.
+    let id = wide(id);
+    // SAFETY: plain COM calls; `id` is NUL-terminated and outlives them.
     unsafe {
-        let Ok(unknown) = CoCreateInstance::<_, IUnknown>(&CLSID_POLICY_CONFIG, None, CLSCTX_ALL)
+        let Ok(policy) =
+            CoCreateInstance::<_, IPolicyConfig>(&CLSID_POLICY_CONFIG, None, CLSCTX_ALL)
         else {
             return false;
         };
-        let mut policy: *mut c_void = std::ptr::null_mut();
-        if unknown.query(&IID_POLICY_CONFIG, &raw mut policy).is_err() || policy.is_null() {
-            return false;
-        }
-        let vtable = *policy.cast::<*const usize>();
-        let set_default: unsafe extern "system" fn(*mut c_void, PCWSTR, i32) -> i32 =
-            std::mem::transmute(*vtable.add(SET_DEFAULT_ENDPOINT));
-        let ok = (0..3).all(|role| set_default(policy, PCWSTR(wide.as_ptr()), role) >= 0);
-        let release: unsafe extern "system" fn(*mut c_void) -> u32 =
-            std::mem::transmute(*vtable.add(2));
-        release(policy);
-        ok
+        (0..3).all(|role| {
+            policy
+                .set_default_endpoint(PCWSTR(id.as_ptr()), role)
+                .is_ok()
+        })
     }
 }
 
 /// The battery, on a machine that has one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Battery {
+    /// How full it is, 0 to 100.
     pub percent: u8,
+    /// Whether it is charging.
     pub charging: bool,
+    /// Whether the machine runs on mains power.
     pub plugged_in: bool,
     /// On battery power: the minutes the system estimates are left.
     pub minutes_left: Option<u32>,
 }
 
+/// The battery's charge, or `None` on a machine without one.
 pub fn battery() -> Option<Battery> {
     let mut status = SYSTEM_POWER_STATUS::default();
     // SAFETY: `status` is a live SYSTEM_POWER_STATUS to write to.
@@ -225,9 +241,11 @@ pub fn battery() -> Option<Battery> {
 pub struct Network {
     /// The connected network's name, like the Wi-Fi network.
     pub name: Option<String>,
+    /// Whether it reaches the internet.
     pub internet: bool,
 }
 
+/// The network connection, if the system can tell.
 pub fn network() -> Option<Network> {
     let _com = Com::init();
     // SAFETY: plain COM calls on interfaces this function owns; `fetched` and `slot` are live
@@ -261,7 +279,9 @@ pub fn network() -> Option<Network> {
 /// A paired Bluetooth device.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairedDevice {
+    /// The name it was paired under.
     pub name: String,
+    /// Whether it is connected now.
     pub connected: bool,
 }
 
@@ -272,12 +292,12 @@ pub fn paired_bluetooth() -> Vec<PairedDevice> {
     let mut found = Vec::new();
     let devices = BluetoothDevice::GetDeviceSelectorFromPairingState(true)
         .and_then(|selector| DeviceInformation::FindAllAsyncAqsFilter(&selector))
-        .and_then(|op| op.get());
+        .and_then(|op| op.join());
     for info in devices.into_iter().flatten() {
         let Ok(id) = info.Id() else {
             continue;
         };
-        let Ok(device) = BluetoothDevice::FromIdAsync(&id).and_then(|op| op.get()) else {
+        let Ok(device) = BluetoothDevice::FromIdAsync(&id).and_then(|op| op.join()) else {
             continue;
         };
         let name = device.Name().map(|n| n.to_string()).unwrap_or_default();
@@ -298,7 +318,9 @@ pub fn paired_bluetooth() -> Vec<PairedDevice> {
 /// A radio the system can switch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RadioKind {
+    /// The Wi-Fi radio.
     Wifi,
+    /// The Bluetooth radio.
     Bluetooth,
 }
 
@@ -314,7 +336,7 @@ impl RadioKind {
 fn find_radio(kind: RadioKind) -> Option<Radio> {
     Radio::GetRadiosAsync()
         .ok()?
-        .get()
+        .join()
         .ok()?
         .into_iter()
         .find(|r| r.Kind().ok() == Some(kind.windows()))
@@ -337,14 +359,14 @@ pub fn set_radio(kind: RadioKind, on: bool) -> bool {
     };
     let allowed = Radio::RequestAccessAsync()
         .ok()
-        .and_then(|op| op.get().ok())
+        .and_then(|op| op.join().ok())
         .is_some_and(|status| status == RadioAccessStatus::Allowed);
     let state = if on { RadioState::On } else { RadioState::Off };
     allowed
         && radio
             .SetStateAsync(state)
             .ok()
-            .and_then(|op| op.get().ok())
+            .and_then(|op| op.join().ok())
             .is_some_and(|status| status == RadioAccessStatus::Allowed)
 }
 

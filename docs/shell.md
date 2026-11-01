@@ -99,7 +99,8 @@ This is on whenever Tile is your sign-in shell, and it stands aside if
 Explorer owns the taskbar.
 
 A Store app's window starts hidden by the shell and has no title bar, so the same process also
-finds each new one, asks `ApplicationFrameHost` for a frame (the window with the title bar and
+finds each new one (window events report it as it is created, shown or hidden, and a look over
+every window once a second catches any missed), asks `ApplicationFrameHost` for a frame (the window with the title bar and
 close button), puts the app in it, lifts the hiding, keeps the app the size of its frame and keeps
 Windows from freezing the app while it has no visible window. Lifting the hiding needs the Immersive App
 Management key Windows only gives the shell window's owner, so the process registers a hidden

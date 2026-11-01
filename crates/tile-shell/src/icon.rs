@@ -3,29 +3,67 @@
 
 use std::{ffi::c_void, mem, ptr};
 
-use windows_sys::{
-    Win32::Foundation::{POINT, SIZE},
-    Win32::Graphics::Gdi::{
+use windows::{
+    Win32::{
+        Foundation::SIZE,
+        UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_ICONONLY},
+    },
+    core::PCWSTR,
+};
+use windows_sys::Win32::{
+    Foundation::POINT,
+    Graphics::Gdi::{
         AC_SRC_ALPHA, AC_SRC_OVER, AlphaBlend, BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER,
         BLENDFUNCTION, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS, DeleteDC,
         DeleteObject, GetDC, GetDIBits, GetObjectW, HBITMAP, HDC, MONITOR_DEFAULTTONEAREST,
         MonitorFromPoint, ReleaseDC, SelectObject,
     },
-    Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
-    Win32::UI::Shell::{SHCreateItemFromParsingName, SIIGBF, SIIGBF_ICONONLY},
-    Win32::UI::WindowsAndMessaging::{GetIconInfo, HICON, ICONINFO},
-    core::{GUID, HRESULT},
+    UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+    UI::WindowsAndMessaging::{GetIconInfo, HICON, ICONINFO},
 };
 
-const IID_ISHELLITEMIMAGEFACTORY: GUID = GUID::from_u128(0xbcc18b79_ba16_442f_80c4_8a59c30c463b);
+use crate::win::wide;
 
-#[repr(C)]
-struct ImageFactoryVtbl {
-    _query_interface:
-        unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> HRESULT,
-    _add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
-    release: unsafe extern "system" fn(*mut c_void) -> u32,
-    get_image: unsafe extern "system" fn(*mut c_void, SIZE, SIIGBF, *mut HBITMAP) -> HRESULT,
+/// What `GetIconInfo` says of an icon: its colour and mask bitmaps, deleted on drop.
+pub(crate) struct IconInfo(ICONINFO);
+
+impl IconInfo {
+    /// The bitmaps of the icon handle `hicon`, or `None` if it can't be read.
+    pub(crate) fn of(hicon: isize) -> Option<Self> {
+        let mut info = ICONINFO::default();
+        // SAFETY: `info` is a live ICONINFO; the bitmaps it is given are ours, deleted on drop.
+        (unsafe { GetIconInfo(hicon as HICON, &raw mut info) } != 0).then_some(Self(info))
+    }
+
+    /// The colour bitmap, which a monochrome icon doesn't have.
+    fn colour(&self) -> Option<HBITMAP> {
+        (!self.0.hbmColor.is_null()).then_some(self.0.hbmColor)
+    }
+
+    /// The icon's width in pixels as it was made.
+    pub(crate) fn width(&self) -> Option<i32> {
+        let mut bitmap = BITMAP::default();
+        // SAFETY: `bitmap` is a live BITMAP of the size given, for a bitmap `self` owns.
+        let got = unsafe {
+            GetObjectW(
+                self.colour().unwrap_or(self.0.hbmMask),
+                size_of::<BITMAP>() as i32,
+                (&raw mut bitmap).cast(),
+            )
+        };
+        (got != 0).then_some(bitmap.bmWidth)
+    }
+}
+
+impl Drop for IconInfo {
+    fn drop(&mut self) {
+        for bitmap in [self.0.hbmColor, self.0.hbmMask] {
+            if !bitmap.is_null() {
+                // SAFETY: `GetIconInfo` handed these over; each is deleted once, here.
+                unsafe { DeleteObject(bitmap) };
+            }
+        }
+    }
 }
 
 /// An app icon: a premultiplied 32-bit bitmap, freed on drop.
@@ -208,46 +246,28 @@ fn build(pixels: &[u8], width: i32, height: i32) -> Option<Icon> {
 /// The pixels of an icon handle as premultiplied BGRA, at its own size. Icons without an alpha
 /// channel take it from their mask.
 fn hicon_pixels(hicon: isize) -> Option<(Vec<u8>, i32, i32)> {
-    let mut info = ICONINFO::default();
-    // SAFETY: `info` is a live ICONINFO; the bitmaps it is given are ours to delete, once each.
-    if unsafe { GetIconInfo(hicon as HICON, &raw mut info) } == 0 {
-        return None;
-    }
-    let pixels = if info.hbmColor.is_null() {
-        None
-    } else {
-        read_pixels(info.hbmColor).map(|(mut colour, w, h)| {
-            if colour.as_chunks::<4>().0.iter().all(|p| p[3] == 0)
-                && let Some((mask, mw, mh)) = read_pixels(info.hbmMask)
-                && (mw, mh) == (w, h)
-            {
-                for (p, m) in colour
-                    .as_chunks_mut::<4>()
-                    .0
-                    .iter_mut()
-                    .zip(mask.as_chunks::<4>().0)
-                {
-                    // A black mask pixel is part of the icon.
-                    p[3] = if m[0] == 0 { 255 } else { 0 };
-                }
-            }
-            premultiply(&mut colour);
-            (colour, w, h)
-        })
-    };
-    // SAFETY: GetIconInfo handed over these bitmaps (either may be null, which is skipped).
-    unsafe {
-        for bitmap in [info.hbmColor, info.hbmMask] {
-            if !bitmap.is_null() {
-                DeleteObject(bitmap);
-            }
+    let info = IconInfo::of(hicon)?;
+    let (mut colour, w, h) = read_pixels(info.colour()?)?;
+    if colour.as_chunks::<4>().0.iter().all(|p| p[3] == 0)
+        && let Some((mask, mw, mh)) = read_pixels(info.0.hbmMask)
+        && (mw, mh) == (w, h)
+    {
+        for (p, m) in colour
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(mask.as_chunks::<4>().0)
+        {
+            // A black mask pixel is part of the icon.
+            p[3] = if m[0] == 0 { 255 } else { 0 };
         }
     }
-    pixels
+    premultiply(&mut colour);
+    Some((colour, w, h))
 }
 
 /// An icon handle drawn at exactly `size` pixels, smoothly scaled, or `None` if it can't be read.
-pub fn render_hicon(hicon: isize, size: i32) -> Option<Icon> {
+pub(crate) fn render_hicon(hicon: isize, size: i32) -> Option<Icon> {
     let (pixels, width, height) = hicon_pixels(hicon)?;
     let size = size.max(1);
     let scaled = resample(
@@ -264,43 +284,27 @@ pub fn render_hicon(hicon: isize, size: i32) -> Option<Icon> {
 /// `size` pixels. COM must be initialised on this thread. It is asked for at up to twice that size
 /// (64 pixels at most) and shrunk smoothly, which keeps it crisp.
 pub fn shell_icon(parsing_name: &str, size: i32) -> Option<Icon> {
-    let name: Vec<u16> = parsing_name.encode_utf16().chain([0]).collect();
-    let mut factory: *mut c_void = ptr::null_mut();
-    // SAFETY: `name` is NUL-terminated and outlives the call; on success `factory` is an
-    // IShellItemImageFactory we own a reference to.
-    let hr = unsafe {
-        SHCreateItemFromParsingName(
-            name.as_ptr(),
-            ptr::null_mut(),
-            &IID_ISHELLITEMIMAGEFACTORY,
-            &raw mut factory,
-        )
+    let name = wide(parsing_name);
+    // At most 64 pixels, or the size itself if that is more: plenty to shrink from.
+    let request = (size * 2).min(64).max(size);
+    // SAFETY: `name` is NUL-terminated and outlives the call; the factory is released on drop.
+    let original = unsafe {
+        let factory: IShellItemImageFactory =
+            SHCreateItemFromParsingName(PCWSTR(name.as_ptr()), None).ok()?;
+        factory
+            .GetImage(
+                SIZE {
+                    cx: request,
+                    cy: request,
+                },
+                SIIGBF_ICONONLY,
+            )
+            .ok()?
+            .0
     };
-    if hr < 0 || factory.is_null() {
+    if original.is_null() {
         return None;
     }
-    // SAFETY: a COM object's first field is its vtable pointer, and this one's layout is
-    // IUnknown followed by GetImage. The reference is released once, after the last call.
-    let original = unsafe {
-        let vtbl = *factory.cast::<*const ImageFactoryVtbl>();
-        let mut bitmap: HBITMAP = ptr::null_mut();
-        // At most 64 pixels, or the size itself if that is more: plenty to shrink from.
-        let request = (size * 2).min(64).max(size);
-        let hr = ((*vtbl).get_image)(
-            factory,
-            SIZE {
-                cx: request,
-                cy: request,
-            },
-            SIIGBF_ICONONLY,
-            &raw mut bitmap,
-        );
-        ((*vtbl).release)(factory);
-        if hr < 0 || bitmap.is_null() {
-            return None;
-        }
-        bitmap
-    };
     let pixels = read_pixels(original);
     // SAFETY: GetImage handed us this bitmap; it is deleted once, here.
     unsafe { DeleteObject(original) };
