@@ -746,3 +746,60 @@ impl fmt::Display for Color {
         write!(f, "#{:02x}{:02x}{:02x}", self.r, self.g, self.b)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn program_is_the_first_word_or_quoted_path() {
+        assert_eq!(program("  notepad.exe file.txt"), "notepad.exe");
+        assert_eq!(
+            program(r#""C:\Program Files\App\app.exe" --flag"#),
+            r"C:\Program Files\App\app.exe"
+        );
+        assert_eq!(program(r#""unterminated path"#), "unterminated path");
+        assert_eq!(program(""), "");
+    }
+
+    #[test]
+    fn layout_settings_clamp_out_of_range_values() {
+        let mut config = Config::default();
+        config.dwindle.split_ratio = 5.0;
+        config.master.mfact = -1.0;
+        config.master.count = 0;
+        config.scrolling.proportion = 0.0;
+        let settings = config.layout_settings();
+        assert_eq!(settings.dwindle_split_ratio, 0.9);
+        assert_eq!(settings.master_mfact, 0.1);
+        assert_eq!(settings.master_count, 1);
+        assert_eq!(settings.scrolling_proportion, 0.1);
+    }
+
+    #[test]
+    fn borders_fall_back_to_the_theme() {
+        let mut config = Config::default();
+        assert_eq!(config.border_active(), config.theme.accent);
+        assert_eq!(config.border_inactive(), config.theme.inactive);
+        config.general.border_active = Some(Color::rgb(1, 2, 3));
+        config.general.border_inactive = Some(Color::rgb(4, 5, 6));
+        assert_eq!(config.border_active(), Color::rgb(1, 2, 3));
+        assert_eq!(config.border_inactive(), Color::rgb(4, 5, 6));
+    }
+
+    #[test]
+    fn colours_parse_with_or_without_a_hash() {
+        assert_eq!("#0a1B2c".parse(), Ok(Color::rgb(10, 27, 44)));
+        assert_eq!(" ff0000 ".parse(), Ok(Color::rgb(255, 0, 0)));
+        for bad in ["", "#fff", "#12345g", "#1234567", "red"] {
+            assert!(bad.parse::<Color>().is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn animation_curve_uses_the_configured_points() {
+        let animations = Animations::default();
+        let [x1, y1, x2, y2] = animations.bezier;
+        assert_eq!(animations.curve(), Bezier::new(x1, y1, x2, y2));
+    }
+}
