@@ -26,6 +26,9 @@ pub struct Restore {
     /// We hid the pointer (`cursor.hide_on_key`) by blanking the system cursors.
     #[serde(default)]
     pub cursor_hidden: bool,
+    /// We turned the SmartScreen app check off while hosting the shell.
+    #[serde(default)]
+    pub smartscreen_disabled: bool,
 }
 
 impl Restore {
@@ -34,6 +37,7 @@ impl Restore {
             && self.undecorated.is_empty()
             && !self.lock_disabled
             && !self.cursor_hidden
+            && !self.smartscreen_disabled
     }
 
     /// Undoes everything recorded here.
@@ -44,6 +48,9 @@ impl Restore {
         }
         if self.cursor_hidden {
             tile_input::restore_cursors();
+        }
+        if self.smartscreen_disabled {
+            tile_platform::set_smartscreen_disabled(false);
         }
     }
 }
@@ -104,6 +111,10 @@ mod tests {
                 cursor_hidden: true,
                 ..Default::default()
             },
+            Restore {
+                smartscreen_disabled: true,
+                ..Default::default()
+            },
         ];
         for restore in cases {
             assert!(!restore.is_empty(), "{restore:?}");
@@ -117,6 +128,7 @@ mod tests {
             undecorated: vec![3],
             lock_disabled: true,
             cursor_hidden: true,
+            smartscreen_disabled: true,
         };
         let json = serde_json::to_string(&restore).unwrap();
         assert_eq!(serde_json::from_str::<Restore>(&json).unwrap(), restore);

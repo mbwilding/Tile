@@ -17,6 +17,7 @@ mod monitors;
 mod mover;
 pub mod registry;
 mod sign_in;
+mod smartscreen;
 mod startup;
 mod tile_icon;
 mod token;
@@ -39,6 +40,9 @@ pub use monitors::{monitors, rect};
 pub use mover::{Animation, Mover};
 pub use sign_in::{
     conhost, headless_command, is_shell as is_sign_in_shell, set_shell as set_sign_in_shell,
+};
+pub use smartscreen::{
+    request_smartscreen_permission, set_smartscreen_disabled, smartscreen_overridden,
 };
 pub use startup::{commands as startup_commands, first_this_session as first_startup_this_session};
 pub use token::{is_elevated, user_sid};

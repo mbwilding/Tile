@@ -7,9 +7,11 @@ use super::Daemon;
 use crate::launch;
 
 impl Daemon {
-    /// Removes the black windows, so the desktop shows again.
+    /// Removes the black windows, so the desktop shows again, and gives the SmartScreen app
+    /// check back, now that Tile no longer hosts the notification area.
     pub(super) fn restore_backdrop(&mut self) {
         self.backdrop = None;
+        self.give_back_smartscreen();
     }
 
     /// Whether Tile acts as the Windows shell: `--shell`, or the tray's Shell switch.
@@ -97,6 +99,7 @@ impl Daemon {
                     if self.backdrop.is_none() {
                         self.backdrop = Backdrop::black();
                     }
+                    self.take_smartscreen();
                 } else {
                     tracing::warn!("couldn't start the notification area");
                 }

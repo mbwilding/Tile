@@ -11,6 +11,7 @@ How Tile fits in with Windows, and what it changes.
 | `%LOCALAPPDATA%\Tile\restore.json` | What to undo if Tile dies, while it runs |
 | `%LOCALAPPDATA%\Tile\launcher.json` | The [launcher](launcher.md)'s launch history, while `launcher.track_usage` is on |
 | `%LOCALAPPDATA%\Tile\grant-win-l.ps1` | The script that asks once for permission to manage the [Win+L](#winl) policy, when it is admin-only |
+| `%LOCALAPPDATA%\Tile\grant-smartscreen.ps1` | The same, for the [SmartScreen](shell.md#smartscreen) policy |
 | `C:\Program Files\Tile` | The installed programs |
 
 ## The tray
@@ -138,9 +139,10 @@ they fit their tile anyway.
 
 ## Undoing changes
 
-Tile hides windows on inactive workspaces, removes title bars, sets the Win+L policy and blanks
-the system cursors to hide the pointer. It records these in `restore.json` and undoes them on
-exit, pause, turning tiling off and on panic. A watchdog process (`Tile.exe --watchdog <pid>`)
+Tile hides windows on inactive workspaces, removes title bars, sets the Win+L policy, turns off
+the [SmartScreen](shell.md#smartscreen) policy and blanks the system cursors to hide the pointer.
+It records these in `restore.json` and undoes them on exit, pause, turning tiling off and on
+panic. A watchdog process (`Tile.exe --watchdog <pid>`)
 undoes them if Tile is killed, and the next start cleans up anything left over. Closing the
 terminal Tile was started from can kill the watchdog too, so Tile cleans up itself when that
 console closes.
