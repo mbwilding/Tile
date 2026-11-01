@@ -3,7 +3,8 @@
 //! A Store app's `Windows.UI.Core.CoreWindow` starts hidden by the shell (DWM's shell cloak) and
 //! has no title bar. Explorer fixes both: it asks `ApplicationFrameHost` for a frame, puts the app
 //! window inside it, and lifts the cloak. With no Explorer, [`start`] does the same for every app
-//! window it finds, from a thread of its own.
+//! window it hears of (from window events, with a sweep each second for any missed), from a
+//! thread of its own.
 //!
 //! Lifting the cloak needs Immersive App Management access, which Windows only gives to the
 //! process that owns the shell window, so [`start`] registers a hidden one. Like [`crate::uwp`],
@@ -33,17 +34,16 @@ use crate::{
 
 /// How long an app gets to close after being asked before it is ended.
 const CLOSE_GRACE: Duration = Duration::from_secs(3);
-/// How many scans try to frame one app window before giving up on it.
+/// How many tries, a tick apart, frame one app window before giving up on it.
 const MAX_TRIES: u8 = 20;
-/// How often empty frames are looked for.
-const SWEEP_EVERY: u32 = 33;
+/// How often empty frames are looked for, and every window is checked in case an event was
+/// missed.
+const SWEEP: Duration = Duration::from_secs(1);
 /// How many sweeps in a row a frame must be empty before it is destroyed.
 const EMPTY_SWEEPS: u8 = 3;
-/// How often windows are checked for a new app to frame.
-const SCAN_EVERY: u32 = 1;
 /// How many ticks after framing an app is kept from staying frozen.
 const RESUME_FOR: u32 = 200;
-/// The pause between checks that keep frames and their apps the same size.
+/// The pause between checks that keep frames and their apps the same size, while there are any.
 const TICK: Duration = Duration::from_millis(30);
 
 /// Starts framing Store app windows on a thread of its own, unless Explorer is the shell.
@@ -87,28 +87,55 @@ struct Framer {
     frames: Vec<Frame>,
     /// How many times each app window was tried, so one that keeps failing is given up on.
     tried: HashMap<usize, u8>,
+    /// App windows that weren't framed yet, tried again every tick.
+    pending: Vec<HWND>,
     /// How many sweeps in a row each frame has held no app.
     empty: HashMap<usize, u8>,
 }
 
+/// Frames app windows as window events report them, and keeps the frames in step with their
+/// apps every tick while there are any. Without the events, every window is scanned each tick.
 fn run() -> Result<(), String> {
     com::join_apartment();
     let mut framer = Framer::new(Shell::take()?);
-    tracing::info!("framing Store app windows");
+    let events = windows::WindowEvents::watch();
+    if events.complete() {
+        tracing::info!("framing Store app windows");
+    } else {
+        tracing::warn!("framing Store app windows, scanning for them without window events");
+    }
     if let Err(e) = crate::immersive::register() {
         tracing::warn!("couldn't register the shell stand-in: {e}");
     }
-    let mut tick = 0u32;
+    framer.scan();
+    let mut next_tick = Instant::now();
+    let mut next_sweep = next_tick + SWEEP;
     while pump_pending() {
-        if tick.is_multiple_of(SCAN_EVERY) {
+        for app in events.take() {
+            framer.consider(app);
+        }
+        let busy = !events.complete() || framer.busy();
+        let now = Instant::now();
+        if busy && now >= next_tick {
+            if events.complete() {
+                framer.retry();
+            } else {
+                framer.scan();
+            }
+            framer.follow();
+            next_tick = now + TICK;
+        }
+        if now >= next_sweep {
             framer.scan();
-        }
-        if tick.is_multiple_of(SWEEP_EVERY) {
             framer.sweep_empty();
+            next_sweep = now + SWEEP;
         }
-        framer.follow();
-        tick = tick.wrapping_add(1);
-        wait(TICK);
+        let until = if framer.busy() || !events.complete() {
+            next_tick.min(next_sweep)
+        } else {
+            next_sweep
+        };
+        wait(until.saturating_duration_since(Instant::now()));
     }
     Ok(())
 }
@@ -122,8 +149,14 @@ impl Framer {
             statics: None,
             frames: Vec::new(),
             tried: HashMap::new(),
+            pending: Vec::new(),
             empty: HashMap::new(),
         }
+    }
+
+    /// Whether anything needs the tick: frames to follow, or app windows to try again.
+    fn busy(&self) -> bool {
+        !self.frames.is_empty() || !self.pending.is_empty()
     }
 
     /// Frames every new Store app window the shell is still hiding.
@@ -134,23 +167,35 @@ impl Framer {
         }
     }
 
+    /// Tries again the app windows that weren't framed yet.
+    fn retry(&mut self) {
+        for app in std::mem::take(&mut self.pending) {
+            self.consider(app);
+        }
+    }
+
     /// Frames `app` if it is a Store app window the shell is still hiding and hasn't been tried
-    /// too often.
+    /// too often. One that isn't framed this time is tried again next tick.
     fn consider(&mut self, app: HWND) {
         let attempts = self.tried.get(&(app as usize)).copied().unwrap_or(0);
         if attempts >= MAX_TRIES || !windows::is_hidden_app_window(app) {
             return;
         }
         self.tried.insert(app as usize, attempts + 1);
-        let Some((id, package)) = windows::app_id(app) else {
-            return;
-        };
-        match self.frame(app, &id, package) {
-            Ok(frame) => {
-                tracing::info!("framed {id}");
-                self.frames.push(frame);
-            }
-            Err(e) => tracing::warn!("couldn't frame {id}: {e}"),
+        let framed =
+            windows::app_id(app).is_some_and(|(id, package)| match self.frame(app, &id, package) {
+                Ok(frame) => {
+                    tracing::info!("framed {id}");
+                    self.frames.push(frame);
+                    true
+                }
+                Err(e) => {
+                    tracing::warn!("couldn't frame {id}: {e}");
+                    false
+                }
+            });
+        if !framed && !self.pending.contains(&app) {
+            self.pending.push(app);
         }
     }
 

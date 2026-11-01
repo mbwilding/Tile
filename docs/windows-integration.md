@@ -120,7 +120,9 @@ component the way Explorer does: it makes a CoreMessaging session with `CoreUICr
 manager's static `Create` from that session's thread (it opens the thread's own session with
 `CoreUIOpenExisting`), then runs the session. It then frames each app window through
 `ApplicationFrameHost`'s frame manager and lifts the shell's cloak, which needs the Immersive App
-Management key that Windows gives the shell window's owner. It tells the app its size with
+Management key that Windows gives the shell window's owner. It hears of app windows from window
+events (`SetWinEventHook` for windows created, shown, cloaked and uncloaked), and looks over every
+window once a second in case one was missed. It tells the app its size with
 `UniversalAppModelInProc`'s `SetBounds` and `SetVisibleBounds`, which only answer the shell
 process. See [shell mode](shell.md#settings-and-store-apps).
 

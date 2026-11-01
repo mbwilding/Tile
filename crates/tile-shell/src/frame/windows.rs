@@ -1,7 +1,7 @@
 //! The window side of framing: the shell window and the cloak it lets this process lift, and
 //! telling Store app windows and their frames apart.
 
-use std::{os::windows::io::AsRawHandle, ptr};
+use std::{cell::RefCell, os::windows::io::AsRawHandle, ptr};
 
 use windows_sys::Win32::{
     Foundation::{HWND, LPARAM, RECT},
@@ -11,10 +11,15 @@ use windows_sys::Win32::{
         LibraryLoader::{GetProcAddress, LoadLibraryW},
         Threading::{PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, TerminateProcess},
     },
-    UI::WindowsAndMessaging::{
-        CreateWindowExW, EnumChildWindows, EnumWindows, GetClientRect, GetParent, GetSystemMetrics,
-        PostMessageW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
-        SetWindowPos, SetWindowTextW, ShowWindow, WM_CLOSE,
+    UI::{
+        Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent},
+        WindowsAndMessaging::{
+            CHILDID_SELF, CreateWindowExW, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CREATE,
+            EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED, EnumChildWindows, EnumWindows,
+            GetClientRect, GetParent, GetSystemMetrics, OBJID_WINDOW, PostMessageW, SM_CXSCREEN,
+            SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos,
+            SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
+        },
     },
 };
 
@@ -124,6 +129,85 @@ impl Shell {
         }
         // SAFETY: as above.
         unsafe { (self.enable)(&raw const self.key, 0) };
+    }
+}
+
+thread_local! {
+    /// Windows the events reported, until the framer looks at them.
+    static REPORTED: RefCell<Vec<HWND>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Hears of windows being created, shown, cloaked and uncloaked in other processes, which is when
+/// a Store app window may need a frame. The events arrive while the thread that made this
+/// pumps its messages; dropping it stops them.
+pub(super) struct WindowEvents(Vec<HWINEVENTHOOK>);
+
+impl WindowEvents {
+    /// Starts listening, on the calling thread.
+    pub(super) fn watch() -> Self {
+        let ranges = [
+            (EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW),
+            (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
+        ];
+        let hooks = ranges
+            .into_iter()
+            .filter_map(|(first, last)| {
+                // SAFETY: `on_event` has the WINEVENTPROC signature and lives for the whole
+                // program; an out-of-context hook needs no module.
+                let hook = unsafe {
+                    SetWinEventHook(
+                        first,
+                        last,
+                        ptr::null_mut(),
+                        Some(on_event),
+                        0,
+                        0,
+                        WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+                    )
+                };
+                (!hook.is_null()).then_some(hook)
+            })
+            .collect();
+        Self(hooks)
+    }
+
+    /// Whether every range is being heard.
+    pub(super) fn complete(&self) -> bool {
+        self.0.len() == 2
+    }
+
+    /// The windows reported since the last call, oldest first.
+    pub(super) fn take(&self) -> Vec<HWND> {
+        REPORTED.with(|reported| std::mem::take(&mut *reported.borrow_mut()))
+    }
+}
+
+impl Drop for WindowEvents {
+    fn drop(&mut self) {
+        for &hook in &self.0 {
+            // SAFETY: a hook `watch` set, removed once.
+            unsafe { UnhookWinEvent(hook) };
+        }
+    }
+}
+
+unsafe extern "system" fn on_event(
+    _hook: HWINEVENTHOOK,
+    _event: u32,
+    window: HWND,
+    object: i32,
+    child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    if object == OBJID_WINDOW && child == CHILDID_SELF as i32 && !window.is_null() {
+        REPORTED.with(|reported| {
+            if let Ok(mut reported) = reported.try_borrow_mut()
+                && !reported.contains(&window)
+            {
+                reported.push(window);
+            }
+        });
     }
 }
 
