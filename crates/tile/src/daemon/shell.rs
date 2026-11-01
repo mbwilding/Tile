@@ -1,15 +1,20 @@
 //! Shell mode: hosting the notification area and the sign-in shell setting.
 
 use tile_platform::Backdrop;
-use tile_shell::notify::{Host, taskbar_exists};
+use tile_shell::{
+    consent::Prompts,
+    notify::{Host, taskbar_exists},
+};
 
 use super::Daemon;
 use crate::{launch, settings};
 
 impl Daemon {
-    /// Removes the black windows, so the desktop shows again.
+    /// Removes the black windows, so the desktop shows again, and leaves UAC prompts to the
+    /// taskbar.
     pub(super) fn restore_backdrop(&mut self) {
         self.backdrop = None;
+        self.prompts = None;
     }
 
     /// Whether Tile acts as the Windows shell: `--shell`, or the tray's Shell switch.
@@ -94,6 +99,11 @@ impl Daemon {
                     tracing::info!("hosting the notification area");
                     if self.backdrop.is_none() {
                         self.backdrop = Backdrop::black();
+                    }
+                    if self.prompts.is_none() {
+                        self.prompts = Prompts::start()
+                            .inspect_err(|e| tracing::warn!("couldn't watch for UAC prompts: {e}"))
+                            .ok();
                     }
                 } else {
                     tracing::warn!("couldn't start the notification area");
