@@ -54,11 +54,31 @@ const DEFOCUS_GRACE: Duration = Duration::from_millis(500);
 const REMAP_PANIC: &str =
     "emergency exit (Backspace+Escape+Enter): remapping is off until the config is reloaded";
 
+/// What subscribers were last told.
 #[derive(Default, PartialEq)]
 struct Published {
     workspace: Option<u8>,
-    window: Option<(isize, String, String)>,
+    window: Option<ActiveWindow>,
     layout: Option<LayoutKind>,
+}
+
+/// The focused window, as subscribers see it.
+#[derive(PartialEq)]
+struct ActiveWindow {
+    id: isize,
+    title: String,
+    exe: String,
+}
+
+impl ActiveWindow {
+    /// The event that says `window` is now the active one.
+    fn event(window: Option<&Self>) -> tile_ipc::Event {
+        tile_ipc::Event::ActiveWindow {
+            id: window.map(|w| w.id),
+            title: window.map(|w| w.title.clone()),
+            exe: window.map(|w| w.exe.clone()),
+        }
+    }
 }
 
 struct Receivers {

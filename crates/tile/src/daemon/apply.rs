@@ -6,7 +6,7 @@ use tile_ipc::{Event, Response};
 use tile_platform::{Animation, Mover, PlaceError, focus_desktop, foreground};
 use tokio::time::Instant;
 
-use super::{Daemon, HEAL_DELAY, Published, tracked::Tween};
+use super::{ActiveWindow, Daemon, HEAL_DELAY, Published, tracked::Tween};
 use crate::{
     launch,
     paths::{self, Restore},
@@ -284,9 +284,11 @@ impl Daemon {
         let state = self.desktops.current_ref();
         Published {
             workspace: state.focused_workspace(),
-            window: state
-                .snapshot_active_window()
-                .map(|w| (w.id, w.title, w.exe)),
+            window: state.snapshot_active_window().map(|w| ActiveWindow {
+                id: w.id,
+                title: w.title,
+                exe: w.exe,
+            }),
             layout: state.active_layout(),
         }
     }
@@ -295,18 +297,7 @@ impl Daemon {
         let now = self.snapshot();
         let mut events = Vec::new();
         events.extend(now.workspace.map(|id| Event::Workspace { id }));
-        events.push(match now.window {
-            Some((id, title, exe)) => Event::ActiveWindow {
-                id: Some(id),
-                title: Some(title),
-                exe: Some(exe),
-            },
-            None => Event::ActiveWindow {
-                id: None,
-                title: None,
-                exe: None,
-            },
-        });
+        events.push(ActiveWindow::event(now.window.as_ref()));
         events.extend(now.layout.map(|layout| Event::Layout { layout }));
         events
     }
@@ -324,18 +315,7 @@ impl Daemon {
             events.push(Event::Workspace { id });
         }
         if now.window != self.published.window {
-            events.push(match &now.window {
-                Some((id, title, exe)) => Event::ActiveWindow {
-                    id: Some(*id),
-                    title: Some(title.clone()),
-                    exe: Some(exe.clone()),
-                },
-                None => Event::ActiveWindow {
-                    id: None,
-                    title: None,
-                    exe: None,
-                },
-            });
+            events.push(ActiveWindow::event(now.window.as_ref()));
         }
         if now.layout != self.published.layout
             && let Some(layout) = now.layout
