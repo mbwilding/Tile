@@ -366,6 +366,18 @@ async fn stop_launcher() -> anyhow::Result<()> {
         return Ok(());
     }
     launcher::send(&LaunchRequest::Exit).await?;
+    if wait_until_stopped(launcher::is_running, "launcher")
+        .await
+        .is_ok()
+    {
+        return Ok(());
+    }
+    // It can hang while exiting; Tile is already stopped, so what's left is the launcher.
+    let _ = Command::new("taskkill")
+        .args(["/f", "/im", "tile.exe"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
     wait_until_stopped(launcher::is_running, "launcher").await
 }
 

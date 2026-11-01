@@ -237,6 +237,14 @@ impl State {
         self.monitors.get(self.focused_monitor).map(|m| &m.info)
     }
 
+    /// Whether window `id` is on the focused monitor's visible workspace.
+    pub fn on_focused_monitor(&self, id: WindowId) -> bool {
+        self.windows
+            .get(&id)
+            .and_then(|m| self.showing(m.workspace))
+            .is_some_and(|i| i == self.focused_monitor)
+    }
+
     /// The number of the focused monitor's workspace.
     pub fn focused_workspace(&self) -> Option<u8> {
         let key = self.focused_key()?;

@@ -37,6 +37,7 @@ use crate::{
 /// How long an event we caused ourselves (hide/show) may take to arrive.
 const SELF_EVENT_WINDOW: Duration = Duration::from_secs(2);
 const RELOAD_DEBOUNCE: Duration = Duration::from_millis(200);
+const DEFOCUS_GRACE: Duration = Duration::from_millis(500);
 /// Logged when the remapper's emergency exit is typed.
 const REMAP_PANIC: &str =
     "emergency exit (Backspace+Escape+Enter): remapping is off until the config is reloaded";
@@ -135,6 +136,8 @@ struct Daemon {
     heal_at: Option<Instant>,
     /// Re-entrancy guard for re-syncing focus after Windows refused a focus change.
     resyncing_focus: bool,
+    /// When Tile last put focus on the desktop because the focused monitor had nothing to focus.
+    defocused_at: Option<Instant>,
     /// While typing hid the pointer: where it was then.
     cursor_hidden: Option<(i32, i32)>,
     /// While the pointer is hidden: when to next check whether the mouse moved.
@@ -328,6 +331,7 @@ pub async fn run(
         relock_at: None,
         heal_at: None,
         resyncing_focus: false,
+        defocused_at: None,
         cursor_hidden: None,
         cursor_check_at: None,
     };
@@ -1392,6 +1396,18 @@ impl Daemon {
                 return;
             }
         }
+        // Windows picks a window on another monitor when the desktop can't hold focus; don't follow.
+        let state = self.desktops.current_ref();
+        if self
+            .defocused_at
+            .is_some_and(|at| at.elapsed() < DEFOCUS_GRACE)
+            && state.focused().is_none()
+            && !state.on_focused_monitor(id)
+        {
+            tracing::info!("ignoring focus moved to another monitor after a defocus");
+            focus_desktop();
+            return;
+        }
         // Focus can arrive before the desktop switch notification.
         if self.desktops.owner(id) != Some(self.desktops.current_id())
             && let Some(live) = vd::current_desktop()
@@ -1692,6 +1708,7 @@ impl Daemon {
         if effects.contains(&Effect::Defocus) {
             tracing::info!("nothing to focus here: focusing the desktop");
             focus_desktop();
+            self.defocused_at = Some(Instant::now());
         }
         let mut failed = Vec::new();
         let mut focus_refused = false;

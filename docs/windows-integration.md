@@ -60,6 +60,12 @@ Windows opens Start when Win is released with no other key pressed in between. W
 `disable_start_menu: true`, Tile presses a key that does nothing just before the release, so Start
 stays closed. Win combos, binds and the `launcher` dispatcher are unaffected. It is off by default.
 
+## Quick settings
+
+Win+A isn't bound by Tile by default, so it still reaches Windows and opens quick settings (Wi-Fi, audio and
+the rest), with or without Explorer running. Use it if you need that menu. The
+[launcher](launcher.md) has its own rows for the same things.
+
 ## Click to Do
 
 On Copilot+ PCs, holding Win shows Click to Do's glow around the pointer. Tile switches it off

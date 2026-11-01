@@ -6,17 +6,21 @@ tray:
   tile: true
   remap: false
   shell: true
-  log: false
+  log: true
 
 theme:
   font: NeoSpleen
 
 binds:
+  # default pop up settings menu for things like wifi, bluetooth and audio
+  # super+a: pop-up settings for audio
   super+r: launcher
+  super+e: exec explorer.exe "%USERPROFILE%"
+  super+c: exec %LOCALAPPDATA%\Microsoft\WinGet\Links\btop.exe
   super+t: exec wtd.exe -w new
   super+p: exec wtd.exe -w new -p "NixOS - Personal"
   super+w: exec wtd.exe -w new -p "NixOS - Work"
-  super+semicolon: "exec explorer.exe ms-screenclip:"
+  super+semicolon: exec snippingtool.exe /clip
   super+ctrl+h: workspace 1
   super+ctrl+t: workspace 2
   super+ctrl+n: workspace 3
