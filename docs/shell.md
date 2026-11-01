@@ -23,7 +23,7 @@ tile install          # the shell has to live somewhere that stays
 
 Then tick **Shell** in the tray menu, run the `toggleshell` dispatcher, or set `shell: true`
 under `tray` in your config. It takes effect at your next sign-in. Ticking it sets your user's
-Winlogon `Shell` value to `tile.exe --shell`, which needs no admin rights and affects only your
+Winlogon `Shell` value to `Tile.exe --shell`, which needs no admin rights and affects only your
 account, and turns on "Launch folder windows in a separate process" so a folder window doesn't
 bring Explorer's taskbar back. Unticking it puts Explorer back from the next sign-in.
 
@@ -60,7 +60,7 @@ sign-in session, so restarting Tile doesn't start everything twice. `shell.run_s
 turns it off.
 
 **Admin rights.** `tile install` runs Tile as administrator through a sign-in task. As the
-shell, Windows also starts `tile.exe --shell` with your normal rights. That copy serves as the
+shell, Windows also starts `Tile.exe --shell` with your normal rights. That copy serves as the
 helper that starts programs without admin rights and waits for the elevated Tile. If the sign-in
 task never starts Tile within 30 seconds, the helper runs Tile itself, without admin rights, and
 logs it to `launcher.log`.
@@ -88,7 +88,7 @@ open: Windows starts them through `sihost.exe`, which then waits for the shell t
 window is ready. Explorer answers; with no Explorer a launch hangs for 45 seconds and fails with
 error 0x80040900 (or "class not registered" or a "File system error").
 
-When Windows starts Tile as the shell (`tile.exe --shell`, the copy that runs with your normal
+When Windows starts Tile as the shell (`Tile.exe --shell`, the copy that runs with your normal
 rights), that process answers instead. It creates the same component Explorer does, the shell's
 `UwpWindowLifecycleManager`, on a CoreMessaging session of its own. Nothing else of Explorer runs.
 This is on whenever Tile is your sign-in shell, and it stands aside if

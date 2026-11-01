@@ -1,6 +1,6 @@
 # The command line
 
-`tile.exe` is both the window manager and its command-line tool. With no command it runs Tile;
+`Tile.exe` is both the window manager and its command-line tool. With no command it runs Tile;
 with one it controls a Tile that is already running.
 
 ```powershell
@@ -21,7 +21,7 @@ Becoming the Windows shell is the tray's Shell item (or `tray.shell` in the conf
 
 ## Console and windows
 
-`tile.exe` is a console program, so its output works in any terminal and the prompt waits for
+`Tile.exe` is a console program, so its output works in any terminal and the prompt waits for
 it. Run in a terminal, `tile` stays in the foreground with that console (Ctrl-C quits it,
 undoing its changes). Started any other way (sign-in, the task, Explorer) it lets go of its
 console at once. What `install` registers starts it through `conhost.exe --headless`, so no

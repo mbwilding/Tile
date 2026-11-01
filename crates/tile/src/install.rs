@@ -2,10 +2,10 @@
 //!
 //! Tile is installed to `C:\Program Files\Tile` and started at sign-in by a scheduled task that
 //! runs it elevated, so it can manage admin windows without a UAC prompt at every sign-in. The
-//! programs it starts go through the launcher (`tile.exe --launcher`, started by the user's
+//! programs it starts go through the launcher (`Tile.exe --launcher`, started by the user's
 //! `Run` key), so they run as the normal user. `tile` goes on the user's `PATH`.
 //!
-//! `tile.exe` is a console program. What starts it at sign-in goes through
+//! `Tile.exe` is a console program. What starts it at sign-in goes through
 //! `conhost.exe --headless`, so no console window ever appears.
 //!
 //! Key, the remapper that is now part of Tile, is stopped and its install removed, so keys
@@ -57,7 +57,7 @@ const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// The program `install` copies.
-const EXE: &str = "tile.exe";
+const EXE: &str = "Tile.exe";
 
 /// The admin part of `install` / `uninstall`.
 #[derive(Debug, Clone, clap::Subcommand)]
@@ -93,11 +93,11 @@ fn key_install_dir() -> PathBuf {
     install_dir().with_file_name("Key")
 }
 
-/// The folder holding the build to install: this `tile.exe`'s own, or for the installed
+/// The folder holding the build to install: this `Tile.exe`'s own, or for the installed
 /// `tile`, `target\release` under the current folder (a Tile checkout).
 fn build_dir(dir: &Path) -> anyhow::Result<PathBuf> {
     let exe = std::env::current_exe()?;
-    let own = exe.parent().context("no folder for tile.exe")?;
+    let own = exe.parent().context("no folder for Tile.exe")?;
     let source = if own == dir {
         std::env::current_dir()?.join("target").join("release")
     } else {
@@ -126,7 +126,7 @@ pub async fn install() -> anyhow::Result<()> {
         user: current_user()?,
     })
     .await?;
-    let tile = dir.join("tile.exe");
+    let tile = dir.join("Tile.exe");
     set_run(
         LAUNCHER_RUN_VALUE,
         Some(&tile_platform::headless_command(&tile, "--launcher")),
@@ -232,14 +232,14 @@ fn run_step(step: &Step) -> anyhow::Result<String> {
     match step {
         Step::Install { source, user } => {
             copy_programs(source, &dir)?;
-            register_task(&dir.join("tile.exe"), user)
+            register_task(&dir.join("Tile.exe"), user)
                 .context("failed to register the sign-in task")?;
             delete_task(KEY_TASK).context("failed to remove Key's sign-in task")?;
             remove_programs(&key_install_dir())?;
             // We run as administrator: started by us, Tile is too. Unless the prompt was
             // answered with another account, whose desktop it must not start on.
             if current_user()?.eq_ignore_ascii_case(user) {
-                start_detached(&dir.join("tile.exe"), &[]).context("failed to start Tile")?;
+                start_detached(&dir.join("Tile.exe"), &[]).context("failed to start Tile")?;
                 Ok("Tile is running as administrator and starts at sign-in.".into())
             } else {
                 Ok("Tile starts as administrator at your next sign-in.".into())
@@ -276,7 +276,7 @@ fn copy_programs(source: &Path, dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Removes `dir`. A running `tile.exe` in it can't be deleted yet, so `cmd` finishes the job
+/// Removes `dir`. A running `Tile.exe` in it can't be deleted yet, so `cmd` finishes the job
 /// once it has exited.
 fn remove_programs(dir: &Path) -> anyhow::Result<()> {
     match fs::remove_dir_all(dir) {
@@ -393,7 +393,7 @@ async fn stop_launcher() -> anyhow::Result<()> {
         .args([
             "/f",
             "/im",
-            "tile.exe",
+            "Tile.exe",
             "/fi",
             &format!("PID ne {}", std::process::id()),
         ])

@@ -18,7 +18,7 @@ binds:
 `tile dispatch launcher` opens it too. It works with tiling off or paused. Pressing the bind
 again closes it.
 
-This is not the `tile.exe --launcher` helper that starts programs with your normal rights; the
+This is not the `Tile.exe --launcher` helper that starts programs with your normal rights; the
 launcher uses that helper too, so apps it starts never run as administrator, unless you ask for it
 (see [running as administrator](#running-as-administrator)).
 

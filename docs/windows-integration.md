@@ -20,7 +20,7 @@ Tile and Remap switch the window manager and the key remapper on or off on their
 remembered across restarts in the config's `tray` section. Tile starts on and Remap off. Shell
 makes Tile the [shell](shell.md) (it starts off). Launch
 and close binds work either way. Log switches logging on or off (nothing is logged until then, or
-until `--log` is passed: `tile.exe --log tile=debug` logs every keybind it handles).
+until `--log` is passed: `Tile.exe --log tile=debug` logs every keybind it handles).
 
 There is no reload item: Tile reloads the config whenever the file is saved. When the saved file
 has errors, Tile keeps running on the last config that loaded, the tray icon's top left tile
@@ -114,7 +114,7 @@ appears. Turning the Shell switch on writes the Winlogon `Shell` value under `HK
 back. Tile checks both against the switch each time it starts and when the config changes.
 
 Store apps (Settings, the Microsoft Store) are started by `sihost.exe`, which waits for the shell
-to report the app's window. The shell process, `tile.exe --shell` with the user's rights, does
+to report the app's window. The shell process, `Tile.exe --shell` with the user's rights, does
 that by creating the `Windows.Internal.Shell.UwpWindowLifecycleManagement.UwpWindowLifecycleManager`
 component the way Explorer does: it makes a CoreMessaging session with `CoreUICreateEx`, calls the
 manager's static `Create` from that session's thread (it opens the thread's own session with
@@ -147,7 +147,7 @@ they fit their tile anyway.
 
 Tile hides windows on inactive workspaces, removes title bars, sets the Win+L policy and blanks
 the system cursors to hide the pointer. It records these in `restore.json` and undoes them on
-exit, pause, turning tiling off and on panic. A watchdog process (`tile.exe --watchdog <pid>`)
+exit, pause, turning tiling off and on panic. A watchdog process (`Tile.exe --watchdog <pid>`)
 undoes them if Tile is killed, and the next start cleans up anything left over. Closing the
 terminal Tile was started from can kill the watchdog too, so Tile cleans up itself when that
 console closes.

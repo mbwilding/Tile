@@ -196,9 +196,9 @@ mod tests {
     #[test]
     fn spots_tiles_own_helper() {
         assert!(is_tile_helper(
-            r#""C:\Program Files\Tile\tile.exe" --launcher"#
+            r#""C:\Program Files\Tile\Tile.exe" --launcher"#
         ));
-        assert!(!is_tile_helper(r"C:\Program Files\Tile\tile.exe"));
+        assert!(!is_tile_helper(r"C:\Program Files\Tile\Tile.exe"));
         assert!(!is_tile_helper(r"C:\other\app.exe --launcher"));
     }
 }

@@ -14,7 +14,7 @@ Aliases in `.cargo/config.toml`:
 
 | Alias | Runs | Does |
 | --- | --- | --- |
-| `cargo release` | `cargo build --release --workspace` | builds `tile.exe` in release |
+| `cargo release` | `cargo build --release --workspace` | builds `Tile.exe` in release |
 | `cargo deploy` | `cargo run --release -p tile -- install` | installs the build from `cargo release` |
 | `cargo deploy-dev` | `cargo run -p tile -- install` | installs the debug build from `cargo build --workspace` |
 
@@ -31,7 +31,7 @@ Aliases in `.cargo/config.toml`:
 | `tile-input` | The low-level keyboard and mouse hooks, `SendInput` and hiding the pointer |
 | `tile-shell` | What Explorer provides, for shell mode: the notification area host (`Shell_TrayWnd`), the black backdrop, shell icons and the Store app frames |
 | `tile-sys` | Volume, battery, network, Wi-Fi and Bluetooth, the single-instance mutex, the console and window messages |
-| `tile` | The program (`tile.exe`): the daemon, the command line and install/uninstall |
+| `tile` | The program (`Tile.exe`): the daemon, the command line and install/uninstall |
 
 The crates layer upward: `tile-core`, `tile-remap` and `tile-config` know nothing of Windows;
 `tile-input`, `tile-shell` and `tile-sys` are the raw Win32 calls; `tile-platform` and
@@ -59,7 +59,7 @@ Every pull request runs the `CI` workflow: `yamllint --strict .` (rules in `.yam
 ## Releasing
 
 Every push to `main` that changes more than docs and examples runs the `Release` workflow, which tests, builds
-and publishes a GitHub release holding `tile.exe`. No
+and publishes a GitHub release holding `Tile.exe`. No
 tag is pushed: the version is the major and minor from `Cargo.toml`, with the workflow run number
 as the patch (`0.1.7`), and the release creates its own tag. To release by hand, run it from the
 Actions tab or with `gh workflow run release.yml`. Bump the major or minor in `Cargo.toml` for a

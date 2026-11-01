@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "Tile"
+path = "src/main.rs"
+
 [dependencies]
 tile-config.workspace = true
 tile-core.workspace = true

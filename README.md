@@ -36,7 +36,7 @@ menu is suppressed), so no separate hotkey program is needed.
 ## Quickstart
 
 ```powershell
-cargo release   # build tile.exe
+cargo release   # build Tile.exe
 cargo deploy    # install and start Tile (one UAC prompt)
 ```
 
@@ -58,10 +58,10 @@ All the keys are in [Keybinds](docs/keybinds.md).
 `tile install` sets Tile up to run as administrator, so it can manage admin windows too,
 without a UAC prompt at sign-in:
 
-- It copies `tile.exe` to `C:\Program Files\Tile`, where only admins can change them.
+- It copies `Tile.exe` to `C:\Program Files\Tile`, where only admins can change them.
 - A scheduled task starts Tile elevated when you sign in. It runs on battery, is never stopped
   for running too long and runs at normal priority.
-- A launcher (`tile.exe --launcher`) starts with your normal rights from your `Run` key. Programs
+- A launcher (`Tile.exe --launcher`) starts with your normal rights from your `Run` key. Programs
   Tile starts, from `exec` binds or the tray, go through it, so they don't run as
   administrator.
 - `C:\Program Files\Tile` goes on your user `PATH`, for `tile` in terminals started after your
@@ -81,8 +81,8 @@ features, where Uninstall runs `tile uninstall`. It is built from `installer/til
 To try a build without installing:
 
 ```powershell
-cargo run --release                  # runs tile.exe
-.\target\release\tile.exe -c my.yml  # with another config file
+cargo run --release                  # runs Tile.exe
+.\target\release\Tile.exe -c my.yml  # with another config file
 ```
 
 Only one Tile runs at a time. Run from a terminal, Tile stays in the foreground: stop it with

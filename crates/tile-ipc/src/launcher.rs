@@ -1,4 +1,4 @@
-//! The launcher: `tile.exe --launcher`, running as the normal user, starts programs for an
+//! The launcher: `Tile.exe --launcher`, running as the normal user, starts programs for an
 //! elevated Tile so they don't inherit its admin rights. Each connection carries one JSON
 //! [`LaunchRequest`] line over `\\.\pipe\tile-launcher.sock`.
 

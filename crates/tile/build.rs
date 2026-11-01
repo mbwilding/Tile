@@ -20,7 +20,7 @@ fn main() {
         println!("cargo:rustc-link-arg-bins={}", res.display());
         // Beside the built exe, for the installer to use as its own icon.
         if let Some(profile) = out.ancestors().nth(3) {
-            std::fs::write(profile.join("tile.ico"), icon_file())
+            std::fs::write(profile.join("Tile.ico"), icon_file())
                 .expect("unable to write the icon file");
         }
     }

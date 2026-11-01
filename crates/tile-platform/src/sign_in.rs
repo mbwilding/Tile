@@ -22,12 +22,12 @@ const SAVED_VALUE: &str = "ShellPreviousSeparateProcess";
 /// Stands in for "the value didn't exist".
 const ABSENT: u32 = u32::MAX;
 
-/// The installed `tile.exe`, where the shell has to live.
+/// The installed `Tile.exe`, where the shell has to live.
 pub fn installed_exe() -> PathBuf {
     std::env::var_os("ProgramFiles")
         .map_or_else(|| PathBuf::from(r"C:\Program Files"), PathBuf::from)
         .join("Tile")
-        .join("tile.exe")
+        .join("Tile.exe")
 }
 
 /// Windows' console host, which can run a console program with no window at all.
@@ -138,14 +138,14 @@ mod tests {
 
     #[test]
     fn headless_commands_run_the_program_through_conhost() {
-        let exe = Path::new(r"C:\Program Files\Tile\tile.exe");
+        let exe = Path::new(r"C:\Program Files\Tile\Tile.exe");
         let command = headless_command(exe, "--launcher");
         assert!(command.starts_with('"'));
         assert!(
             command
-                .contains(r#"conhost.exe" --headless "C:\Program Files\Tile\tile.exe" --launcher"#)
+                .contains(r#"conhost.exe" --headless "C:\Program Files\Tile\Tile.exe" --launcher"#)
         );
-        assert!(headless_command(exe, "").ends_with(r#"tile.exe""#));
+        assert!(headless_command(exe, "").ends_with(r#"Tile.exe""#));
     }
 
     #[test]
