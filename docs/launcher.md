@@ -130,6 +130,10 @@ Explorer owns the tray and there are none to show.
 - **Click** it as you would on a taskbar. The launcher closes and the app opens or focuses.
 - **Right click** it for the app's own menu. The launcher stays open behind the menu and comes
   back to the front when the menu closes, unless your choice brought another window forward.
+  Tile notices the menu by its window, Windows' own or one an app draws itself, not by what it
+  looks like; if none shows up within a couple of seconds it gives up quietly, leaving the
+  launcher and the menu (if one is open after all) alone, rather than guessing and closing one
+  of them.
 
 Tray icons are tiny, usually 16 or 32 pixels. One at least as big as the size shown is shrunk
 with a smoothing filter. A smaller one gives way to the icon of the app's program, which Windows
