@@ -62,6 +62,19 @@ impl Daemon {
         self.drag = None;
     }
 
+    /// Switches Click to Do off if `general.disable_click_to_do` asks for it. It stays off after
+    /// Tile exits: Windows pops up a notice on every flip.
+    pub(super) fn switch_off_click_to_do(&self) {
+        if self.tiling
+            && self.loaded.config.general.disable_click_to_do
+            && tile_platform::click_to_do_available()
+            && !tile_platform::click_to_do_disabled()
+            && tile_platform::disable_click_to_do()
+        {
+            tracing::info!("switched off Click to Do");
+        }
+    }
+
     /// Starts, updates or stops the key remapper to match `general.remap`.
     pub(super) fn update_remap(&mut self) {
         if !self.loaded.config.general.remap {
