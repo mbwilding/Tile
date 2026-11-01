@@ -15,6 +15,7 @@ mod monitors;
 mod mover;
 mod sign_in;
 mod startup;
+mod tile_icon;
 mod token;
 mod tray;
 mod windows;

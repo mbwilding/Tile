@@ -21,13 +21,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: cargo build --release -p tile
-      - name: Package
+      - name: Version
         run: |
           $m = (Select-String -Path Cargo.toml -Pattern '^version = "(\d+)\.(\d+)\.\d+"').Matches[0]
           "VERSION=$($m.Groups[1]).$($m.Groups[2]).${{ github.run_number }}" >> $env:GITHUB_ENV
-          Copy-Item target/release/tile.exe .
-          Compress-Archive -Path tile.exe -DestinationPath tile.zip
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create $env:VERSION tile.zip --target ${{ github.sha }} --title $env:VERSION --generate-notes
+        run: gh release create $env:VERSION target/release/tile.exe --target ${{ github.sha }} --title $env:VERSION --generate-notes

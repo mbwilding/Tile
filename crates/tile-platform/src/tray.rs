@@ -8,6 +8,7 @@ use std::{
     thread,
 };
 
+use crate::tile_icon;
 use tokio::sync::mpsc;
 use tray_icon::{
     Icon, TrayIcon, TrayIconBuilder,
@@ -69,27 +70,9 @@ fn truncate(text: &str, max: usize) -> String {
     cut
 }
 
-/// A 32x32 icon: four rounded tiles, the top left one in the accent colour, or red while the
-/// config has errors.
+/// The 32x32 tray icon, red while the config has errors.
 fn icon(error: bool) -> Option<Icon> {
-    const SIZE: u32 = 32;
-    let mut rgba = Vec::with_capacity((SIZE * SIZE * 4) as usize);
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            let in_tile = |v: u32| (2..15).contains(&v) || (17..30).contains(&v);
-            let corner = |v: u32| matches!(v, 2 | 14 | 17 | 29);
-            let filled = in_tile(x) && in_tile(y) && !(corner(x) && corner(y));
-            let primary = x < 16 && y < 16;
-            let pixel = match (filled, primary) {
-                (false, _) => [0, 0, 0, 0],
-                (true, true) if error => [0xf3, 0x8b, 0xa8, 0xff],
-                (true, true) => [0x89, 0xb4, 0xfa, 0xff],
-                (true, false) => [0xcd, 0xd6, 0xf4, 0xff],
-            };
-            rgba.extend_from_slice(&pixel);
-        }
-    }
-    Icon::from_rgba(rgba, SIZE, SIZE).ok()
+    Icon::from_rgba(tile_icon::rgba(32, error), 32, 32).ok()
 }
 
 struct Items {

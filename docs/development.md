@@ -59,7 +59,7 @@ Every pull request runs the `CI` workflow: `yamllint --strict .` (rules in `.yam
 ## Releasing
 
 Every push to `main` that changes more than docs and examples runs the `Release` workflow, which tests, builds
-and publishes a GitHub release holding `tile.zip`, which has `tile.exe`. No
+and publishes a GitHub release holding `tile.exe`. No
 tag is pushed: the version is the major and minor from `Cargo.toml`, with the workflow run number
 as the patch (`0.1.7`), and the release creates its own tag. To release by hand, run it from the
 Actions tab or with `gh workflow run release.yml`. Bump the major or minor in `Cargo.toml` for a
