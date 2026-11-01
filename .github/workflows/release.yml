@@ -27,9 +27,13 @@ jobs:
           "VERSION=$v" >> $env:GITHUB_ENV
           "TILE_VERSION=$v" >> $env:GITHUB_ENV
       - run: cargo build --release -p tile
+      - name: Installer
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" installer/tile.iss
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
-          gh release create $env:VERSION target/release/tile.exe
+          gh release create $env:VERSION target/release/tile.exe target/installer/Tile-Setup.exe
           --target ${{ github.sha }} --title $env:VERSION --generate-notes
