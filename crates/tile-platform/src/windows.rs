@@ -584,3 +584,38 @@ pub fn mouse_button_down() -> bool {
     .into_iter()
     .any(w::GetAsyncKeyState)
 }
+
+#[cfg(test)]
+mod tests {
+    use winsafe::prelude::{shell_IEnumShellItems as _, shell_IShellItem as _};
+
+    use super::*;
+
+    #[test]
+    fn an_unknown_app_has_no_target_file() {
+        let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
+        assert_eq!(
+            apps_folder_target(r"shell:AppsFolder\Tile.NoSuchApp!App"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_desktop_app_resolves_to_a_real_file() {
+        let _com = w::CoInitializeEx(co::COINIT::APARTMENTTHREADED | co::COINIT::DISABLE_OLE1DDE);
+        let folder: w::IShellItem =
+            w::SHCreateItemFromParsingName("shell:AppsFolder", None::<&w::IBindCtx>).unwrap();
+        let items: w::IEnumShellItems = folder
+            .BindToHandler(None::<&w::IBindCtx>, &co::BHID::EnumItems)
+            .unwrap();
+        let resolved = items
+            .iter()
+            .flatten()
+            .filter_map(|item| item.GetDisplayName(co::SIGDN::PARENTRELATIVEPARSING).ok())
+            .filter_map(|id| apps_folder_target(&format!(r"shell:AppsFolder\{id}")))
+            .next();
+        if let Some(path) = resolved {
+            assert!(std::path::Path::new(&path).is_file());
+        }
+    }
+}

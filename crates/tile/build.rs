@@ -61,8 +61,8 @@ fn dib(size: u32) -> Vec<u8> {
 
     let rgba = tile_icon::rgba(size, false);
     for row in rgba.chunks_exact(size as usize * 4).rev() {
-        for px in row.chunks_exact(4) {
-            out.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        for &[r, g, b, a] in row.as_chunks::<4>().0 {
+            out.extend_from_slice(&[b, g, r, a]);
         }
     }
     let mask_row = size.div_ceil(32) * 4;

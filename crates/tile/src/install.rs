@@ -550,4 +550,83 @@ mod tests {
         );
         assert_eq!(edit_path(r"C:\tools", DIR, false), None);
     }
+
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("tile-install-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn copies_the_program_and_moves_the_old_one_aside() {
+        let root = scratch("copy");
+        let (source, dir) = (root.join("build"), root.join("Tile"));
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join(EXE), "new").unwrap();
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(EXE), "old").unwrap();
+        fs::write(dir.join("stale.old"), "older").unwrap();
+
+        copy_programs(&source, &dir).unwrap();
+
+        assert_eq!(fs::read_to_string(dir.join(EXE)).unwrap(), "new");
+        assert!(!dir.join("stale.old").exists());
+        let aside: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "old"))
+            .collect();
+        assert_eq!(aside.len(), 1);
+        assert_eq!(fs::read_to_string(aside[0].path()).unwrap(), "old");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copying_creates_the_folder() {
+        let root = scratch("create");
+        fs::write(root.join(EXE), "new").unwrap();
+        let dir = root.join("nested").join("Tile");
+        copy_programs(&root, &dir).unwrap();
+        assert!(dir.join(EXE).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copying_without_a_build_fails() {
+        let root = scratch("missing");
+        assert!(copy_programs(&root.join("none"), &root.join("Tile")).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn removes_the_install_folder_and_tolerates_a_missing_one() {
+        let root = scratch("remove");
+        let dir = root.join("Tile");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(EXE), "x").unwrap();
+        remove_programs(&dir).unwrap();
+        assert!(!dir.exists());
+        remove_programs(&dir).unwrap();
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn waits_until_the_program_stops() {
+        static CHECKS: AtomicU32 = AtomicU32::new(0);
+        async fn running() -> bool {
+            CHECKS.fetch_add(1, Ordering::SeqCst) < 2
+        }
+        wait_until_stopped(running, "Tile").await.unwrap();
+        assert_eq!(CHECKS.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn the_folders_follow_the_install_dir() {
+        assert!(install_dir().ends_with("Tile"));
+        assert!(key_install_dir().ends_with("Key"));
+        assert!(old_install_dir().ends_with("Programs/Tile"));
+    }
 }
