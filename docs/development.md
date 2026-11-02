@@ -8,7 +8,7 @@ cargo fmt --all
 ```
 
 `cargo run` starts the daemon (the default member); pass `--workspace` to build or test
-everything. See the README for running a build without installing it.
+everything. [Running a build](#running-a-build) covers trying one without installing it.
 
 Aliases in `.cargo/config.toml`:
 
@@ -22,6 +22,20 @@ Aliases in `.cargo/config.toml`:
 testing [notification popups](windows-integration.md#notifications), including their icon). Run
 it with Windows PowerShell (`powershell`), not PowerShell 7, which can't load the WinRT types it
 needs.
+
+## Running a build
+
+```powershell
+cargo release                        # builds Tile.exe in release
+cargo deploy                         # installs and starts it (one UAC prompt)
+cargo run --release                  # runs it without installing
+.	argetelease\Tile.exe -c my.yml  # runs it with another config file
+```
+
+To update an install from a checkout, run `cargo release` and `cargo deploy` again, or
+`tile install` from the checkout: the installed `tile` installs the build in `.	argetelease`.
+Releases also carry `Tile-Setup-<version>.exe`, built from `installer/tile.iss` (Inno Setup),
+which runs `tile install` and adds Tile to Apps & features, where Uninstall runs `tile uninstall`.
 
 ## Project layout
 
