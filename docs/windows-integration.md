@@ -133,6 +133,21 @@ hidden at startup on its own thread, like the launcher. It is a tool window that
 activated and lets clicks through (`WS_EX_NOACTIVATE`, `WS_EX_TRANSPARENT`), so it never steals
 focus, and Tile never tiles it. It fades by stepping the window's layered alpha on a timer.
 
+## Window borders
+
+Windows 11 draws a one pixel border that Tile colours with `DWMWA_BORDER_COLOR`; it can't be
+made thicker. With `general.border_width` above 1, Tile also draws a ring outside each tiled
+window, on a layered popup of its own (made on a thread of its own, like the indicator) that
+can't be activated and lets clicks through. The ring is per-pixel alpha, so its outer and inner
+edges are smooth, and its inner corners follow Windows 11's window corner radius. The ring thread reads each
+window's position straight from Windows, once per compositor frame while anything is moving, so
+a ring moves with its window while it animates or you drag it, whatever the daemon is doing.
+Once nothing has moved for about half a second it only looks 25 times a second, and it redraws
+or moves a ring only when its window actually changed, so a still desktop costs next to nothing. The ring sits
+directly above its window in the stacking order, not topmost, so anything over the window is over
+its ring too. It still needs a gap at least as wide beside the window, or it covers a neighbour's
+edge.
+
 ## Notifications
 
 A popup, top-right by default, shows for each new Windows toast notification while Tile hosts the

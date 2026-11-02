@@ -45,6 +45,18 @@ impl Node {
         }
     }
 
+    fn set_ratios(&mut self, to: f32) {
+        if let Self::Split {
+            ratio, children, ..
+        } = self
+        {
+            *ratio = clamp_ratio(to);
+            let [a, b] = children.as_mut();
+            a.set_ratios(to);
+            b.set_ratios(to);
+        }
+    }
+
     fn for_each_leaf_mut(&mut self, f: &mut impl FnMut(&mut WindowId)) {
         match self {
             Self::Leaf(id) => f(id),
@@ -169,6 +181,13 @@ impl Node {
 }
 
 impl Dwindle {
+    /// Gives every split the same ratio.
+    pub fn set_ratios(&mut self, ratio: f32) {
+        if let Some(root) = &mut self.root {
+            root.set_ratios(ratio);
+        }
+    }
+
     /// Flips the direction of the split `id` is part of. `area` is the tiling area.
     pub fn toggle_split(&mut self, id: WindowId, area: Rect, s: &LayoutSettings) {
         if let Some(root) = &mut self.root {

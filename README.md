@@ -30,8 +30,6 @@ keep their order when you do.
 | --- | --- |
 | ![Dwindle](docs/images/dwindle.png) | ![Master and stack](docs/images/master.png) |
 | **Dwindle**: every new window splits the focused one | **Master/stack**: one big window, the rest stacked beside it |
-| ![Scrolling](docs/images/scrolling.png) | ![Even](docs/images/even.png) |
-| **Scrolling**: an endless strip of columns that follows your focus | **Even**: equal shares for every window |
 
 ### Built for big and odd-shaped screens
 
@@ -77,9 +75,7 @@ or a hard kill.
 
 ## Features
 
-- Five layouts, chosen per workspace: **dwindle**, **master/stack**, **monocle**,
-  **scrolling** (an endless strip of columns) and **even** (equal shares, used automatically on
-  portrait monitors)
+- Four layouts, chosen per workspace: **dwindle**, **master/stack**, **monocle**, and **even** (equal shares, used automatically on portrait monitors)
 - Numbered workspaces, independent per monitor (or synced, if you prefer); floating and fullscreen windows
 - Native virtual desktops (Windows 11 24H2+): every desktop has its own workspaces and layouts
 - Mouse: hold `Win` and drag a window; drag a tile onto another to swap them, or its edge to
@@ -90,7 +86,7 @@ or a hard kill.
   lines and Tile dispatchers, and finds volume, Wi-Fi, Bluetooth, power and tray icon items
 - Optional [shell mode](docs/shell.md): run Tile instead of Explorer's taskbar, with tray icons
   and system items in the launcher
-- A workspace indicator that flashes the workspace number when you switch
+- A workspace indicator that flashes the workspace number or layout name when you switch
 - Coloured focus borders (Windows 11) and eased move/resize animations
 - Optional title bar removal for tiled windows, with per-app overrides
 - Key remapping: layers, modifier layers, `overload()`, `overloadt()` and key sequences
@@ -163,7 +159,7 @@ config to copy and paste, and [`examples/`](examples) has complete configs to st
 | --- | --- |
 | [Configuration](docs/configuration.md) | Every setting, and the default config to copy |
 | [Keybinds](docs/keybinds.md) | Default keys, key names, every dispatcher |
-| [Layouts](docs/layouts.md) | The five layouts, portrait and multi-monitor behaviour |
+| [Layouts](docs/layouts.md) | The four layouts, portrait and multi-monitor behaviour |
 | [Window rules](docs/window-rules.md) | Float, ignore or place windows by program, class or title |
 | [Key remapping](docs/key-remapping.md) | Remap layers, overloads and their limits |
 | [Launcher](docs/launcher.md) | The app launcher: searching, keys, launch history |

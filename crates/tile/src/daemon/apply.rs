@@ -3,7 +3,7 @@
 use std::{collections::HashSet, time::Duration};
 use tile_core::{Effect, Rect, WindowId};
 use tile_ipc::{Event, Response};
-use tile_platform::{Animation, Mover, PlaceError, focus_desktop, foreground};
+use tile_platform::{Animation, Mover, PlaceError, Ring, focus_desktop, foreground};
 use tokio::time::Instant;
 
 use super::{ActiveWindow, Daemon, HEAL_DELAY, Published, tracked::Tween};
@@ -68,6 +68,7 @@ impl Daemon {
         }
         self.update_decorations();
         self.update_borders();
+        self.sync_rings();
         self.persist_restore();
         self.publish();
         // Keep our notion of focus (and the highlight) truthful when Windows said no.
@@ -191,6 +192,7 @@ impl Daemon {
         if !self.tiling {
             return;
         }
+        self.sync_rings();
         let dead: Vec<_> = self
             .desktops
             .managed()
@@ -227,12 +229,47 @@ impl Daemon {
                 .set_border(new, Some(self.loaded.config.border_active()));
         }
         self.bordered = focused;
+        self.sync_rings();
         self.heal_at = Some(Instant::now() + HEAL_DELAY);
+    }
+
+    /// Draws the border rings round the tiled windows on show, or clears them when the border is
+    /// Windows' own one pixel one. The first pixel is Windows' own, so a ring is one less wide.
+    pub(super) fn sync_rings(&mut self) {
+        let config = &self.loaded.config;
+        let width = config.general.border_width.saturating_sub(1);
+        if !config.general.borders || width == 0 || !self.tiling {
+            self.rings.set(Vec::new());
+            return;
+        }
+        let focused = self.desktops.current_ref().focused();
+        let rings = self
+            .desktops
+            .managed()
+            .into_iter()
+            .filter(|id| self.desktops.is_current(*id) && !self.desktops.is_hidden(*id))
+            .filter_map(|id| {
+                let frame = self.windows.frame_rect(id)?;
+                let color = if Some(id) == focused {
+                    config.border_active()
+                } else {
+                    config.border_inactive()
+                };
+                Some(Ring {
+                    key: id.0,
+                    frame,
+                    color,
+                    width,
+                })
+            })
+            .collect();
+        self.rings.set(rings);
     }
 
     /// Re-applies border colors that apps overwrote (Chromium/Electron repaint their frame
     /// on activation and theme changes).
     pub(super) fn heal_borders(&mut self) {
+        self.sync_rings();
         let general = &self.loaded.config.general;
         if !general.borders {
             return;

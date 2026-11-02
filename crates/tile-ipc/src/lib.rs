@@ -309,7 +309,7 @@ mod tests {
                 exe: None,
             },
             Event::Layout {
-                layout: LayoutKind::Scrolling,
+                layout: LayoutKind::Monocle,
             },
         ];
         for event in events {

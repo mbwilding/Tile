@@ -595,7 +595,7 @@ fn run(
                 dc.SetBkMode(co::BKMODE::TRANSPARENT)?;
                 let style = s.settings.style.clone();
                 let show_app_name = s.config().show_app_name;
-                let border_width = s.scale(s.config().border_width);
+                let border_width = s.scale(s.settings.style.border_width);
                 let radius = s.scale(12);
                 let padding = s.scale(16);
                 let line = s.line_h();
@@ -813,6 +813,7 @@ mod tests {
                     foreground: Color::rgb(0, 0, 0),
                     dimmed: Color::rgb(0, 0, 0),
                     border: Color::rgb(0, 0, 0),
+                    border_width: 1,
                 },
             },
             queue: VecDeque::new(),

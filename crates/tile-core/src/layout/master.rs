@@ -10,7 +10,7 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Master {
     windows: WindowList,
-    mfact: f32,
+    ratio: f32,
     /// How tall each window is next to the others of its column; 1.0 where unset.
     weights: HashMap<WindowId, f32>,
 }
@@ -19,13 +19,18 @@ pub struct Master {
 const MIN_WEIGHT: f32 = 0.1;
 
 impl Master {
-    /// An empty layout with the master column at `s.master_mfact`.
+    /// An empty layout with the master column at `s.master_ratio`.
     pub fn new(s: &LayoutSettings) -> Self {
         Self {
             windows: WindowList::default(),
-            mfact: s.master_mfact,
+            ratio: s.master_ratio,
             weights: HashMap::new(),
         }
+    }
+
+    /// Sets the master column's share of the width.
+    pub fn set_ratio(&mut self, ratio: f32) {
+        self.ratio = clamp_ratio(ratio);
     }
 
     /// Swaps `id` with the first master, or a master with the first stacked window.
@@ -91,7 +96,7 @@ impl Layout for Master {
         if windows.len() <= s.master_count {
             return self.column(area, windows, s.gaps_in);
         }
-        let (master_area, stack_area) = area.split(Axis::Horizontal, self.mfact, s.gaps_in);
+        let (master_area, stack_area) = area.split(Axis::Horizontal, self.ratio, s.gaps_in);
         let (masters, stack) = windows.split_at(s.master_count);
         let mut tiles = self.column(master_area, masters, s.gaps_in);
         tiles.extend(self.column(stack_area, stack, s.gaps_in));
@@ -112,7 +117,7 @@ impl Layout for Master {
         } else {
             -change
         };
-        self.mfact = clamp_ratio(self.mfact + signed);
+        self.ratio = clamp_ratio(self.ratio + signed);
 
         let windows = &self.windows.0;
         let column = if windows.len() <= s.master_count || pos < s.master_count {
@@ -137,7 +142,7 @@ mod tests {
         let s = LayoutSettings {
             gaps_in: 0,
             gaps_out: 0,
-            master_mfact: 0.5,
+            master_ratio: 0.5,
             ..LayoutSettings::default()
         };
         let area = Rect::new(0, 0, 1000, 900);

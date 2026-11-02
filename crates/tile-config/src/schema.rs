@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
-use tile_core::{LayoutKind, LayoutSettings, animation::Bezier, layout::CenterMode};
+use tile_core::{LayoutKind, LayoutSettings, animation::Bezier};
 
 /// The whole config file. Missing sections fall back to the shipped defaults.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,8 +23,6 @@ pub struct Config {
     pub dwindle: Dwindle,
     /// `master:`, the master layout.
     pub master: Master,
-    /// `scrolling:`, the scrolling layout.
-    pub scrolling: Scrolling,
     /// `remap:`, the key remapper's layers.
     pub remap: Remap,
     /// `launcher:`, the app launcher.
@@ -84,11 +82,6 @@ const DEFAULT_BINDS: &[(&str, &str)] = &[
     ("super+period", "focusmonitor r"),
     ("super+s", "togglesplit"),
     ("super+r", "launcher"),
-    ("super+ctrl+r", "cycleproportion"),
-    ("super+c", "centercolumn"),
-    ("super+bracketleft", "consumewindow l"),
-    ("super+bracketright", "consumewindow r"),
-    ("super+backslash", "expelwindow"),
     ("super+shift+r", "reload"),
     ("super+shift+p", "togglepause"),
     ("super+shift+e", "exit"),
@@ -143,7 +136,6 @@ impl Default for Config {
             animations: Animations::default(),
             dwindle: Dwindle::default(),
             master: Master::default(),
-            scrolling: Scrolling::default(),
             remap: Remap::default(),
             launcher: Launcher::default(),
             workspace_indicator: WorkspaceIndicator::default(),
@@ -161,12 +153,9 @@ impl Config {
             gaps_in: self.general.gaps_in,
             gaps_out: self.general.gaps_out,
             dwindle_split_ratio: self.dwindle.split_ratio,
-            master_mfact: self.master.mfact,
+            master_ratio: self.master.ratio,
             master_count: self.master.count,
             master_new_is_master: self.master.new_is_master,
-            scrolling_proportion: self.scrolling.proportion,
-            scrolling_presets: self.scrolling.proportion_presets.clone(),
-            scrolling_center: self.scrolling.center_focused,
             independent_workspaces: self.general.independent_workspaces,
         }
         .clamped()
@@ -219,6 +208,7 @@ impl Config {
             foreground: theme.foreground,
             dimmed: theme.dimmed,
             border: n.border.unwrap_or(theme.accent),
+            border_width: n.border_width.unwrap_or(self.general.border_width),
         }
     }
 }
@@ -406,6 +396,8 @@ pub struct NotificationStyle {
     pub dimmed: Color,
     /// The card's outline.
     pub border: Color,
+    /// The outline's thickness in pixels at 100% scaling.
+    pub border_width: u32,
 }
 
 /// The window manager's main switches.
@@ -429,6 +421,9 @@ pub struct General {
     pub layout: LayoutKind,
     /// Draw a coloured border around tiled windows (Windows 11).
     pub borders: bool,
+    /// How thick the border is, in pixels at 100% scaling. 1 is Windows' own border; more is
+    /// drawn by Tile as a smooth ring outside the window.
+    pub border_width: u32,
     /// Unset follows `theme.accent`.
     pub border_active: Option<Color>,
     /// Unset follows `theme.inactive`.
@@ -459,6 +454,7 @@ impl Default for General {
             independent_workspaces: true,
             layout: LayoutKind::Master,
             borders: true,
+            border_width: 3,
             border_active: None,
             border_inactive: None,
             focus_new_windows: true,
@@ -561,7 +557,7 @@ impl Default for Dwindle {
 #[serde(default, deny_unknown_fields)]
 pub struct Master {
     /// The master column's share of the width, from 0.1 to 0.9.
-    pub mfact: f32,
+    pub ratio: f32,
     /// How many windows share the master column, at least 1.
     pub count: usize,
     /// New windows become the master instead of joining the stack.
@@ -571,31 +567,9 @@ pub struct Master {
 impl Default for Master {
     fn default() -> Self {
         Self {
-            mfact: LayoutSettings::DEFAULT_MFACT,
+            ratio: LayoutSettings::DEFAULT_MASTER_RATIO,
             count: LayoutSettings::DEFAULT_MASTER_COUNT,
             new_is_master: false,
-        }
-    }
-}
-
-/// The scrolling layout.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Scrolling {
-    /// A new column's share of the width, from 0.1 to 1.0.
-    pub proportion: f32,
-    /// The column widths `cycleproportion` steps through.
-    pub proportion_presets: Vec<f32>,
-    /// When the focused column is centred.
-    pub center_focused: CenterMode,
-}
-
-impl Default for Scrolling {
-    fn default() -> Self {
-        Self {
-            proportion: LayoutSettings::DEFAULT_PROPORTION,
-            proportion_presets: LayoutSettings::DEFAULT_PROPORTION_PRESETS.to_vec(),
-            center_focused: CenterMode::OnOverflow,
         }
     }
 }
@@ -850,8 +824,9 @@ pub struct Notifications {
     pub show_app_name: bool,
     /// Unset follows `theme.accent`.
     pub border: Option<Color>,
-    /// The border's thickness in pixels at 100% scaling. 0 draws no border.
-    pub border_width: u32,
+    /// The border's thickness in pixels at 100% scaling. 0 draws no border. Unset follows
+    /// `general.border_width`.
+    pub border_width: Option<u32>,
     /// Mutes, or changes the duration of, notifications from apps whose name matches.
     pub filter: Vec<NotificationFilter>,
 }
@@ -868,7 +843,7 @@ impl Default for Notifications {
             max_visible: 3,
             show_app_name: true,
             border: None,
-            border_width: 1,
+            border_width: None,
             filter: Vec::new(),
         }
     }
@@ -1011,19 +986,12 @@ mod tests {
     fn layout_settings_clamp_out_of_range_values() {
         let mut config = Config::default();
         config.dwindle.split_ratio = 5.0;
-        config.master.mfact = -1.0;
+        config.master.ratio = -1.0;
         config.master.count = 0;
-        config.scrolling.proportion = 0.0;
-        config.scrolling.proportion_presets = vec![2.0];
         let settings = config.layout_settings();
         assert_eq!(settings.dwindle_split_ratio, LayoutSettings::MAX_RATIO);
-        assert_eq!(settings.master_mfact, LayoutSettings::MIN_RATIO);
+        assert_eq!(settings.master_ratio, LayoutSettings::MIN_RATIO);
         assert_eq!(settings.master_count, LayoutSettings::MIN_MASTER_COUNT);
-        assert_eq!(
-            settings.scrolling_proportion,
-            LayoutSettings::MIN_PROPORTION
-        );
-        assert_eq!(settings.scrolling_presets, [LayoutSettings::MAX_PROPORTION]);
     }
 
     #[test]

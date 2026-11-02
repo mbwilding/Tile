@@ -58,6 +58,11 @@ impl Indicator {
         self.send(Request::Show(workspace.to_string(), area));
     }
 
+    /// As [`show`](Self::show), with any `text` (the layout's name, say) in place of the number.
+    pub fn show_text(&self, text: &str, area: Rect) {
+        self.send(Request::Show(text.to_owned(), area));
+    }
+
     /// Applies new settings, hiding the indicator until it is next shown.
     pub fn set_settings(&self, settings: IndicatorSettings) {
         self.send(Request::Settings(Box::new(settings)));

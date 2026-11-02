@@ -3,6 +3,7 @@
 //! low-level keyboard hooks, `uiautomation` for closing windows and `tray-icon` for the tray.
 
 mod backdrop;
+mod borders;
 mod click_to_do;
 pub mod desktops;
 mod drag;
@@ -27,6 +28,7 @@ mod tray;
 mod windows;
 
 pub use backdrop::Backdrop;
+pub use borders::{Borders, Ring};
 pub use click_to_do::{click_to_do_available, click_to_do_disabled, disable_click_to_do};
 pub use drag::{DragEvent, WinDrag};
 pub use events::{WinEvent, WinEventHooks};

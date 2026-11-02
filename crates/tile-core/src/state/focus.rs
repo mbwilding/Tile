@@ -116,10 +116,17 @@ impl State {
             Direction::Down => Rect::new(from.x, area.y - 1, from.w, 1),
             Direction::Up => Rect::new(from.x, area.bottom(), from.w, 1),
         };
-        nearest_in_direction(
+        let best = nearest_in_direction(
             &probe,
             dir,
             tiles.iter().filter(|t| t.visible).map(|t| (t.id, t.rect)),
+        )?;
+        // Windows sharing a spot (monocle) tie: enter on the one that had focus, not the first.
+        let rect_of = |id: WindowId| tiles.iter().find(|t| t.id == id).map(|t| t.rect);
+        Some(
+            focus
+                .filter(|f| rect_of(*f).is_some() && rect_of(*f) == rect_of(best))
+                .unwrap_or(best),
         )
     }
 

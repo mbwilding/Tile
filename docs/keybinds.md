@@ -30,8 +30,6 @@ binds, so they see keys as remapped: a home-row `Win` works for `Win+` binds.
 | `Win+,` / `Win+.` | focus monitor left / right |
 | `Win+S` | flip the dwindle split |
 | `Win+R` | open the [app launcher](launcher.md) |
-| `Win+Ctrl+R` / `Win+C` | scrolling: next column width / centre column |
-| `Win+[` / `Win+]` / `Win+\` | scrolling: merge into left / right column, split out |
 | `Win+Ctrl+Shift+Left/Right` | move window to previous / next virtual desktop |
 | `Win+Ctrl+P` | show window on all desktops (it floats) |
 | `Win+Shift+R` / `Win+Shift+P` / `Win+Shift+E` | reload config / pause (or resume) tiling and remapping / exit |
@@ -90,15 +88,10 @@ A `binds` value is `<dispatcher> [arguments]`. `tile dispatch` runs the same one
 | `movetoworkspace <n>` | move the window to workspace `n` and follow it |
 | `movetoworkspacesilent <n>` | move the window to workspace `n` and stay |
 | `focusmonitor <l\|r\|u\|d>` | focus the next monitor that way |
-| `layout <name>` / `cyclelayout` | set / step through the workspace's layout |
-| `resetlayout` | rebuild the workspace's layout as new, keeping the window order: undoes resizing and flipped splits, and in the scrolling layout gives each window its own column again |
+| `layout <name>` / `cyclelayout` | set / step through the workspace's layout; the [workspace indicator](configuration.md#workspace_indicator) flashes its name |
+| `resetlayout` | rebuild the workspace's layout as new, keeping the window order: undoes resizing and flipped splits |
 | `swapwithmaster` | master / dwindle: swap the window with the main one (or the main one with the next) |
 | `togglesplit` | dwindle: flip the direction of the window's split |
-| `scroller_proportion <0.05-1.0>` | scrolling: set the column's width |
-| `cycleproportion` | scrolling: next width from `proportion_presets` |
-| `consumewindow <l\|r>` | scrolling: move the window into the column that way |
-| `expelwindow` | scrolling: move the window into a column of its own |
-| `centercolumn` | scrolling: centre the focused column |
 | `desktop <n\|next\|prev>` | switch virtual desktop (past the last one creates one) |
 | `movetodesktop <n\|next\|prev>` | send the window to another virtual desktop |
 | `pin` | show the window on all virtual desktops (it floats) |

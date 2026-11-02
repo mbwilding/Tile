@@ -98,7 +98,7 @@ Common long names and plurals work too (`kilometres`, `feet`, `celsius`).
 There is no prefix: commands are results like any other, after the apps and system items. What
 you type can match:
 
-- **A Tile dispatcher**, as in a bind: `workspace 3`, `layout scrolling`, `reload`. Typing part
+- **A Tile dispatcher**, as in a bind: `workspace 3`, `layout monocle`, `reload`. Typing part
   of a name (`work`) lists the dispatchers that start with it; picking one that takes an
   argument puts its name in the search box for you to finish (`workspace `), and picking one
   that doesn't runs it. Dispatchers that act on a window act on the one that had focus before

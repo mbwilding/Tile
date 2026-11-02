@@ -68,7 +68,7 @@ pub enum Effect {
     },
     /// Show a window that was hidden.
     Show(WindowId),
-    /// Hide a window, as its workspace isn't shown or it scrolled off screen.
+    /// Hide a window, as its workspace isn't shown.
     Hide(WindowId),
     /// Give a window the keyboard focus.
     Focus(WindowId),
@@ -142,7 +142,7 @@ impl State {
         self.windows.keys().copied()
     }
 
-    /// Windows the manager has hidden (inactive workspaces, scrolled-off columns).
+    /// Windows the manager has hidden (inactive workspaces, monocle windows behind the focused one).
     pub fn hidden(&self) -> impl Iterator<Item = WindowId> + '_ {
         self.hidden.iter().copied()
     }
@@ -204,8 +204,25 @@ impl State {
         settings: LayoutSettings,
         default_layout: LayoutKind,
     ) -> Vec<Effect> {
+        // Layouts keep the sizes they were made with, so changed ones are pushed into them.
+        for ws in self.workspaces.values_mut() {
+            ws.layout.adopt_settings(&self.settings, &settings);
+        }
+        let previous = std::mem::replace(&mut self.default_layout, default_layout);
         self.settings = settings;
-        self.default_layout = default_layout;
+        // A workspace still on the old default follows the new one; a chosen layout stays.
+        if previous != default_layout {
+            let keys: Vec<u8> = self.workspaces.keys().copied().collect();
+            for key in keys {
+                let area = self.area_of(key);
+                if let Some(ws) = self.workspaces.get_mut(&key)
+                    && ws.layout.kind() == previous
+                    && area.h <= area.w
+                {
+                    ws.layout = ws.layout.convert(default_layout, area, &self.settings);
+                }
+            }
+        }
         self.sync()
     }
 

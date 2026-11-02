@@ -2,7 +2,6 @@ mod dwindle;
 mod even;
 mod master;
 mod monocle;
-mod scrolling;
 
 use std::{fmt, str::FromStr};
 
@@ -12,7 +11,6 @@ pub use dwindle::Dwindle;
 pub use even::Even;
 pub use master::Master;
 pub use monocle::Monocle;
-pub use scrolling::Scrolling;
 
 use crate::{
     WindowId,
@@ -29,21 +27,13 @@ pub enum LayoutKind {
     Master,
     /// Every window fills the workspace.
     Monocle,
-    /// An endless strip of columns, scrolled to keep the focus in view.
-    Scrolling,
     /// Equal shares, side by side or stacked.
     Even,
 }
 
 impl LayoutKind {
     /// Every layout, in the order `cyclelayout` steps through them.
-    pub const ALL: [Self; 5] = [
-        Self::Dwindle,
-        Self::Master,
-        Self::Monocle,
-        Self::Scrolling,
-        Self::Even,
-    ];
+    pub const ALL: [Self; 4] = [Self::Dwindle, Self::Master, Self::Monocle, Self::Even];
 
     /// The layout after this one, wrapping round.
     pub fn next(self) -> Self {
@@ -61,8 +51,19 @@ impl FromStr for LayoutKind {
             "master" => Ok(Self::Master),
             "monocle" => Ok(Self::Monocle),
             "even" => Ok(Self::Even),
-            "scrolling" | "scroller" => Ok(Self::Scrolling),
             _ => Err(()),
+        }
+    }
+}
+
+impl LayoutKind {
+    /// The name as shown to the user, like `Master`.
+    pub const fn title(self) -> &'static str {
+        match self {
+            Self::Dwindle => "Dwindle",
+            Self::Master => "Master",
+            Self::Monocle => "Monocle",
+            Self::Even => "Even",
         }
     }
 }
@@ -74,22 +75,8 @@ impl fmt::Display for LayoutKind {
             Self::Master => "master",
             Self::Monocle => "monocle",
             Self::Even => "even",
-            Self::Scrolling => "scrolling",
         })
     }
-}
-
-/// When the scrolling layout re-centers the focused column.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum CenterMode {
-    /// Keep the focused column centered at all times.
-    Always,
-    /// Center the focused column whenever it would otherwise be (partly) off screen.
-    #[default]
-    OnOverflow,
-    /// Scroll just enough to bring the focused column into view.
-    Never,
 }
 
 /// Layout tunables, derived from the user config. The config's defaults and limits are the
@@ -103,45 +90,31 @@ pub struct LayoutSettings {
     /// The share of a new dwindle split given to the window that was there.
     pub dwindle_split_ratio: f32,
     /// The master column's share of the width.
-    pub master_mfact: f32,
+    pub master_ratio: f32,
     /// How many windows share the master column, at least [`Self::MIN_MASTER_COUNT`].
     pub master_count: usize,
     /// New windows become the master instead of joining the stack.
     pub master_new_is_master: bool,
-    /// A new scrolling column's share of the width.
-    pub scrolling_proportion: f32,
-    /// The column widths `cycleproportion` steps through.
-    pub scrolling_presets: Vec<f32>,
-    /// When the scrolling layout centres the focused column.
-    pub scrolling_center: CenterMode,
     /// Each monitor has workspaces of its own. Off, switching workspace switches every monitor.
     pub independent_workspaces: bool,
 }
 
 impl LayoutSettings {
     /// Default [`gaps_in`](Self::gaps_in), in pixels.
-    pub const DEFAULT_GAPS_IN: i32 = 10;
+    pub const DEFAULT_GAPS_IN: i32 = 20;
     /// Default [`gaps_out`](Self::gaps_out), in pixels.
-    pub const DEFAULT_GAPS_OUT: i32 = 10;
+    pub const DEFAULT_GAPS_OUT: i32 = 20;
     /// Default [`dwindle_split_ratio`](Self::dwindle_split_ratio).
     pub const DEFAULT_SPLIT_RATIO: f32 = 0.5;
-    /// Default [`master_mfact`](Self::master_mfact).
-    pub const DEFAULT_MFACT: f32 = 0.5;
+    /// Default [`master_ratio`](Self::master_ratio).
+    pub const DEFAULT_MASTER_RATIO: f32 = 0.5;
     /// Default [`master_count`](Self::master_count).
     pub const DEFAULT_MASTER_COUNT: usize = 1;
-    /// Default [`scrolling_proportion`](Self::scrolling_proportion).
-    pub const DEFAULT_PROPORTION: f32 = 0.333;
-    /// Default [`scrolling_presets`](Self::scrolling_presets).
-    pub const DEFAULT_PROPORTION_PRESETS: [f32; 4] = [0.25, 0.333, 0.5, 1.0];
 
     /// The smallest share of a dwindle split or the master column.
     pub const MIN_RATIO: f32 = 0.1;
     /// The largest share of a dwindle split or the master column.
     pub const MAX_RATIO: f32 = 0.9;
-    /// The narrowest scrolling column, as a share of the width.
-    pub const MIN_PROPORTION: f32 = 0.1;
-    /// The widest scrolling column: the whole width.
-    pub const MAX_PROPORTION: f32 = 1.0;
     /// The fewest windows in the master column.
     pub const MIN_MASTER_COUNT: usize = 1;
 
@@ -149,12 +122,8 @@ impl LayoutSettings {
     #[must_use]
     pub fn clamped(mut self) -> Self {
         self.dwindle_split_ratio = clamp_ratio(self.dwindle_split_ratio);
-        self.master_mfact = clamp_ratio(self.master_mfact);
+        self.master_ratio = clamp_ratio(self.master_ratio);
         self.master_count = self.master_count.max(Self::MIN_MASTER_COUNT);
-        self.scrolling_proportion = clamp_proportion(self.scrolling_proportion);
-        for preset in &mut self.scrolling_presets {
-            *preset = clamp_proportion(*preset);
-        }
         self
     }
 
@@ -170,12 +139,9 @@ impl Default for LayoutSettings {
             gaps_in: Self::DEFAULT_GAPS_IN,
             gaps_out: Self::DEFAULT_GAPS_OUT,
             dwindle_split_ratio: Self::DEFAULT_SPLIT_RATIO,
-            master_mfact: Self::DEFAULT_MFACT,
+            master_ratio: Self::DEFAULT_MASTER_RATIO,
             master_count: Self::DEFAULT_MASTER_COUNT,
             master_new_is_master: false,
-            scrolling_proportion: Self::DEFAULT_PROPORTION,
-            scrolling_presets: Self::DEFAULT_PROPORTION_PRESETS.to_vec(),
-            scrolling_center: CenterMode::OnOverflow,
             independent_workspaces: true,
         }
     }
@@ -183,13 +149,6 @@ impl Default for LayoutSettings {
 
 fn clamp_ratio(ratio: f32) -> f32 {
     ratio.clamp(LayoutSettings::MIN_RATIO, LayoutSettings::MAX_RATIO)
-}
-
-fn clamp_proportion(proportion: f32) -> f32 {
-    proportion.clamp(
-        LayoutSettings::MIN_PROPORTION,
-        LayoutSettings::MAX_PROPORTION,
-    )
 }
 
 /// The windows of a list-based layout, in layout order.
@@ -225,7 +184,7 @@ fn equal_tiles(rect: Rect, axis: Axis, ids: &[WindowId], gap: i32) -> Vec<Tile> 
         .collect()
 }
 
-/// A window's computed position. Invisible tiles (scrolled off screen) must be hidden.
+/// A window's computed position. Invisible tiles must be hidden.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tile {
     /// The window.
@@ -291,8 +250,6 @@ pub enum LayoutState {
     Master(Master),
     /// See [`Monocle`].
     Monocle(Monocle),
-    /// See [`Scrolling`].
-    Scrolling(Scrolling),
     /// See [`Even`].
     Even(Even),
 }
@@ -304,8 +261,22 @@ impl LayoutState {
             LayoutKind::Dwindle => Self::Dwindle(Dwindle::default()),
             LayoutKind::Master => Self::Master(Master::new(s)),
             LayoutKind::Monocle => Self::Monocle(Monocle::default()),
-            LayoutKind::Scrolling => Self::Scrolling(Scrolling::default()),
             LayoutKind::Even => Self::Even(Even::default()),
+        }
+    }
+
+    /// Brings the sizes this layout keeps for itself in line with `new` where they differ from
+    /// `old`, as a config reload does: the master column's width and every dwindle split's ratio.
+    /// The rest of the settings are read as they are used.
+    pub fn adopt_settings(&mut self, old: &LayoutSettings, new: &LayoutSettings) {
+        match self {
+            Self::Master(l) if old.master_ratio != new.master_ratio => {
+                l.set_ratio(new.master_ratio);
+            }
+            Self::Dwindle(l) if old.dwindle_split_ratio != new.dwindle_split_ratio => {
+                l.set_ratios(new.dwindle_split_ratio);
+            }
+            _ => {}
         }
     }
 
@@ -315,7 +286,6 @@ impl LayoutState {
             Self::Dwindle(_) => LayoutKind::Dwindle,
             Self::Master(_) => LayoutKind::Master,
             Self::Monocle(_) => LayoutKind::Monocle,
-            Self::Scrolling(_) => LayoutKind::Scrolling,
             Self::Even(_) => LayoutKind::Even,
         }
     }
@@ -336,7 +306,6 @@ impl LayoutState {
             Self::Dwindle(l) => l,
             Self::Master(l) => l,
             Self::Monocle(l) => l,
-            Self::Scrolling(l) => l,
             Self::Even(l) => l,
         }
     }
@@ -346,7 +315,6 @@ impl LayoutState {
             Self::Dwindle(l) => l,
             Self::Master(l) => l,
             Self::Monocle(l) => l,
-            Self::Scrolling(l) => l,
             Self::Even(l) => l,
         }
     }
@@ -453,7 +421,6 @@ mod tests {
         for kind in LayoutKind::ALL {
             assert_eq!(kind.to_string().parse::<LayoutKind>(), Ok(kind));
         }
-        assert_eq!("Scroller".parse::<LayoutKind>(), Ok(LayoutKind::Scrolling));
         assert_eq!("MASTER".parse::<LayoutKind>(), Ok(LayoutKind::Master));
         assert!("grid".parse::<LayoutKind>().is_err());
     }
@@ -548,7 +515,5 @@ mod tests {
         let s = LayoutSettings::default();
         assert!(s.independent_workspaces);
         assert!((0.0..=1.0).contains(&s.dwindle_split_ratio));
-        assert!(s.scrolling_presets.iter().all(|p| *p > 0.0 && *p <= 1.0));
-        assert_eq!(CenterMode::default(), CenterMode::OnOverflow);
     }
 }

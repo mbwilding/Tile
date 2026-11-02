@@ -27,8 +27,8 @@ use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, WallpaperAction, Win
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
-    Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Toast, ToastSettings,
-    Tray, TrayEvent, WinDrag, WinEvent, WinEventHooks, Windows,
+    Backdrop, Borders, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Toast,
+    ToastSettings, Tray, TrayEvent, WinDrag, WinEvent, WinEventHooks, Windows,
     desktops::{self as vd, DesktopChange},
     foreground,
 };
@@ -156,6 +156,8 @@ struct Daemon {
     /// Windows excluded by rules or that we can't control (elevated).
     ignored: HashSet<WindowId>,
     bordered: Option<WindowId>,
+    /// The thick border rings, when `general.border_width` asks for them.
+    rings: Borders,
     subscribers: Vec<UnboundedSender<Response>>,
     published: Published,
     saved_restore: Restore,
@@ -299,6 +301,7 @@ pub async fn run(
         registry.clone(),
     );
     let indicator = Indicator::spawn(indicator_settings(&loaded));
+    let rings = Borders::spawn();
     // Not hosting the shell yet at this point; `start_shell` below corrects it once it is known.
     let toast = Toast::spawn(
         toast_settings(
@@ -329,6 +332,7 @@ pub async fn run(
         tray,
         launcher,
         indicator,
+        rings,
         toast,
         notify_listener: None,
         notify_tx,
@@ -484,6 +488,7 @@ impl Daemon {
                             tracked.tween = None;
                         }
                     }
+                    self.sync_rings();
                 }
                 _ = sweep.tick() => self.sweep(),
                 _ = tokio::signal::ctrl_c() => self.quit = true,
@@ -548,6 +553,7 @@ impl Daemon {
         }
         self.launcher.shutdown();
         self.indicator.shutdown();
+        self.rings.shutdown();
         self.toast.shutdown();
         self.notify_listener = None;
         self.tray.shutdown();

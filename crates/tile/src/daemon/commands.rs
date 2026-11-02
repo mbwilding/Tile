@@ -183,6 +183,10 @@ impl Daemon {
             command => {
                 let switches =
                     matches!(command, Command::Workspace(_) | Command::MoveToWorkspace(_));
+                let layout_change = matches!(
+                    command,
+                    Command::Layout(_) | Command::CycleLayout | Command::ResetLayout
+                );
                 let before = self.focused_monitor().map(|m| m.id);
                 let effects = self.desktops.current().apply(&command);
                 let focus = effects.iter().rev().find_map(|e| match e {
@@ -207,6 +211,8 @@ impl Daemon {
                 }
                 if switches {
                     self.show_workspace();
+                } else if layout_change {
+                    self.show_layout();
                 }
             }
         }
@@ -237,6 +243,14 @@ impl Daemon {
             (state.focused_workspace(), state.focused_monitor())
         {
             self.indicator.show(workspace, monitor.work_area);
+        }
+    }
+
+    /// Flashes the focused workspace's layout name on its monitor.
+    pub(super) fn show_layout(&self) {
+        let state = self.desktops.current_ref();
+        if let (Some(layout), Some(monitor)) = (state.active_layout(), state.focused_monitor()) {
+            self.indicator.show_text(layout.title(), monitor.work_area);
         }
     }
 

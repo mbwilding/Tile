@@ -9,8 +9,9 @@ use windows_sys::Win32::{
     },
     UI::Shell::{SHEmptyRecycleBinW, SHQUERYRBINFO, SHQueryRecycleBinW},
     UI::WindowsAndMessaging::{
-        GetClassNameW, GetWindowThreadProcessId, HWND_BROADCAST, IsWindow, PostMessageW, SC_CLOSE,
-        SC_MONITORPOWER, WM_APP, WM_SYSCOMMAND,
+        CreateWindowExW, GetClassNameW, GetWindowThreadProcessId, HWND_BROADCAST, IsWindow,
+        PostMessageW, SC_CLOSE, SC_MONITORPOWER, WM_APP, WM_SYSCOMMAND, WS_EX_LAYERED,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP,
     },
 };
 
@@ -47,6 +48,32 @@ pub fn empty_recycle_bin() -> bool {
     // SAFETY: no owner window and no root path (every drive); the flags are all zero, so
     // Windows keeps its confirmation, progress and sound.
     unsafe { SHEmptyRecycleBinW(std::ptr::null_mut(), std::ptr::null(), 0) >= 0 }
+}
+
+/// Makes a hidden popup for the caller to draw on with `UpdateLayeredWindow`: layered,
+/// never activated and click-through. The caller destroys it, on this thread.
+pub fn create_overlay() -> Option<isize> {
+    let class: Vec<u16> = "STATIC\0".encode_utf16().collect();
+    // SAFETY: `STATIC` is a system class, so there is no window procedure of ours to keep alive;
+    // the string is NUL-terminated and outlives the call, and the rest is null (no parent, menu,
+    // module or creation data).
+    let hwnd = unsafe {
+        CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            class.as_ptr(),
+            std::ptr::null(),
+            WS_POPUP,
+            0,
+            0,
+            1,
+            1,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null(),
+        )
+    };
+    (!hwnd.is_null()).then_some(hwnd as isize)
 }
 
 /// How many items the Recycle Bin holds across every drive, if Windows says.

@@ -5,6 +5,12 @@ features:
   shell: true
   log: true
 
+general:
+  layout: master
+  gaps_in: 20
+  gaps_out: 20
+  border_width: 3
+
 # theme:
 #   font: NeoSpleen
 
@@ -18,9 +24,9 @@ binds:
   super+r: launcher
   super+e: exec explorer.exe "%USERPROFILE%"
   super+c: exec %LOCALAPPDATA%\Microsoft\WinGet\Links\btop.exe
-  super+t: exec wtd.exe -w new
-  super+p: exec wtd.exe -w new -p "NixOS - Personal"
-  super+w: exec wtd.exe -w new -p "NixOS - Work"
+  super+t: exec wt.exe -w new
+  super+p: exec wt.exe -w new -p "NixOS - Personal"
+  super+w: exec wt.exe -w new -p "NixOS - Work"
   super+minus: exechidden ecc toggle
   super+semicolon: exec snippingtool.exe /clip
   super+ctrl+h: workspace 1

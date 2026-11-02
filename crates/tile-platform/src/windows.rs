@@ -61,7 +61,7 @@ fn has(bits: isize, flag: u32) -> bool {
     bits & flag as isize != 0
 }
 
-fn frame_of(hwnd: &w::HWND) -> Option<Rect> {
+pub(crate) fn frame_of(hwnd: &w::HWND) -> Option<Rect> {
     match hwnd.DwmGetWindowAttribute(co::DWMWA::EXTENDED_FRAME_BOUNDS) {
         Ok(w::DwmAttr::ExtendedFrameBounds(r)) => Some(rect(r)),
         _ => hwnd.GetWindowRect().ok().map(rect),
@@ -359,6 +359,13 @@ impl Windows {
             handles, insets, ..
         } = self;
         Some(measure_insets(insets, id, handles.get(&id)?))
+    }
+
+    /// Where the window's visible frame is now, if it is on screen.
+    pub fn frame_rect(&self, id: WindowId) -> Option<Rect> {
+        let hwnd = self.handles.get(&id)?;
+        let frame = frame_of(hwnd)?;
+        (frame.x > -30_000).then_some(frame)
     }
 
     /// Whether the window still exists.

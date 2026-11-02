@@ -34,11 +34,12 @@ or contains `: ` or ` #`, and around numbers meant as text (`"2"`).
 | `tiling` | `true` | Manage windows. `false` leaves them alone and gives Win+L back; turning it on again manages the open windows. |
 | `default_binds` | `true` | Start from the [default binds](keybinds.md#default-keys), which `binds` add to. `false` leaves only your own `binds`. |
 | `remap` | `true` | Run the key remapper with the `remap` layers. |
-| `gaps_in` | `10` | Pixels between neighbouring tiled windows. |
-| `gaps_out` | `10` | Pixels between tiled windows and the monitor edge. |
+| `gaps_in` | `20` | Pixels between neighbouring tiled windows. |
+| `gaps_out` | `20` | Pixels between tiled windows and the monitor edge. |
 | `independent_workspaces` | `true` | Every monitor has workspaces of its own, so `workspace 2` is workspace 2 on the monitor you are on and never moves focus to another monitor. `false` syncs the monitors: switching workspace switches them all together. See [layouts](layouts.md#workspaces-and-monitors). |
-| `layout` | `master` | Layout of new workspaces: `dwindle`, `master`, `monocle`, `scrolling` or `even`. New workspaces on a portrait monitor start with `even` instead. See [layouts](layouts.md). |
+| `layout` | `master` | Layout of new workspaces: `dwindle`, `master`, `monocle` or `even`. New workspaces on a portrait monitor start with `even` instead. Changing it moves workspaces still on the old default to the new one. See [layouts](layouts.md). |
 | `borders` | `true` | Colour the window border to show focus (Windows 11). |
+| `border_width` | `3` | Border thickness in pixels at 100% scaling. `1` is Windows' own border; wider is drawn by Tile as a smooth ring outside the window, so it needs a gap at least as wide (`gaps_in`, `gaps_out`) to stay clear of its neighbours. It follows the window and stacks just above it. |
 | `border_active` | `theme.accent` | Border colour of the focused window. |
 | `border_inactive` | `theme.inactive` | Border colour of every other tiled window. |
 | `focus_new_windows` | `true` | Focus a window when it opens. |
@@ -122,13 +123,10 @@ these in the file applies at once and starts again from `path`.
 
 | Section | Key | Default | Meaning |
 | --- | --- | --- | --- |
-| `dwindle` | `split_ratio` | `0.5` | Share of a split given to the existing window. |
-| `master` | `mfact` | `0.5` | Width of the master area, as a share of the monitor. |
+| `dwindle` | `split_ratio` | `0.5` | Share of a split given to the existing window. Changing it resets every split to the new ratio. |
+| `master` | `ratio` | `0.5` | Share of the monitor width given to the master area (0.1 to 0.9). Changing it in the config resets the width on every workspace, undoing any resizing. |
 | `master` | `count` | `1` | Windows in the master area. |
 | `master` | `new_is_master` | `false` | New windows become the master. |
-| `scrolling` | `proportion` | `0.333` | Width of new columns, as a share of the monitor. |
-| `scrolling` | `proportion_presets` | `[0.25, 0.333, 0.5, 1.0]` | Widths `cycleproportion` steps through. |
-| `scrolling` | `center_focused` | `on_overflow` | When to centre the focused column: `always`, `on_overflow` (when it would otherwise be partly off screen) or `never`. |
 
 ### `launcher`
 
@@ -169,7 +167,8 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 
 A small square showing the workspace number that flashes up on the focused monitor when a
 `workspace` or `movetoworkspace` dispatcher runs (even onto the workspace you are already on),
-then fades out. It never takes focus and clicks go through it.
+then fades out. The `layout`, `cyclelayout` and `resetlayout` dispatchers flash the layout's
+name (`Master`, `Monocle`) the same way. It never takes focus and clicks go through it.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -203,7 +202,7 @@ Popups for Windows toast notifications, read through `UserNotificationListener`.
 | `max_visible` | `3` | How many popups are shown stacked at once; the rest wait their turn. |
 | `show_app_name` | `true` | Show the posting app's name above the title. |
 | `border` | `theme.accent` | The card's outline colour. |
-| `border_width` | `1` | The outline's thickness in pixels at 100% scaling. `0` draws no outline. |
+| `border_width` | `general.border_width` | The outline's thickness in pixels at 100% scaling. `0` draws no outline. |
 | `filter` | `[]` | Mutes, or overrides the duration of, notifications from apps whose name matches. Each entry has `app` (a regex, matched the same way as a [window rule](window-rules.md)'s patterns), `mute` and `duration_ms`. The first matching entry wins each field. |
 
 ### `binds`
@@ -246,11 +245,12 @@ general:
   tiling: true                  # manage windows; false leaves them alone
   default_binds: true           # start from the default binds; false leaves only yours
   remap: true                   # remap keys with the remap layers
-  gaps_in: 10                   # px between neighbouring windows
-  gaps_out: 10                  # px between windows and the monitor edge
+  gaps_in: 20                   # px between neighbouring windows
+  gaps_out: 20                  # px between windows and the monitor edge
   independent_workspaces: true  # each monitor has its own workspaces; false syncs them
-  layout: master                # dwindle | master | monocle | scrolling | even
+  layout: master                # dwindle | master | monocle | even
   borders: true                 # colour the window border to show focus (Windows 11)
+  border_width: 3               # px at 100% scaling; 1 is Windows' own, more is drawn by Tile
   # border_active: "#89b4fa"    # unset follows theme.accent
   # border_inactive: "#45475a"  # unset follows theme.inactive
   focus_new_windows: true
@@ -304,14 +304,9 @@ dwindle:
   split_ratio: 0.5              # share of a split given to the existing window
 
 master:
-  mfact: 0.5                    # width of the master area
+  ratio: 0.5                    # share of the monitor width given to the master area
   count: 1                      # windows in the master area
   new_is_master: false          # new windows become master
-
-scrolling:
-  proportion: 0.333             # width of new columns, as a share of the monitor
-  proportion_presets: [0.25, 0.333, 0.5, 1.0]   # widths `cycleproportion` steps through
-  center_focused: on_overflow   # always | on_overflow | never
 
 remap:
   modifier_guard: true          # a layer's lone Alt or Win doesn't open a menu or Start
@@ -344,7 +339,7 @@ launcher:
   fix_popups: true              # move a tray app's popup from a monitor's corner to the pointer
 
 workspace_indicator:
-  enabled: true                 # flash the workspace number when switching
+  enabled: true                 # flash the workspace number or layout name when switching
   position: bottom_right        # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
   gap: 48                       # px from the edges, unused for center
   size: 96                      # px at 100% scaling
@@ -368,7 +363,7 @@ notifications:
   max_visible: 3                # popups stacked at once; the rest wait their turn
   show_app_name: true           # above the title
   # border: "#89b4fa"           # unset follows theme.accent
-  border_width: 1               # px at 100% scaling; 0 draws no border
+  # border_width: 3            # px at 100% scaling, 0 for none; unset follows general.border_width
   filter: []                    # mute, or override the duration of, notifications from an app
 
 binds: {}                       # added to the default binds; see keybinds.md

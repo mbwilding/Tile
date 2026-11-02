@@ -256,19 +256,18 @@ fn minimize_and_restore() {
 }
 
 #[test]
-fn scrolling_hides_offscreen_columns() {
-    let mut s = state(1);
-    s.apply(&Command::Layout(LayoutKind::Scrolling));
+fn coming_back_to_a_monocle_workspace_lands_on_the_window_that_had_focus() {
+    let mut s = state(2);
+    s.apply(&Command::Layout(LayoutKind::Monocle));
     open(&mut s, W);
     open(&mut s, X);
     open(&mut s, Y);
-    let effects = open(&mut s, WindowId(4));
-    assert!(effects.contains(&Effect::Hide(W)));
-    let effects = (0..3)
-        .flat_map(|_| s.apply(&Command::MoveFocus(Direction::Left)))
-        .collect::<Vec<_>>();
-    assert!(effects.contains(&Effect::Show(W)));
-    assert_eq!(s.focused(), Some(W));
+    assert_eq!(s.focused(), Some(Y));
+    s.apply(&Command::MoveFocus(Direction::Right));
+    open(&mut s, WindowId(4));
+    assert_eq!(s.focused(), Some(WindowId(4)));
+    s.apply(&Command::MoveFocus(Direction::Left));
+    assert_eq!(s.focused(), Some(Y));
 }
 
 #[test]
@@ -640,7 +639,7 @@ fn layouts_switch_and_cycle() {
     let effects = s.sync();
     assert_eq!(placed(&effects, W), placed(&effects, X));
     s.apply(&Command::CycleLayout);
-    assert_eq!(s.active_layout(), Some(LayoutKind::Scrolling));
+    assert_eq!(s.active_layout(), Some(LayoutKind::Even));
     assert_eq!(s.snapshot_windows().len(), 2);
 }
 
@@ -659,32 +658,9 @@ fn resetting_the_layout_undoes_resizing() {
 fn layout_commands_ignore_other_layouts() {
     let mut s = opened(1, &[W]);
     s.apply(&Command::Layout(LayoutKind::Monocle));
-    for command in [
-        Command::CycleProportion,
-        Command::ScrollerProportion(0.5),
-        Command::ExpelWindow,
-        Command::CenterColumn,
-        Command::ConsumeWindow(Direction::Left),
-        Command::ToggleSplit,
-        Command::SwapWithMaster,
-    ] {
+    for command in [Command::ToggleSplit, Command::SwapWithMaster] {
         assert!(s.apply(&command).is_empty(), "{command:?}");
     }
-}
-
-#[test]
-fn scrolling_commands_change_the_columns() {
-    let mut s = state(1);
-    s.apply(&Command::Layout(LayoutKind::Scrolling));
-    open(&mut s, W);
-    open(&mut s, X);
-    let before = s.sync();
-    let after = s.apply(&Command::ScrollerProportion(1.0));
-    assert_ne!(placed(&before, X), placed(&after, X));
-    assert!(!s.apply(&Command::CycleProportion).is_empty());
-    assert!(!s.apply(&Command::CenterColumn).is_empty());
-    assert!(!s.apply(&Command::ConsumeWindow(Direction::Left)).is_empty());
-    assert!(!s.apply(&Command::ExpelWindow).is_empty());
 }
 
 #[test]
@@ -728,6 +704,36 @@ fn settings_changes_reflow_and_info_updates() {
     let snap = s.snapshot_active_window().unwrap();
     assert_eq!((snap.title.as_str(), snap.exe.as_str()), ("t", "e.exe"));
     s.set_info(Y, WindowInfo::default());
+}
+
+#[test]
+fn a_changed_master_ratio_reaches_existing_master_layouts() {
+    let mut s = state(1);
+    s.apply(&Command::Layout(LayoutKind::Master));
+    open(&mut s, W);
+    let effects = open(&mut s, X);
+    let before = placed(&effects, W).unwrap().w;
+    let settings = LayoutSettings {
+        master_ratio: 0.7,
+        ..LayoutSettings::default()
+    };
+    let effects = s.set_settings(settings, LayoutKind::Master);
+    assert!(placed(&effects, W).unwrap().w > before);
+}
+
+#[test]
+fn changed_ratios_and_a_new_default_layout_reach_open_workspaces() {
+    let mut s = opened(1, &[W, X]);
+    let wide = |effects: &[Effect]| placed(effects, W).unwrap();
+    let before = s.set_settings(LayoutSettings::default(), LayoutKind::Dwindle);
+    let settings = LayoutSettings {
+        dwindle_split_ratio: 0.7,
+        ..LayoutSettings::default()
+    };
+    let after = s.set_settings(settings.clone(), LayoutKind::Dwindle);
+    assert!(wide(&after).w > wide(&before).w);
+    s.set_settings(settings, LayoutKind::Monocle);
+    assert_eq!(s.active_layout(), Some(LayoutKind::Monocle));
 }
 
 #[test]

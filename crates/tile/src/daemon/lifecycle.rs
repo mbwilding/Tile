@@ -45,6 +45,7 @@ impl Daemon {
         self.update_lock_override();
         self.install_binds();
         self.reset_state();
+        self.sync_rings();
         self.update_cursor();
         self.persist_restore();
         self.publish();
@@ -177,6 +178,7 @@ impl Daemon {
             .desktops
             .set_settings(config.layout_settings(), config.general.layout);
         self.repaint_borders();
+        self.sync_rings();
         self.apply(effects);
     }
 

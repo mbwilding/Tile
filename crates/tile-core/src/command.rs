@@ -47,16 +47,6 @@ pub enum Command {
     CycleLayout,
     /// Rebuild the workspace's layout as new, undoing every resize and split change.
     ResetLayout,
-    /// Scrolling layout: set the focused column's width as a fraction of the monitor.
-    ScrollerProportion(f32),
-    /// Scrolling layout: step the focused column through the width presets.
-    CycleProportion,
-    /// Scrolling layout: move the focused window into the column that way.
-    ConsumeWindow(Direction),
-    /// Scrolling layout: move the focused window into a column of its own.
-    ExpelWindow,
-    /// Scrolling layout: centre the focused column.
-    CenterColumn,
     /// Switch native virtual desktop.
     Desktop(DesktopTarget),
     /// Send the active window to another native virtual desktop.
@@ -191,14 +181,9 @@ pub const DISPATCHERS: &[(&str, &str)] = &[
     ("movetoworkspace", "<1-255>"),
     ("movetoworkspacesilent", "<1-255>"),
     ("focusmonitor", "<l|r|u|d>"),
-    ("layout", "<dwindle|master|monocle|scrolling|even>"),
+    ("layout", "<dwindle|master|monocle|even>"),
     ("cyclelayout", ""),
     ("resetlayout", ""),
-    ("scroller_proportion", "<0.05-1.0>"),
-    ("cycleproportion", ""),
-    ("consumewindow", "<l|r>"),
-    ("expelwindow", ""),
-    ("centercolumn", ""),
     ("desktop", "<n|next|prev>"),
     ("movetodesktop", "<n|next|prev>"),
     ("pin", ""),
@@ -329,25 +314,14 @@ impl FromStr for Command {
             "focusmonitor" => Self::FocusMonitor(parse_direction(n, rest)?),
             "layout" => {
                 let arg = rest.ok_or_else(|| {
-                    ParseError::MissingArg(name.clone(), "dwindle|master|monocle|scrolling")
+                    ParseError::MissingArg(name.clone(), "dwindle|master|monocle|even")
                 })?;
                 Self::Layout(arg.parse().map_err(|()| {
-                    ParseError::BadArg(name.clone(), arg.into(), "dwindle|master|monocle|scrolling")
+                    ParseError::BadArg(name.clone(), arg.into(), "dwindle|master|monocle|even")
                 })?)
             }
             "cyclelayout" => Self::CycleLayout,
-            "scroller_proportion" | "scrollerproportion" => {
-                let arg = rest.ok_or_else(|| ParseError::MissingArg(name.clone(), "0.1-1.0"))?;
-                match arg.parse::<f32>() {
-                    Ok(p) if (0.05..=1.0).contains(&p) => Self::ScrollerProportion(p),
-                    _ => return Err(ParseError::BadArg(name, arg.into(), "0.05-1.0")),
-                }
-            }
             "resetlayout" => Self::ResetLayout,
-            "cycleproportion" => Self::CycleProportion,
-            "consumewindow" => Self::ConsumeWindow(parse_direction(n, rest)?),
-            "expelwindow" => Self::ExpelWindow,
-            "centercolumn" => Self::CenterColumn,
             "desktop" => Self::Desktop(parse_desktop(n, rest)?),
             "movetodesktop" => Self::MoveToDesktop(parse_desktop(n, rest)?),
             "pin" => Self::Pin,
@@ -422,11 +396,6 @@ impl fmt::Display for Command {
             Self::Layout(kind) => write!(f, "layout {kind}"),
             Self::CycleLayout => f.write_str("cyclelayout"),
             Self::ResetLayout => f.write_str("resetlayout"),
-            Self::ScrollerProportion(p) => write!(f, "scroller_proportion {p}"),
-            Self::CycleProportion => f.write_str("cycleproportion"),
-            Self::ConsumeWindow(d) => write!(f, "consumewindow {d}"),
-            Self::ExpelWindow => f.write_str("expelwindow"),
-            Self::CenterColumn => f.write_str("centercolumn"),
             Self::Desktop(t) => write!(f, "desktop {t}"),
             Self::MoveToDesktop(t) => write!(f, "movetodesktop {t}"),
             Self::Pin => f.write_str("pin"),
@@ -461,9 +430,7 @@ mod tests {
             "resizeactive -40 0",
             "workspace 3",
             "movetoworkspacesilent 9",
-            "layout scrolling",
-            "scroller_proportion 0.5",
-            "consumewindow r",
+            "layout monocle",
             "desktop 2",
             "movetodesktop next",
             "resetlayout",

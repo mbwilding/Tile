@@ -5,11 +5,12 @@ general:
   tiling: true # manage windows; false leaves them alone
   default_binds: false # only the binds below; true adds them to the defaults
   remap: true # remap keys with the remap layers
-  gaps_in: 10 # px between neighbouring windows
-  gaps_out: 10 # px between windows and the monitor edge
+  gaps_in: 20 # px between neighbouring windows
+  gaps_out: 20 # px between windows and the monitor edge
   independent_workspaces: true # each monitor has its own workspaces; false syncs them
-  layout: master # dwindle | master | monocle | scrolling | even
+  layout: master # dwindle | master | monocle | even
   borders: true # colour the window border to show focus (Windows 11)
+  border_width: 3 # px at 100% scaling; 1 is Windows' own, more is drawn by Tile
   # border_active: "#89b4fa" # unset follows theme.accent
   # border_inactive: "#45475a" # unset follows theme.inactive
   focus_new_windows: true
@@ -63,14 +64,9 @@ dwindle:
   split_ratio: 0.5 # share of a split given to the existing window
 
 master:
-  mfact: 0.5 # width of the master area
+  ratio: 0.5 # share of the monitor width given to the master area
   count: 1 # windows in the master area
   new_is_master: false # new windows become master
-
-scrolling:
-  proportion: 0.333 # width of new columns, as a share of the monitor
-  proportion_presets: [0.25, 0.333, 0.5, 1.0] # widths `cycleproportion` steps through
-  center_focused: on_overflow # always | on_overflow | never
 
 remap:
   modifier_guard: true # a layer's lone Alt or Win doesn't open a menu or Start
@@ -103,7 +99,7 @@ launcher:
   fix_popups: true # move a tray app's popup from a monitor's corner to the pointer
 
 workspace_indicator:
-  enabled: true # flash the workspace number when switching
+  enabled: true # flash the workspace number or layout name when switching
   position: bottom_right # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
   gap: 48 # px from the edges, unused for center
   size: 96 # px at 100% scaling
@@ -127,7 +123,7 @@ notifications:
   max_visible: 3 # popups stacked at once; the rest wait their turn
   show_app_name: true # above the title
   # border: "#89b4fa" # unset follows theme.accent
-  border_width: 1 # px at 100% scaling; 0 draws no border
+  # border_width: 3 # px at 100% scaling, 0 for none; unset follows general.border_width
   filter: [] # mute, or override the duration of, notifications from an app
 
 # Every default bind. See keybinds.md for the key names and dispatchers.
@@ -191,11 +187,6 @@ binds:
   super+z: lock
   super+s: togglesplit
   super+r: launcher
-  super+ctrl+r: cycleproportion
-  super+c: centercolumn
-  super+bracketleft: consumewindow l
-  super+bracketright: consumewindow r
-  super+backslash: expelwindow
   super+shift+r: reload
   super+shift+p: togglepause
   super+shift+e: exit

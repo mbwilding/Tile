@@ -51,18 +51,14 @@ impl Layout for Monocle {
     }
 
     fn neighbor(&self, id: WindowId, dir: Direction, _tiles: &[Tile]) -> Option<WindowId> {
+        // No wrapping round: past either end, focus moves on to the next monitor.
         let windows = &self.windows.0;
-        let len = windows.len();
         let pos = self.windows.position(id)?;
-        if len < 2 {
-            return None;
-        }
-        let next = if dir.is_backward() {
-            (pos + len - 1) % len
+        if dir.is_backward() {
+            pos.checked_sub(1).map(|prev| windows[prev])
         } else {
-            (pos + 1) % len
-        };
-        Some(windows[next])
+            windows.get(pos + 1).copied()
+        }
     }
 }
 
@@ -112,12 +108,14 @@ mod tests {
     }
 
     #[test]
-    fn neighbours_cycle_and_wrap() {
+    fn neighbours_step_in_order_and_stop_at_the_ends() {
         let (m, _) = filled(&[A, B, C]);
         assert_eq!(m.neighbor(A, Direction::Right, &[]), Some(B));
-        assert_eq!(m.neighbor(C, Direction::Down, &[]), Some(A));
-        assert_eq!(m.neighbor(A, Direction::Left, &[]), Some(C));
+        assert_eq!(m.neighbor(B, Direction::Down, &[]), Some(C));
+        assert_eq!(m.neighbor(C, Direction::Left, &[]), Some(B));
         assert_eq!(m.neighbor(B, Direction::Up, &[]), Some(A));
+        assert_eq!(m.neighbor(C, Direction::Right, &[]), None);
+        assert_eq!(m.neighbor(A, Direction::Left, &[]), None);
         assert_eq!(m.neighbor(WindowId(99), Direction::Right, &[]), None);
     }
 
