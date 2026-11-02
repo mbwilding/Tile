@@ -14,6 +14,7 @@ What Explorer would otherwise provide is covered like this:
 | Programs started at sign-in | Tile runs the `Run` and `RunOnce` keys and the Startup folders |
 | File Explorer windows | Unchanged |
 | Opening Settings, the Store and other Store apps | The shell process answers for them, [below](#settings-and-store-apps) |
+| SmartScreen's warning for an unrecognised download | Can't be shown; Tile turns the check off instead, [below](#smartscreen) |
 
 ## Turning it on
 
@@ -134,6 +135,21 @@ is up waits a few seconds for it instead of running as administrator.
 It runs in the helper process that starts programs with your normal rights: the copy Windows
 starts at sign-in, and the one Tile starts again when it restarts, as long as Tile is your
 sign-in shell. So updating Tile with `cargo deploy` needs no sign-out.
+
+## SmartScreen
+
+SmartScreen's "Windows protected your PC" warning for an unrecognised downloaded program is shown
+through a shell service only Explorer provides. Without it the check still runs but has nowhere
+to ask, so the launch is just cancelled rather than offered. Rather than leave every download
+silently blocked, Tile turns the `EnableSmartScreen` policy off (machine-wide) while it hosts the
+notification area, and puts back whatever value was there before as soon as it doesn't, including
+when Tile quits. Windows Defender itself is unaffected: this is only the download reputation
+check.
+
+The policy is admin-only on some machines. If so, Tile asks once for permission (one UAC prompt,
+via `%LOCALAPPDATA%\Tile\grant-smartscreen.ps1`) the first time it starts hosting the shell, the
+same way it does for [Win+L](windows-integration.md#winl). Until that is accepted, downloaded programs are still blocked
+with no warning, as they were before.
 
 ## Getting out of trouble
 

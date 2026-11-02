@@ -181,6 +181,7 @@ impl Daemon {
     /// Drops windows that disappeared without us noticing.
     pub(super) fn sweep(&mut self) {
         self.sync_shell();
+        self.retry_smartscreen_override();
         if !self.tiling {
             return;
         }
@@ -271,6 +272,7 @@ impl Daemon {
                 .collect(),
             lock_disabled: self.win_l.taken,
             cursor_hidden: self.cursor_hidden.is_some(),
+            smartscreen_disabled: self.smartscreen.taken,
         };
         restore.hidden.sort_unstable();
         restore.undecorated.sort_unstable();

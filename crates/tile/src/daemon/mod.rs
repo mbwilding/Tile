@@ -10,6 +10,7 @@ mod lock;
 mod manage;
 mod pointer;
 mod shell;
+mod smartscreen;
 mod tracked;
 
 use std::{
@@ -35,7 +36,7 @@ use tokio::{
     time::{Instant, MissedTickBehavior, interval, sleep_until},
 };
 
-use self::{lock::WinL, tracked::Tracked};
+use self::{lock::WinL, smartscreen::SmartScreen, tracked::Tracked};
 use crate::{
     launch, logging,
     paths::{self, Restore},
@@ -136,6 +137,8 @@ struct Daemon {
     saved_restore: Restore,
     /// The Win+L takeover.
     win_l: WinL,
+    /// The SmartScreen app check override, while Tile hosts the notification area.
+    smartscreen: SmartScreen,
     /// Shortly after a focus change: re-check borders apps may have repainted on activation.
     heal_at: Option<Instant>,
     /// Re-entrancy guard for re-syncing focus after Windows refused a focus change.
@@ -300,6 +303,7 @@ pub async fn run(
         published: Published::default(),
         saved_restore: Restore::default(),
         win_l: WinL::default(),
+        smartscreen: SmartScreen::default(),
         heal_at: None,
         resyncing_focus: false,
         defocused_at: None,
@@ -465,13 +469,14 @@ impl Daemon {
         if self.win_l.taken {
             tile_platform::set_lock_disabled(false);
         }
-        paths::save_restore(&Restore::default());
         self.launcher.shutdown();
         self.indicator.shutdown();
         self.tray.shutdown();
         if let Some(host) = self.notify_host.take() {
             host.stop();
         }
+        // Last, so it overrules anything the shutdown above persisted on its way out.
         self.restore_backdrop();
+        paths::save_restore(&Restore::default());
     }
 }
