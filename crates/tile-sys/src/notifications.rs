@@ -79,6 +79,10 @@ impl From<windows::UI::Notifications::Management::UserNotificationListenerAccess
 pub struct Notification {
     /// The posting app's display name.
     pub app: String,
+    /// The posting app's AUMID (e.g. `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App`), for resolving
+    /// its shell icon through `shell:AppsFolder\<aumid>`. `None` for a notification with no app
+    /// identity behind it, which a popup then shows with no icon.
+    pub aumid: Option<String>,
     /// The first text element, usually the title.
     pub title: String,
     /// The remaining text elements, joined with newlines.
@@ -108,16 +112,16 @@ pub fn request_access() -> Option<Access> {
         .map(Access::from)
 }
 
-/// `notification`'s app name and toast text, or `None` if a part of it can't be read.
+/// `notification`'s app name and toast text, or `None` if a part of it can't be read. The AUMID
+/// is best-effort: a missing one doesn't fail the whole notification, it just shows with no icon.
 fn describe(notification: &UserNotification) -> Option<Notification> {
-    let app = notification
-        .AppInfo()
-        .ok()?
-        .DisplayInfo()
-        .ok()?
-        .DisplayName()
-        .ok()?
-        .to_string();
+    let app_info = notification.AppInfo().ok()?;
+    let app = app_info.DisplayInfo().ok()?.DisplayName().ok()?.to_string();
+    let aumid = app_info
+        .AppUserModelId()
+        .ok()
+        .map(|id| id.to_string())
+        .filter(|id| !id.is_empty());
     let binding = notification
         .Notification()
         .ok()?
@@ -132,7 +136,12 @@ fn describe(notification: &UserNotification) -> Option<Notification> {
         .filter_map(|element| element.Text().ok().map(|t| t.to_string()));
     let title = lines.next().unwrap_or_default();
     let body = lines.collect::<Vec<_>>().join("\n");
-    Some(Notification { app, title, body })
+    Some(Notification {
+        app,
+        aumid,
+        title,
+        body,
+    })
 }
 
 /// The ids and parsed content of every notification posted right now, oldest first.
