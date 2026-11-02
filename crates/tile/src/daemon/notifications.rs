@@ -79,8 +79,15 @@ impl Daemon {
     }
 
     /// Shows `notification` as a popup on the focused monitor, or the first one if nothing is
-    /// focused.
+    /// focused, unless `togglednd` has muted popups or `notifications.filter` mutes this app.
     pub(super) fn show_notification(&mut self, notification: Notification) {
+        if self.dnd {
+            return;
+        }
+        let outcome = self.loaded.notification_filters.resolve(&notification.app);
+        if outcome.mute {
+            return;
+        }
         let area = self
             .desktops
             .current_ref()
@@ -88,7 +95,17 @@ impl Daemon {
             .map(|m| m.work_area)
             .or_else(|| tile_platform::monitors().first().map(|m| m.work_area));
         if let Some(area) = area {
-            self.toast.show(notification, area);
+            self.toast.show(notification, area, outcome.duration_ms);
         }
+    }
+
+    /// `togglednd`: mutes or unmutes popups, without touching Windows' own notification
+    /// settings, so Focus Assist and Action Center behave exactly as the user set them.
+    pub(super) fn toggle_dnd(&mut self) {
+        self.dnd = !self.dnd;
+        tracing::info!(
+            "notification popups {}",
+            if self.dnd { "muted" } else { "unmuted" }
+        );
     }
 }

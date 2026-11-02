@@ -75,6 +75,9 @@ pub enum Command {
     ToggleShell,
     /// Switch logging on or off, like the tray's Log item.
     ToggleLog,
+    /// Mute notification popups, or let them show again. Doesn't touch Windows' own notification
+    /// settings; Action Center and Focus Assist are unaffected.
+    ToggleDnd,
     /// Quit Tile.
     Exit,
 }
@@ -149,6 +152,7 @@ pub const DISPATCHERS: &[(&str, &str)] = &[
     ("toggleremap", ""),
     ("toggleshell", ""),
     ("togglelog", ""),
+    ("togglednd", ""),
     ("exit", ""),
 ];
 
@@ -169,6 +173,7 @@ impl Command {
                 | Self::ToggleRemap
                 | Self::ToggleShell
                 | Self::ToggleLog
+                | Self::ToggleDnd
                 | Self::Exit
         )
     }
@@ -286,6 +291,7 @@ impl FromStr for Command {
             "toggleremap" => Self::ToggleRemap,
             "toggleshell" => Self::ToggleShell,
             "togglelog" => Self::ToggleLog,
+            "togglednd" => Self::ToggleDnd,
             "exit" => Self::Exit,
             _ => return Err(ParseError::Unknown(name)),
         })
@@ -340,6 +346,7 @@ impl fmt::Display for Command {
             Self::ToggleRemap => f.write_str("toggleremap"),
             Self::ToggleShell => f.write_str("toggleshell"),
             Self::ToggleLog => f.write_str("togglelog"),
+            Self::ToggleDnd => f.write_str("togglednd"),
             Self::Exit => f.write_str("exit"),
         }
     }
@@ -368,6 +375,7 @@ mod tests {
             "lock",
             "launcher",
             "cyclenext",
+            "togglednd",
         ] {
             let cmd: Command = input.parse().unwrap();
             assert_eq!(cmd.to_string(), input);
