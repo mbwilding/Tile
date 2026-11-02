@@ -7,6 +7,7 @@ mod click_to_do;
 pub mod desktops;
 mod drag;
 mod events;
+mod focus_sink;
 mod frame;
 mod gui;
 mod hotkeys;
@@ -29,6 +30,7 @@ pub use backdrop::Backdrop;
 pub use click_to_do::{click_to_do_available, click_to_do_disabled, disable_click_to_do};
 pub use drag::{DragEvent, WinDrag};
 pub use events::{WinEvent, WinEventHooks};
+pub use focus_sink::start_focus_sink;
 pub use gui::{
     Mailbox, WindowThread, colorref, corner_preference, fill_round, fill_round_bordered, init_com,
     make_font, mix, paint_buffered, scale, set_alpha, set_antialiasing, set_transparent,

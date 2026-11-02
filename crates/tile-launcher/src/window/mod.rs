@@ -67,8 +67,9 @@ pub enum LauncherEvent {
     },
     /// Carry out a system item's action.
     System(Action),
-    /// The launcher closed, however it did.
-    Closed,
+    /// The launcher is about to close itself (not because focus went elsewhere), so Windows is
+    /// about to hand focus to some other window.
+    Closing,
 }
 
 /// The `launcher` config section with its `hide` patterns compiled and its look resolved.
@@ -254,7 +255,7 @@ fn run(
         process_dlg_msgs: false,
         ..Default::default()
     });
-    let closed = events.clone();
+    let closing = events.clone();
     let state = Rc::new(RefCell::new(State::new(
         settings, events, usage_path, registry,
     )));
@@ -279,9 +280,10 @@ fn run(
         }
     });
 
-    let hide = {
+    // `announce` is false when focus already went elsewhere, which is the user's doing.
+    let close = {
         let (wnd, state) = (wnd.clone(), state.clone());
-        move || {
+        Rc::new(move |announce: bool| {
             // Leave a fresh frame behind, or the next open flashes this session's selection
             // before it paints.
             if !wnd.hwnd().IsWindowVisible() {
@@ -291,9 +293,16 @@ fn run(
             if reset {
                 redraw(wnd.hwnd(), true);
             }
+            // Before hiding, so the daemon knows by the time focus moves.
+            if announce {
+                let _ = closing.send(LauncherEvent::Closing);
+            }
             wnd.hwnd().ShowWindow(co::SW::HIDE);
-            let _ = closed.send(LauncherEvent::Closed);
-        }
+        })
+    };
+    let hide = {
+        let close = close.clone();
+        move || close(true)
     };
 
     let toggle = {
@@ -434,13 +443,13 @@ fn run(
     });
 
     wnd.on().wm_activate({
-        let (hide, state) = (hide.clone(), state.clone());
+        let (close, state) = (close.clone(), state.clone());
         move |p| {
             // The menu of a tray icon takes the focus: the launcher stays until it closes.
             if p.event == co::WA::INACTIVE
                 && !state.borrow().menu.as_ref().is_some_and(|m| m.keep_open)
             {
-                hide();
+                close(false);
             }
             Ok(())
         }

@@ -167,11 +167,13 @@ pub fn focus_hwnd(hwnd: &w::HWND) -> bool {
     focused
 }
 
-/// Puts focus on the desktop. With nothing left to focus on a monitor, Windows would otherwise
-/// pick a window on another one.
+/// Puts focus on the desktop, or without Explorer on a window of Tile's that stands in for it.
+/// With nothing left to focus on a monitor, Windows would otherwise pick a window on another one.
 pub fn focus_desktop() {
     if let Some(desktop) = enumerate(|h| h.GetClassName().is_ok_and(|c| c == "Progman")).first() {
         focus_hwnd(desktop);
+    } else if let Some(sink) = crate::focus_sink::focus_sink() {
+        focus_hwnd(&sink);
     }
 }
 

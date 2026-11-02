@@ -42,6 +42,14 @@ window, Tile tiles it where it landed, as for a title bar drag. It doesn't work 
 windows, on windows of a higher privilege than Tile, or on the taskbar or desktop. Turn it off
 with `cursor.drag: false`.
 
+## Empty monitors
+
+When the focused monitor has no window to focus (you closed its last one, or closed the launcher over
+it), Windows would hand focus to a window on another monitor, and Tile would follow it. Tile puts
+focus on the desktop instead and ignores the jump for half a second, so the focused monitor stays
+where it was. Without Explorer there is no desktop window, so Tile keeps a one pixel, invisible window
+off screen to take the focus.
+
 ## Virtual desktops
 
 Windows 11 24H2 and later. Every native virtual desktop has its own workspaces and layouts. Task

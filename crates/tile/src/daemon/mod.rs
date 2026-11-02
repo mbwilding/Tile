@@ -285,6 +285,7 @@ pub async fn run(
     let win_drag = WinDrag::start(drag_tx).context("failed to install the mouse hook")?;
     let tray = Tray::spawn(tray_tx);
     let registry = Registry::default();
+    tile_platform::start_focus_sink();
     tile_platform::set_antialiasing(loaded.config.theme.antialiasing);
     let launcher = Launcher::spawn(
         launcher_tx,
@@ -439,7 +440,13 @@ impl Daemon {
                     self.heal_at = None;
                     self.heal_borders();
                 }
-                Some(event) = rx.events.recv() => self.on_event(event),
+                Some(event) = rx.events.recv() => {
+                    // What the launcher said first decides how its closing moves focus.
+                    while let Ok(event) = rx.launcher.try_recv() {
+                        self.on_launcher(event);
+                    }
+                    self.on_event(event);
+                }
                 Some(change) = rx.desktops.recv() => self.on_desktop(change),
                 Some(event) = rx.hotkeys.recv() => match event {
                     HotkeyEvent::Bind(index) => {
@@ -452,25 +459,7 @@ impl Daemon {
                 },
                 Some(event) = rx.drags.recv() => self.on_drag(event),
                 Some(event) = rx.tray.recv() => self.on_tray(event),
-                Some(event) = rx.launcher.recv() => match event {
-                    LauncherEvent::Launch(id) => launch::start_app(&id, false),
-                    LauncherEvent::LaunchAsAdmin(id) => launch::start_app(&id, true),
-                    LauncherEvent::Run(line) => launch::exec(&line),
-                    LauncherEvent::Dispatch(command) => self.run_command(command),
-                    LauncherEvent::Tray { key, click, at } => {
-                        if !self.registry.click(key, click, at) {
-                            tracing::debug!("the tray icon has gone");
-                        }
-                    }
-                    LauncherEvent::System(action) => self.run_system(action),
-                    // Windows hands focus to a window of another monitor when the launcher
-                    // closes over an empty one.
-                    LauncherEvent::Closed => {
-                        if self.desktops.current_ref().focused().is_none() {
-                            self.defocused_at = Some(Instant::now());
-                        }
-                    }
-                },
+                Some(event) = rx.launcher.recv() => self.on_launcher(event),
                 Some(incoming) = rx.ipc.recv() => self.on_ipc(incoming),
                 Some(()) = rx.config.recv() => reload_at = Some(Instant::now() + RELOAD_DEBOUNCE),
                 Some(Notice::Panic) = rx.remap.recv() => self.stop_remap(REMAP_PANIC),
@@ -490,6 +479,28 @@ impl Daemon {
                 }
                 _ = sweep.tick() => self.sweep(),
                 _ = tokio::signal::ctrl_c() => self.quit = true,
+            }
+        }
+    }
+
+    fn on_launcher(&mut self, event: LauncherEvent) {
+        match event {
+            LauncherEvent::Launch(id) => launch::start_app(&id, false),
+            LauncherEvent::LaunchAsAdmin(id) => launch::start_app(&id, true),
+            LauncherEvent::Run(line) => launch::exec(&line),
+            LauncherEvent::Dispatch(command) => self.run_command(command),
+            LauncherEvent::Tray { key, click, at } => {
+                if !self.registry.click(key, click, at) {
+                    tracing::debug!("the tray icon has gone");
+                }
+            }
+            LauncherEvent::System(action) => self.run_system(action),
+            // Windows hands focus to a window of another monitor when the launcher closes over an
+            // empty one; the focused monitor stays where it was.
+            LauncherEvent::Closing => {
+                if self.desktops.current_ref().focused().is_none() {
+                    self.defocused_at = Some(Instant::now());
+                }
             }
         }
     }
