@@ -28,6 +28,11 @@ impl Expected {
         self.at = Some(Instant::now());
     }
 
+    /// Whether one is still expected.
+    pub(super) fn is_pending(&self) -> bool {
+        self.count > 0 && self.at.is_some_and(|at| at.elapsed() < SELF_EVENT_WINDOW)
+    }
+
     /// Consumes one expected event, if there is a recent one. A stale expectation is dropped.
     pub(super) fn consume(&mut self) -> bool {
         let fresh = self.count > 0 && self.at.is_some_and(|at| at.elapsed() < SELF_EVENT_WINDOW);

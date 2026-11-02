@@ -73,7 +73,13 @@ impl Daemon {
         // Keep our notion of focus (and the highlight) truthful when Windows said no.
         if focus_refused && !self.resyncing_focus {
             self.resyncing_focus = true;
-            if let Some(id) = foreground() {
+            // A window we are hiding may still be in front, and isn't where focus went.
+            let leaving = |d: &Self, id| {
+                d.tracked
+                    .get(&id)
+                    .is_some_and(|t| t.pending_hide.is_pending())
+            };
+            if let Some(id) = foreground().filter(|id| !leaving(self, *id)) {
                 self.on_foreground(id);
             }
             self.resyncing_focus = false;

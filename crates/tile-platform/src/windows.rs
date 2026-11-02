@@ -424,7 +424,13 @@ impl Windows {
 
     /// Brings a window to the foreground. Returns `false` if Windows refused.
     pub fn focus(&self, id: WindowId) -> bool {
-        self.handles.get(&id).is_some_and(focus_hwnd)
+        self.handles.get(&id).is_some_and(|hwnd| {
+            // Tile's own show is async and may not have run, and a hidden window can't take focus.
+            if !hwnd.IsWindowVisible() && !hwnd.IsIconic() {
+                hwnd.ShowWindow(co::SW::SHOWNA);
+            }
+            focus_hwnd(hwnd)
+        })
     }
 
     /// Asks the window to close, like clicking its close button.
