@@ -82,8 +82,60 @@ pub enum Command {
     /// Mute notification popups, or let them show again. Doesn't touch Windows' own notification
     /// settings; Action Center and Focus Assist are unaffected.
     ToggleDnd,
+    /// Change the wallpaper Tile paints in shell mode.
+    Wallpaper(WallpaperAction),
+    /// Open Tile's config file, its folder or its logs.
+    Open(OpenTarget),
     /// Quit Tile.
     Exit,
+}
+
+/// What `wallpaper` does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WallpaperAction {
+    /// The next image, in the cycle's order.
+    Next,
+    /// The image shown before this one.
+    Prev,
+    /// Any image not yet shown in this round, whatever the cycle's order.
+    Random,
+    /// Stop the timed cycle, or start it again.
+    Pause,
+    /// This image file.
+    Set(String),
+}
+
+impl fmt::Display for WallpaperAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Next => f.write_str("next"),
+            Self::Prev => f.write_str("prev"),
+            Self::Random => f.write_str("random"),
+            Self::Pause => f.write_str("pause"),
+            Self::Set(path) => f.write_str(path),
+        }
+    }
+}
+
+/// What `open` shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OpenTarget {
+    /// The config file, in your editor.
+    Config,
+    /// The folder the config file is in.
+    Folder,
+    /// The folder of Tile's logs.
+    Logs,
+}
+
+impl fmt::Display for OpenTarget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Config => "config",
+            Self::Folder => "folder",
+            Self::Logs => "logs",
+        })
+    }
 }
 
 /// A native virtual desktop: zero-based index, or relative to the current one.
@@ -159,6 +211,8 @@ pub const DISPATCHERS: &[(&str, &str)] = &[
     ("toggleshell", ""),
     ("togglelog", ""),
     ("togglednd", ""),
+    ("wallpaper", "<next|prev|random|pause|image path>"),
+    ("open", "<config|folder|logs>"),
     ("exit", ""),
 ];
 
@@ -181,6 +235,8 @@ impl Command {
                 | Self::ToggleShell
                 | Self::ToggleLog
                 | Self::ToggleDnd
+                | Self::Wallpaper(_)
+                | Self::Open(_)
                 | Self::Exit
         )
     }
@@ -304,6 +360,28 @@ impl FromStr for Command {
             "toggleshell" => Self::ToggleShell,
             "togglelog" => Self::ToggleLog,
             "togglednd" => Self::ToggleDnd,
+            "wallpaper" => {
+                let arg = rest.ok_or_else(|| {
+                    ParseError::MissingArg(name.clone(), "next|prev|random|pause|image path")
+                })?;
+                Self::Wallpaper(match arg.to_ascii_lowercase().as_str() {
+                    "next" => WallpaperAction::Next,
+                    "prev" | "previous" => WallpaperAction::Prev,
+                    "random" => WallpaperAction::Random,
+                    "pause" | "resume" => WallpaperAction::Pause,
+                    _ => WallpaperAction::Set(arg.trim_matches('"').to_string()),
+                })
+            }
+            "open" => {
+                const EXPECTED: &str = "config|folder|logs";
+                let arg = rest.ok_or_else(|| ParseError::MissingArg(name.clone(), EXPECTED))?;
+                Self::Open(match arg.to_ascii_lowercase().as_str() {
+                    "config" => OpenTarget::Config,
+                    "folder" => OpenTarget::Folder,
+                    "logs" | "log" => OpenTarget::Logs,
+                    _ => return Err(ParseError::BadArg(name, arg.into(), EXPECTED)),
+                })
+            }
             "exit" => Self::Exit,
             _ => return Err(ParseError::Unknown(name)),
         })
@@ -361,6 +439,8 @@ impl fmt::Display for Command {
             Self::ToggleShell => f.write_str("toggleshell"),
             Self::ToggleLog => f.write_str("togglelog"),
             Self::ToggleDnd => f.write_str("togglednd"),
+            Self::Wallpaper(action) => write!(f, "wallpaper {action}"),
+            Self::Open(target) => write!(f, "open {target}"),
             Self::Exit => f.write_str("exit"),
         }
     }
@@ -392,6 +472,11 @@ mod tests {
             "launcher",
             "cyclenext",
             "togglednd",
+            "wallpaper next",
+            "wallpaper prev",
+            "wallpaper pause",
+            r"wallpaper C:\Pictures\pic ture.png",
+            "open logs",
         ] {
             let cmd: Command = input.parse().unwrap();
             assert_eq!(cmd.to_string(), input);

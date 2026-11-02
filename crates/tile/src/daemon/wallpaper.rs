@@ -8,6 +8,7 @@ use std::{
 };
 
 use tile_config::{CycleOrder, Wallpaper};
+use tile_core::WallpaperAction;
 use tokio::time::Instant;
 
 use super::Daemon;
@@ -17,11 +18,18 @@ const EXTENSIONS: &[&str] = &[
     "png", "jpg", "jpeg", "jfif", "bmp", "gif", "tif", "tiff", "webp", "heic", "heif", "avif",
 ];
 
-/// The image on show and the ones already shown in this round of a random cycle.
+/// How many earlier images `wallpaper prev` can step back through.
+const HISTORY: usize = 50;
+
+/// The image on show, the ones already shown in this round of a random cycle and the ones
+/// before it, newest last.
 #[derive(Default)]
 pub(super) struct Shown {
     current: Option<PathBuf>,
     played: HashSet<PathBuf>,
+    history: Vec<PathBuf>,
+    /// The timed cycle is stopped until `wallpaper pause` again or a reload.
+    paused: bool,
 }
 
 /// The images in `directory` (and the folders under it, if `recursive`), by path. Symlinked
@@ -151,13 +159,48 @@ impl Daemon {
         self.show_wallpaper();
     }
 
-    /// The timer fired: moves on to the next image.
-    pub(super) fn cycle_wallpaper(&mut self) {
-        let order = self.wallpaper_config().cycle.order;
-        let candidates = self.wallpaper_images();
+    /// Changes the image, from the timer or a `wallpaper` command. Does nothing unless Tile is
+    /// painting the desktop.
+    pub(super) fn change_wallpaper(&mut self, action: WallpaperAction) {
+        if self.backdrop.is_none() {
+            tracing::debug!("wallpaper: Tile isn't painting the desktop");
+            return;
+        }
+        let configured = self.wallpaper_config().cycle.order;
         let mut shown = std::mem::take(&mut self.shown);
-        if let Some(next) = pick(order, &candidates, &mut shown) {
+        let (next, back) = match &action {
+            WallpaperAction::Next => (
+                pick(configured, &self.wallpaper_images(), &mut shown),
+                false,
+            ),
+            WallpaperAction::Random => (
+                pick(CycleOrder::Random, &self.wallpaper_images(), &mut shown),
+                false,
+            ),
+            WallpaperAction::Prev => (shown.history.pop(), true),
+            WallpaperAction::Set(path) => (
+                Path::new(path).is_file().then(|| PathBuf::from(path)),
+                false,
+            ),
+            WallpaperAction::Pause => {
+                shown.paused = !shown.paused;
+                self.shown = shown;
+                self.schedule_wallpaper();
+                return;
+            }
+        };
+        if let Some(next) = next {
             tracing::debug!("wallpaper: {}", next.display());
+            if let Some(current) = shown.current.take()
+                && !back
+                && current != next
+            {
+                if shown.history.len() == HISTORY {
+                    shown.history.remove(0);
+                }
+                shown.history.push(current);
+            }
+            shown.played.insert(next.clone());
             shown.current = Some(next);
         }
         self.shown = shown;
@@ -175,8 +218,8 @@ impl Daemon {
     /// Sets when the wallpaper next changes, if it cycles.
     fn schedule_wallpaper(&mut self) {
         let cycle = &self.wallpaper_config().cycle;
-        self.wallpaper_at =
-            (self.backdrop.is_some() && cycle.enabled).then(|| Instant::now() + cycle.interval());
+        self.wallpaper_at = (self.backdrop.is_some() && cycle.enabled && !self.shown.paused)
+            .then(|| Instant::now() + cycle.interval());
     }
 }
 

@@ -108,5 +108,7 @@ A `binds` value is `<dispatcher> [arguments]`. `tile dispatch` runs the same one
 | `toggletile` / `toggleremap` | pause or resume the window manager / the key remapper on its own, like the tray's Tile and Remap items |
 | `toggleshell` / `togglelog` | switch [shell mode](shell.md) / logging on or off, like the tray's Shell and Log items |
 | `togglednd` | mute or unmute notification popups, without touching Windows' own notification settings |
+| `wallpaper <next\|prev\|random\|pause\|path>` | in [shell mode](shell.md#the-desktop): show the next, the previous or a random image, stop or restart the timed change, or show this image file |
+| `open <config\|folder\|logs>` | open the config file, the folder it is in, or the logs folder |
 
 Directions can also be written `left`, `right`, `up` and `down`.

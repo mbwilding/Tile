@@ -8,8 +8,8 @@ use windows_sys::Win32::{
         NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
     },
     UI::WindowsAndMessaging::{
-        GetClassNameW, GetWindowThreadProcessId, IsWindow, PostMessageW, SC_CLOSE, WM_APP,
-        WM_SYSCOMMAND,
+        GetClassNameW, GetWindowThreadProcessId, HWND_BROADCAST, IsWindow, PostMessageW, SC_CLOSE,
+        SC_MONITORPOWER, WM_APP, WM_SYSCOMMAND,
     },
 };
 
@@ -32,6 +32,13 @@ pub fn post_close(hwnd: isize) -> bool {
     // SAFETY: posting a message with no pointers; Windows validates the handle and fails for
     // one that isn't a window.
     unsafe { PostMessageW(hwnd as *mut c_void, WM_SYSCOMMAND, SC_CLOSE as usize, 0) != 0 }
+}
+
+/// Turns every monitor off until the next input, as the power button's display-off does.
+pub fn turn_off_display() -> bool {
+    // SAFETY: posting a message with no pointers to every top-level window; the `2` asks for the
+    // monitors to power off.
+    unsafe { PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER as usize, 2) != 0 }
 }
 
 /// Posts `WM_APP + offset` to the window `hwnd`, to wake its thread from another one.

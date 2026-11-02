@@ -584,7 +584,13 @@ fn run(
                         && matches!(
                             &event,
                             LauncherEvent::System(a)
-                                if !matches!(a, Action::Open(_) | Action::Power(_))
+                                if !matches!(
+                                    a,
+                                    Action::Open(_)
+                                        | Action::Power(_)
+                                        | Action::Tile(_)
+                                        | Action::DisplayOff
+                                )
                         );
                     if stays {
                         let _ = events.send(event);

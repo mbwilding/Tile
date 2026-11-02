@@ -49,7 +49,7 @@ pub fn apply(action: &Action) -> bool {
         Action::SetRadio(radio, on) => sys::set_radio(*radio, *on),
         Action::WifiConnect(profile) => wifi::connect(profile),
         Action::WifiDisconnect => wifi::disconnect(),
-        Action::Open(_) | Action::Power(_) => false,
+        Action::Open(_) | Action::Power(_) | Action::Tile(_) | Action::DisplayOff => false,
     }
 }
 

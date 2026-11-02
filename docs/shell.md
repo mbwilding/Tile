@@ -85,7 +85,19 @@ wallpaper:
     order: random
 ```
 
-It is a setting in the config only, with nothing for it in the tray or the launcher. It doesn't
+Change it by hand with the `wallpaper` dispatcher, in a bind, `tile dispatch` or the launcher
+(**Next wallpaper** and the rows after it, or type `wallpaper next`):
+
+| Command | Does |
+| --- | --- |
+| `wallpaper next` | the next image, in the cycle's `order` |
+| `wallpaper prev` | the image shown before this one (the last 50 are kept) |
+| `wallpaper random` | an image not yet shown in this round, whatever the `order` |
+| `wallpaper pause` | stops the timed change, or starts it again |
+| `wallpaper C:\Pictures\a.png` | that image file |
+
+A change by hand keeps the timer going from that moment. The pause and the history last until
+the config is reloaded or Tile restarts. It doesn't
 touch the wallpaper Windows has saved, so that is back as it was with Explorer. With Explorer
 running Tile paints nothing.
 

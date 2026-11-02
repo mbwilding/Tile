@@ -1,18 +1,25 @@
 //! Running dispatchers and launcher actions.
 
 use std::path::Path;
-use tile_core::{Command, Effect, MonitorInfo, Rect, WindowId};
+use tile_core::{Command, Effect, MonitorInfo, OpenTarget, Rect, WindowId};
 use tile_launcher::system::{Action, Power};
 use tile_platform::{close_foreground, cursor_pos, desktops as vd, focus_exe, set_cursor_pos};
 
 use super::Daemon;
-use crate::launch;
+use crate::{launch, paths};
 
 impl Daemon {
     /// Does what a system row of the launcher asks for.
     pub(super) fn run_system(&mut self, action: Action) {
         if action == Action::Power(Power::Lock) {
             self.run_command(Command::Lock);
+        } else if let Action::Tile(line) = action {
+            match line.parse() {
+                Ok(command) => self.run_command(command),
+                Err(e) => tracing::warn!("`{line}`: {e}"),
+            }
+        } else if action == Action::DisplayOff {
+            tile_sys::turn_off_display();
         } else if let Some(line) = tile_launcher::system_command_line(&action) {
             launch::exec(&line);
         } else {
@@ -27,6 +34,19 @@ impl Daemon {
             if let Err(e) = spawned {
                 tracing::warn!("couldn't do {what}: {e}");
             }
+        }
+    }
+
+    /// Opens the config file, its folder or the logs.
+    fn open_target(&self, target: OpenTarget) {
+        match target {
+            OpenTarget::Config => launch::open(&self.config_path),
+            OpenTarget::Folder => {
+                if let Some(folder) = self.config_path.parent() {
+                    launch::open(folder);
+                }
+            }
+            OpenTarget::Logs => launch::open(&paths::log_dir()),
         }
     }
 
@@ -132,6 +152,8 @@ impl Daemon {
             Command::ToggleShell => self.toggle_shell(),
             Command::ToggleLog => self.toggle_logging(),
             Command::ToggleDnd => self.toggle_dnd(),
+            Command::Wallpaper(action) => self.change_wallpaper(action),
+            Command::Open(target) => self.open_target(target),
             Command::Exit => self.quit = true,
             Command::Exec(line) => launch::exec(&line),
             Command::ExecHidden(line) => launch::exec_hidden(&line),

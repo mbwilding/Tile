@@ -17,7 +17,7 @@ pub mod state;
 
 use serde::{Deserialize, Serialize};
 
-pub use command::Command;
+pub use command::{Command, OpenTarget, WallpaperAction};
 pub use desktops::{DesktopId, Desktops};
 pub use geometry::{Direction, Rect};
 pub use layout::{LayoutKind, LayoutSettings};

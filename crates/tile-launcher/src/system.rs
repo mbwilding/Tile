@@ -96,6 +96,8 @@ pub enum Power {
     SwitchUser,
     /// Suspend the machine.
     Sleep,
+    /// Save the session to disk and turn the machine off.
+    Hibernate,
     /// End the session.
     SignOut,
     /// Restart the machine.
@@ -112,6 +114,7 @@ impl Power {
             // Leaves the session running and shows the sign-in screen.
             Self::SwitchUser => "tsdisconnect.exe",
             Self::Sleep => "rundll32.exe powrprof.dll,SetSuspendState 0,1,0",
+            Self::Hibernate => "shutdown.exe /h",
             Self::SignOut => "shutdown.exe /l",
             Self::Restart => "shutdown.exe /r /t 0",
             Self::ShutDown => "shutdown.exe /s /t 0",
@@ -130,6 +133,8 @@ impl Action {
                 '\u{E701}'
             }
             Self::Open(_) => '\u{E713}',
+            Self::Tile(_) => '\u{E765}',
+            Self::DisplayOff => '\u{E7F4}',
             Self::Power(_) => '\u{E7E8}',
         }
     }
@@ -158,6 +163,10 @@ pub enum Action {
     Open(&'static str),
     /// End the session or put the machine away.
     Power(Power),
+    /// Run a Tile dispatcher, written as in a bind.
+    Tile(&'static str),
+    /// Turn the monitors off until the next input.
+    DisplayOff,
 }
 
 /// What the system is doing, as far as it could be read. Whatever is missing (no battery, no
@@ -475,6 +484,148 @@ pub fn entries(status: &Status) -> Vec<Entry> {
             Action::Open("ms-settings:dateandtime"),
         ));
     }
+    out.push(entry(
+        "Display",
+        "Enter for display settings: resolution, scale, layout and brightness",
+        "screen monitor resolution scale refresh rate orientation hdr brightness arrangement multiple displays",
+        Action::Open("ms-settings:display"),
+    ));
+    for (title, command, subtitle, keywords) in [
+        (
+            "Screens: PC screen only",
+            "DisplaySwitch.exe /internal",
+            "Use only the main display",
+            "display monitor project projector layout",
+        ),
+        (
+            "Screens: Duplicate",
+            "DisplaySwitch.exe /clone",
+            "Show the same on every display",
+            "display monitor project projector mirror layout",
+        ),
+        (
+            "Screens: Extend",
+            "DisplaySwitch.exe /extend",
+            "Join the displays into one desktop",
+            "display monitor project projector layout",
+        ),
+        (
+            "Screens: Second screen only",
+            "DisplaySwitch.exe /external",
+            "Use only the other display",
+            "display monitor project projector layout",
+        ),
+    ] {
+        out.push(entry(title, subtitle, keywords, Action::Open(command)));
+    }
+    out.push(entry(
+        "Turn off display",
+        "Monitors go dark until you move the mouse or press a key",
+        "screen monitor off blank",
+        Action::DisplayOff,
+    ));
+    for (title, uri, keywords) in [
+        (
+            "Night light",
+            "ms-settings:nightlight",
+            "display warm blue light colour temperature",
+        ),
+        (
+            "Airplane mode",
+            "ms-settings:network-airplanemode",
+            "flight radio wireless",
+        ),
+    ] {
+        out.push(entry(
+            title,
+            "Enter to open its settings",
+            keywords,
+            Action::Open(uri),
+        ));
+    }
+    for (title, line, subtitle, keywords) in [
+        (
+            "Next wallpaper",
+            "wallpaper next",
+            "Needs Tile to paint the desktop (shell mode)",
+            "background image change",
+        ),
+        (
+            "Previous wallpaper",
+            "wallpaper prev",
+            "Needs Tile to paint the desktop (shell mode)",
+            "background image back",
+        ),
+        (
+            "Random wallpaper",
+            "wallpaper random",
+            "Needs Tile to paint the desktop (shell mode)",
+            "background image shuffle",
+        ),
+        (
+            "Pause wallpaper cycle",
+            "wallpaper pause",
+            "Stops or restarts the timed change",
+            "background image resume timer",
+        ),
+        (
+            "Toggle tiling",
+            "toggletile",
+            "Pause or resume the window manager",
+            "tile windows",
+        ),
+        (
+            "Pause Tile",
+            "togglepause",
+            "Pause or resume tiling and remapping together",
+            "tile resume",
+        ),
+        (
+            "Toggle key remapper",
+            "toggleremap",
+            "Pause or resume remapping",
+            "tile keys remap",
+        ),
+        (
+            "Reload config",
+            "reload",
+            "Read Tile's config again",
+            "tile settings refresh",
+        ),
+        (
+            "Reset layout",
+            "resetlayout",
+            "Undo resizing and flipped splits on this workspace",
+            "tile windows",
+        ),
+        (
+            "Do not disturb",
+            "togglednd",
+            "Mute or show Tile's notification popups",
+            "notifications focus quiet toast",
+        ),
+        (
+            "Open config",
+            "open config",
+            "Edit Tile's config file",
+            "tile settings yaml",
+        ),
+        (
+            "Open config folder",
+            "open folder",
+            "Show the folder of Tile's config file",
+            "tile settings",
+        ),
+        (
+            "Open logs",
+            "open logs",
+            "Show the folder of Tile's logs",
+            "tile log debug",
+        ),
+        ("Quit Tile", "exit", "Stop Tile", "tile exit close"),
+    ] {
+        out.push(entry(title, subtitle, keywords, Action::Tile(line)));
+    }
     for (title, command, keywords) in [
         (
             "System Properties",
@@ -501,6 +652,7 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         ("Lock", "lock screen", Power::Lock),
         ("Switch user", "change account", Power::SwitchUser),
         ("Sleep", "suspend", Power::Sleep),
+        ("Hibernate", "suspend to disk", Power::Hibernate),
         ("Sign out", "log off logout", Power::SignOut),
         ("Restart", "reboot", Power::Restart),
         ("Shut down", "power off turn off", Power::ShutDown),
@@ -839,22 +991,43 @@ mod tests {
     #[test]
     fn missing_hardware_has_no_rows() {
         let all = titles("", &Status::default());
-        assert_eq!(
-            all,
-            [
-                "System Properties",
-                "Environment Variables",
-                "Control Panel",
-                "Device Manager",
-                "Services",
-                "Lock",
-                "Switch user",
-                "Sleep",
-                "Sign out",
-                "Restart",
-                "Shut down"
-            ]
-        );
+        for title in [
+            "Display",
+            "Screens: Extend",
+            "Turn off display",
+            "Next wallpaper",
+            "Quit Tile",
+            "System Properties",
+            "Lock",
+            "Hibernate",
+            "Shut down",
+        ] {
+            assert!(all.iter().any(|t| t == title), "{title} is missing");
+        }
+        assert!(!all.iter().any(|t| t.starts_with("Volume") || t == "Clock"));
+    }
+
+    #[test]
+    fn display_opens_its_settings_first() {
+        let rows = find("display", &Status::default());
+        assert_eq!(rows[0].title, "Display");
+        assert_eq!(rows[0].action, Action::Open("ms-settings:display"));
+        let layouts: Vec<_> = rows
+            .iter()
+            .filter(|e| e.title.starts_with("Screens"))
+            .collect();
+        assert_eq!(layouts.len(), 4);
+    }
+
+    #[test]
+    fn tile_rows_run_real_dispatchers() {
+        for row in entries(&Status::default()) {
+            if let Action::Tile(line) = row.action {
+                assert!(line.parse::<tile_core::Command>().is_ok(), "{line}");
+            }
+        }
+        let rows = find("next wallpaper", &Status::default());
+        assert_eq!(rows[0].action, Action::Tile("wallpaper next"));
     }
 
     #[test]

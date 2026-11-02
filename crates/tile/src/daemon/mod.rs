@@ -23,7 +23,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use tile_config::Loaded;
-use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, WindowId};
+use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, WallpaperAction, WindowId};
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
@@ -443,7 +443,7 @@ impl Daemon {
             tokio::select! {
                 () = until(self.cursor_check_at) => self.check_cursor(),
                 () = until(self.win_l.relock_at) => self.relock(),
-                () = until(self.wallpaper_at) => self.cycle_wallpaper(),
+                () = until(self.wallpaper_at) => self.change_wallpaper(WallpaperAction::Next),
                 () = until(self.heal_at) => {
                     self.heal_at = None;
                     self.heal_borders();

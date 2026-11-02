@@ -116,7 +116,15 @@ what you type matches them (`vol`, `bluetooth`, `shut`). The bar's buttons list 
 | **Battery: 80%** | opens the battery settings (only on a machine with a battery) |
 | **Clock** | opens the date and time settings |
 | **System Properties**, **Environment Variables**, **Control Panel**, **Device Manager**, **Services** | open the classic Windows tools that Start's app list doesn't have |
-| **Lock**, **Sleep** | do it now |
+| **Display** (type `display`) | opens the display settings: resolution, scale, layout and brightness |
+| **Screens: PC screen only**, **Duplicate**, **Extend**, **Second screen only** | set how the displays are used, as Win+P does |
+| **Turn off display** | switches the monitors off until the next input |
+| **Night light**, **Airplane mode** | open their Settings page |
+| **Next wallpaper**, **Previous wallpaper**, **Random wallpaper**, **Pause wallpaper cycle** | change the [desktop](shell.md#the-desktop)'s wallpaper (only while Tile paints it) |
+| **Toggle tiling**, **Pause Tile**, **Toggle key remapper**, **Reload config**, **Reset layout**, **Do not disturb** | run the dispatcher of that name |
+| **Open config**, **Open config folder**, **Open logs** | open them |
+| **Quit Tile** | stops Tile |
+| **Lock**, **Sleep**, **Hibernate** | do it now |
 | **Sign out**, **Restart**, **Shut down** | do it now |
 
 The rows are read in the background when the launcher opens, so the current values show up a

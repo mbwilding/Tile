@@ -59,6 +59,8 @@ impl State {
             | Command::ToggleShell
             | Command::ToggleLog
             | Command::ToggleDnd
+            | Command::Wallpaper(_)
+            | Command::Open(_)
             | Command::Exit => Vec::new(),
         }
     }
