@@ -142,9 +142,10 @@ pub struct Listener {
 }
 
 impl Listener {
-    /// Starts polling, calling `on_notification` for each notification not already seen, oldest
-    /// first. Returns `None` if Tile doesn't currently have permission ([`access_status`]
-    /// should be checked, and [`request_access`] asked for, before calling this).
+    /// Starts polling, calling `on_notification` for each notification posted from now on, oldest
+    /// first; whatever is already in Action Center when this starts is not replayed. Returns
+    /// `None` if Tile doesn't currently have permission ([`access_status`] should be checked, and
+    /// [`request_access`] asked for, before calling this).
     pub fn spawn(on_notification: impl Fn(Notification) + Send + 'static) -> Option<Self> {
         let _com = Com::init();
         if access_status() != Some(Access::Allowed) {
@@ -173,7 +174,9 @@ fn run(stopped: &mpsc::Receiver<()>, on_notification: &(impl Fn(Notification) + 
     let Some(listener) = UserNotificationListener::Current().ok() else {
         return;
     };
-    let mut seen = HashSet::new();
+    // Notifications already sitting in Action Center when Tile starts watching are not new;
+    // only pop up the ones that arrive from here on.
+    let mut seen: HashSet<u32> = poll(&listener).into_iter().map(|(id, _)| id).collect();
     loop {
         for (id, notification) in poll(&listener) {
             if seen.insert(id) {
