@@ -29,10 +29,7 @@ use tile_platform::{
     desktops::{self as vd, DesktopChange},
     foreground,
 };
-use tile_shell::{
-    consent::Prompts,
-    notify::{Host, Registry},
-};
+use tile_shell::notify::{Host, Registry};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     time::{Instant, MissedTickBehavior, interval, sleep_until},
@@ -118,9 +115,6 @@ struct Daemon {
     taskbar_noted: bool,
     /// The black desktop Tile paints while it hosts the notification area.
     backdrop: Option<Backdrop>,
-    /// Brings up UAC prompts that wait for a taskbar click, while Tile hosts the notification
-    /// area.
-    prompts: Option<Prompts>,
     /// The window manager is paused (tray "Tile").
     paused: bool,
     /// The key remapper is paused (tray "Remap").
@@ -292,7 +286,6 @@ pub async fn run(
         shell_on: saved.shell,
         taskbar_noted: false,
         backdrop: None,
-        prompts: None,
         paused: !saved.tile,
         remap_paused: !saved.remap,
         quit: false,
