@@ -1,26 +1,59 @@
 //! Popups for Windows toast notifications, read with `UserNotificationListener`
-//! (see [`tile_sys::notifications`]). Off by default: `notifications.enabled` turns it on.
+//! (see [`tile_sys::notifications`]). `notifications.enabled` chooses when: left unset, only
+//! while Tile hosts the shell, since that is when Explorer's own toasts don't show.
 
-use tile_sys::notifications::{self, Notification};
+use tile_sys::notifications::{self, Access, Notification};
 
 use super::Daemon;
 
 impl Daemon {
-    /// Starts or stops the notification listener to match `notifications.enabled`, and applies
-    /// the popup's current settings either way.
+    /// Whether notification popups should be running right now.
+    fn notifications_wanted(&self) -> bool {
+        self.loaded
+            .config
+            .notifications
+            .enabled
+            .unwrap_or_else(|| self.notify_host.is_some())
+    }
+
+    /// Applies the popup's current settings, and starts or stops the listener to match
+    /// [`Self::notifications_wanted`]. Called after a config change and whenever shell hosting
+    /// starts or stops, so this must stay cheap and quiet when there is nothing new to do.
     pub(super) fn update_notifications(&mut self) {
-        self.toast.set_settings(super::toast_settings(&self.loaded));
-        if !self.loaded.config.notifications.enabled {
+        let wanted = self.notifications_wanted();
+        self.toast
+            .set_settings(super::toast_settings(&self.loaded, wanted));
+        if wanted {
+            self.start_notifications();
+        } else {
             self.notify_listener = None;
-            return;
+            self.notify_denied = false;
         }
+    }
+
+    /// Starts the listener if it isn't already running. Windows is only asked for permission
+    /// once a run, and a refusal is only logged once, so this is safe to call on every retry.
+    fn start_notifications(&mut self) {
         if self.notify_listener.is_some() {
             return;
         }
-        // The first time this is turned on, Windows may ask the user once; after that it
-        // remembers the answer itself, the same as any other `GetAccessStatus` caller.
-        if notifications::access_status() == Some(notifications::Access::Unspecified) {
-            notifications::request_access();
+        match notifications::access_status() {
+            Some(Access::Unspecified) => {
+                if !self.notify_access_requested {
+                    self.notify_access_requested = true;
+                    // `request_access` blocks until the user answers a prompt, if Windows shows
+                    // one, so it must not run on the daemon's own thread.
+                    std::thread::spawn(|| {
+                        notifications::request_access();
+                    });
+                }
+                return;
+            }
+            Some(Access::Denied) | None => {
+                self.warn_notifications_denied();
+                return;
+            }
+            Some(Access::Allowed) => {}
         }
         let tx = self.notify_tx.clone();
         match notifications::Listener::spawn(move |notification| {
@@ -28,12 +61,20 @@ impl Daemon {
         }) {
             Some(listener) => {
                 self.notify_listener = Some(listener);
+                self.notify_denied = false;
                 tracing::info!("notification popups started");
             }
-            None => tracing::warn!(
-                "notifications.enabled is on, but Tile doesn't have permission to read \
+            None => self.warn_notifications_denied(),
+        }
+    }
+
+    fn warn_notifications_denied(&mut self) {
+        if !self.notify_denied {
+            self.notify_denied = true;
+            tracing::warn!(
+                "wanted notification popups, but Tile doesn't have permission to read \
                  notifications (check Settings, Notifications, for Tile)"
-            ),
+            );
         }
     }
 

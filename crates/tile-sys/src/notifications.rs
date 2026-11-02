@@ -8,9 +8,10 @@
 //!   notification content. The `userNotificationListener` restricted capability that Microsoft's
 //!   docs describe is a Store packaging concept; an unpackaged process already runs with the
 //!   signed-in user's full rights, which this read-only API apparently accepts in place of it.
-//! - The live `NotificationChanged` event does not: subscribing fails with
-//!   `0x80070490` ("Element not found"), packaged app or not, which looks like it needs a
-//!   per-package registration this process has none of. So this module polls
+//! - The live `NotificationChanged` event does not: subscribing fails outright with
+//!   `0x80070490` ("Element not found"). That matches reports elsewhere of the same error for a
+//!   packaged app too, which would mean it needs some other per-package registration, not just an
+//!   identity, but only the unpackaged case was tested here. So this module polls
 //!   `GetNotificationsAsync` instead and works out what is new by id.
 
 use std::{

@@ -113,5 +113,7 @@ impl Daemon {
             }
             _ => {}
         }
+        // Notifications' own default follows whether we ended up hosting just now.
+        self.update_notifications();
     }
 }

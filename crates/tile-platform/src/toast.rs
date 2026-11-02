@@ -28,6 +28,10 @@ const BODY_LINES: i32 = 3;
 /// The `notifications` config section, with its look resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToastSettings {
+    /// Whether a popup should be shown at all right now. This is the caller's resolved decision,
+    /// not `config.enabled` directly: that setting can be unset, deferring to whether the shell
+    /// is hosted, which this module has no way to know.
+    pub enabled: bool,
     /// The section as configured.
     pub config: Config,
     /// Its look, with the theme filled in.
@@ -248,7 +252,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                 match request {
                     Request::Show(notification, area) => {
                         let mut s = state.borrow_mut();
-                        if !s.config().enabled {
+                        if !s.settings.enabled {
                             continue;
                         }
                         let was_empty = s.queue.is_empty();

@@ -108,7 +108,7 @@ workspace_indicator:
   # foreground: "#1e1e2e" # unset follows theme.accent_foreground
 
 notifications:
-  enabled: false # show a popup for each new Windows toast notification
+  enabled: ~ # unset follows shell mode; true/false always shows or never does
   position: bottom_right # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
   gap: 16 # px from the edges, unused for center
   width: 340 # px at 100% scaling

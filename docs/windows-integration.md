@@ -127,24 +127,30 @@ focus, and Tile never tiles it. It fades by stepping the window's layered alpha 
 
 ## Notifications
 
-[`notifications.enabled`](configuration.md#notifications) shows a popup, bottom-right by default,
-for each new Windows toast notification. It reads them with
-`Windows.UI.Notifications.Management.UserNotificationListener`, the API behind Focus Assist's
-priority list and notification-reading apps, instead of Explorer's `shellexperiencehost.exe`
-popups, which only the registered shell can drive and which Tile doesn't reimplement (see
-[shell mode](shell.md#what-you-give-up)).
+A popup, bottom-right by default, shows for each new Windows toast notification while Tile hosts
+the shell, since that is when Explorer's own `shellexperiencehost.exe` popups don't show (only the
+registered shell can drive them, and Tile doesn't reimplement that; see
+[shell mode](shell.md#what-you-give-up)). [`notifications.enabled`](configuration.md#notifications)
+overrides the default: `true` always shows popups, `false` never does, even while hosting.
 
-This was checked by hand before writing any of it: from an unpackaged, unsigned build with no
-app manifest or package identity, `GetAccessStatus` reports `Allowed` outright and
-`GetNotificationsAsync` returns full notification content (app, title, body). Microsoft's docs
-describe a `userNotificationListener` restricted capability, normally a Store packaging concern,
-but an unpackaged desktop process already runs with the signed-in user's full rights, which this
-read-only API accepts in place of it; no sparse MSIX package or Store listing was needed. The
-live `NotificationChanged` event is a different story: subscribing to it fails outright with
-`0x80070490` ("Element not found"), which looks like it needs a per-package registration an
-unpackaged process has none of. So Tile polls `GetNotificationsAsync` every two seconds instead
-and works out what is new by id; new notifications land as a popup within that couple of
-seconds, not instantly.
+Tile reads notifications with
+`Windows.UI.Notifications.Management.UserNotificationListener`, the API behind Focus Assist's
+priority list and notification-reading apps, rather than Explorer's path. This was checked by
+hand before writing any of it: from an unpackaged, unsigned build with no app manifest or package
+identity, `GetAccessStatus` reports `Allowed` outright and `GetNotificationsAsync` returns full
+notification content (app, title, body). Microsoft's docs describe a `userNotificationListener`
+restricted capability, normally a Store packaging concern, but an unpackaged desktop process
+already runs with the signed-in user's full rights, which this read-only API accepts in place of
+it; no sparse MSIX package or Store listing was needed.
+
+The live `NotificationChanged` event is a different story: subscribing to it fails outright with
+`0x80070490` ("Element not found"). Others have reported the same for a packaged app, which would
+mean it needs some other per-package registration, not just an identity, but that wasn't tested
+here; only the unpackaged case was. So Tile polls `GetNotificationsAsync` every two seconds
+instead and works out what is new by id; new notifications land as a popup within that couple of
+seconds, not instantly. Two seconds is a deliberate trade-off, not a technical floor: it is one
+cheap, asynchronous WinRT call, so a shorter interval is possible if the delay matters more than
+the (small) extra overhead.
 
 The popup window is a topmost layered popup on a thread of its own, the same shape as the
 [workspace indicator](#the-workspace-indicator): it never steals focus, and a click dismisses it
