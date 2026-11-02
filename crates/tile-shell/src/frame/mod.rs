@@ -59,6 +59,33 @@ pub(crate) fn start() {
     }
 }
 
+/// Makes every internal call framing makes, once, on a throwaway window and frame, for
+/// [`crate::probe`]. A wrong vtable slot either crashes the process or fails a check here.
+pub(crate) fn probe() -> Result<(), crate::probe::Error> {
+    use crate::probe::Error;
+    com::join_apartment();
+    let shell = Shell::take().map_err(Error::Inconclusive)?;
+    let manager = com::frame_manager().map_err(Error::Failed)?;
+    let frame = com::create_frame(&manager).map_err(Error::Failed)?;
+    let window =
+        com::frame_window(&frame).ok_or_else(|| Error::Failed("the frame has no window".into()))?;
+    let class = crate::win::class_name(window);
+    if class != "ApplicationFrameWindow" {
+        return Err(Error::Failed(format!("a frame's window is a {class}")));
+    }
+    // What these answer for a window that is no app doesn't matter; that they return does.
+    let _ = com::present(&frame, shell.window, "Tile.Probe");
+    let _ = com::frames(&manager);
+    let _events = com::listen(&manager);
+    if let Some(statics) = com::window_statics() {
+        com::set_bounds(&statics, window, 100, 100);
+    }
+    shell.uncloak(&[shell.window]);
+    com::resume("Tile.Probe_8wekyb3d8bbwe");
+    com::destroy_frame(&manager, &frame);
+    Ok(())
+}
+
 /// A Store app window and the frame it sits in.
 struct Frame {
     /// When the app was asked to close.

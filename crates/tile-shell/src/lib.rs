@@ -9,6 +9,7 @@ mod frame;
 mod icon;
 mod immersive;
 pub mod notify;
+pub mod probe;
 mod thread;
 pub mod uwp;
 mod win;

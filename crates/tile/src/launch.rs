@@ -157,7 +157,7 @@ pub async fn serve_for_tile() -> anyhow::Result<bool> {
     let server = LaunchServer::bind()?;
     tracing::info!("launcher started, waiting for Tile");
     // As the shell, this process answers for Store apps the way Explorer would.
-    tile_shell::uwp::start();
+    tile_shell::uwp::start(crate::shell_apps::verify);
     let mut serving = tokio::spawn(serve_requests(server));
     let deadline = Instant::now() + SHELL_WAIT;
     let mut seen = false;
@@ -191,7 +191,7 @@ pub async fn serve() -> anyhow::Result<()> {
     // Restarting Tile replaces the sign-in copy of this process with this one, so it answers for
     // Store apps whenever Tile is the shell.
     if tile_platform::is_sign_in_shell() {
-        tile_shell::uwp::start();
+        tile_shell::uwp::start(crate::shell_apps::verify);
     }
     serve_requests(server).await;
     tracing::info!("launcher stopped");

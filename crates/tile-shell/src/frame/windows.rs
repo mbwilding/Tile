@@ -63,6 +63,8 @@ type Enable = unsafe extern "system" fn(*const usize, i32) -> i32;
 pub(super) struct Shell {
     key: usize,
     enable: Enable,
+    /// The hidden window registered as the shell's.
+    pub(super) window: HWND,
 }
 
 impl Shell {
@@ -114,7 +116,11 @@ impl Shell {
         if unsafe { acquire(&raw mut key) } == 0 {
             return Err("Windows refused the Immersive App Management key".into());
         }
-        Ok(Self { key, enable })
+        Ok(Self {
+            key,
+            enable,
+            window,
+        })
     }
 
     /// Lifts the shell's cloak from `windows`.

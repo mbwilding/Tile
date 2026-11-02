@@ -10,7 +10,13 @@
 //! from a thread that belongs to a session. If an update changes any of it, [`start`] logs the
 //! failure and Store apps hang as before; nothing else is affected.
 
-use std::{ffi::c_void, mem::ManuallyDrop, ptr, thread};
+use std::{
+    ffi::c_void,
+    mem::ManuallyDrop,
+    ptr,
+    sync::atomic::{AtomicBool, Ordering},
+    thread,
+};
 
 use windows::{
     Win32::{
@@ -88,19 +94,34 @@ fn explorer_is_shell() -> bool {
     })
 }
 
+/// Set once the lifecycle manager exists and the session is about to run.
+static HOSTED: AtomicBool = AtomicBool::new(false);
+
+/// Whether [`host`] got as far as running the session.
+pub(crate) fn hosted() -> bool {
+    HOSTED.load(Ordering::Acquire)
+}
+
 /// Starts the Store app support on a thread of its own, unless Explorer is the shell and already
-/// does this. The thread runs for the life of the process.
-pub fn start() {
+/// does this. `check` runs first, on that thread; if it fails the support stays off and the
+/// reason is logged. The thread runs for the life of the process.
+pub fn start(check: fn() -> std::result::Result<(), String>) {
     if explorer_is_shell() {
         tracing::info!("Explorer is the shell; Store apps are left to it");
         return;
     }
-    crate::frame::start();
     let spawned = thread::Builder::new()
         .name("store apps".into())
-        .spawn(|| match host() {
-            Ok(()) => tracing::info!("the Store app host stopped"),
-            Err(e) => tracing::warn!("Store apps won't start without Explorer: {e}"),
+        .spawn(move || {
+            if let Err(e) = check() {
+                tracing::warn!("Store apps and Settings are off: {e}");
+                return;
+            }
+            crate::frame::start();
+            match host() {
+                Ok(()) => tracing::info!("the Store app host stopped"),
+                Err(e) => tracing::warn!("Store apps won't start without Explorer: {e}"),
+            }
         });
     if let Err(e) = spawned {
         tracing::warn!("couldn't start the Store app host: {e}");
@@ -129,7 +150,7 @@ pub fn activate(aumid: &str) -> std::result::Result<u32, String> {
 
 /// Makes a CoreMessaging session, creates the lifecycle manager from its thread, then runs the
 /// session, which returns only when the process ends.
-fn host() -> std::result::Result<(), String> {
+pub(crate) fn host() -> std::result::Result<(), String> {
     // SAFETY: takes no pointers.
     let started = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
     context(started, "starting the runtime")?;
@@ -166,6 +187,7 @@ fn host() -> std::result::Result<(), String> {
     let created = unsafe { statics.create(&mut manager) };
     context(created, "creating the lifecycle manager")?;
     tracing::info!("hosting Store app launches");
+    HOSTED.store(true, Ordering::Release);
     // The manager is kept until the session ends.
     let _manager = manager;
     // SAFETY: a call on the live session.

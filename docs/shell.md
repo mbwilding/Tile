@@ -136,6 +136,15 @@ then runs the session. Nothing else of Explorer runs.
 This is on whenever Tile is your sign-in shell, and it stands aside if
 Explorer owns the taskbar.
 
+All of this calls undocumented parts of Windows, which an update can move. So the first time the
+shell process starts on a build of Windows (and after Tile is updated), it runs the calls once in
+a throwaway process, `Tile.exe --probe-shell`, which makes a frame, the session and the manager
+and exits. If that passes, the answer is remembered in `%LOCALAPPDATA%\Tile\shell-compat.json`
+against the sizes and dates of the Windows files involved, and the support starts. If it crashes,
+fails or hangs, the support stays off, the log says why, and Settings and the Store behave as they
+do with no Explorer, rather than the shell process crashing. Delete the file to check again. If
+the check can't run (another process is already the shell), the support starts without it.
+
 A Store app's window starts hidden by the shell and has no title bar, so the same process also
 finds each new one (window events report it as it is created, shown or hidden, and a look over
 every window once a second catches any missed), asks `ApplicationFrameHost` for a frame (the window with the title bar and

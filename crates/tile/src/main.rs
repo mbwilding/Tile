@@ -9,6 +9,7 @@ mod logging;
 mod paths;
 mod remap;
 mod settings;
+mod shell_apps;
 mod task;
 
 use std::path::PathBuf;
@@ -36,6 +37,9 @@ struct Args {
     /// Internal: start programs for an elevated Tile, as the normal user.
     #[arg(long, hide = true)]
     launcher: bool,
+    /// Internal: try the Store app support's calls for the shell helper and exit with the result.
+    #[arg(long, hide = true)]
+    probe_shell: bool,
     /// Run as the Windows shell, as the tray's Shell switch sets up: host the notification area
     /// and start the sign-in programs, whether or not the tray's Shell switch is on.
     #[arg(long)]
@@ -62,6 +66,9 @@ fn main() -> anyhow::Result<()> {
     }
     // Started without a terminal (sign-in, a task, Explorer), there is no console to keep.
     tile_sys::detach_console();
+    if args.probe_shell {
+        shell_apps::probe_and_exit();
+    }
     if let Some(pid) = args.watchdog {
         watchdog(pid);
         return Ok(());
