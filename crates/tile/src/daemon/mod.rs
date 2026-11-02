@@ -92,6 +92,8 @@ struct Receivers {
     config: UnboundedReceiver<()>,
     remap: UnboundedReceiver<Notice>,
     notifications: UnboundedReceiver<Notification>,
+    /// A notification popup was clicked, so its app should come to the front.
+    clicks: UnboundedReceiver<Notification>,
 }
 
 struct Daemon {
@@ -272,6 +274,7 @@ pub async fn run(
     let (remap_tx, remap_rx) = mpsc::unbounded_channel();
     let (drag_tx, drags_rx) = mpsc::unbounded_channel();
     let (notify_tx, notifications_rx) = mpsc::unbounded_channel();
+    let (click_tx, clicks_rx) = mpsc::unbounded_channel();
 
     let (hooks, events) = WinEventHooks::install()
         .await
@@ -290,10 +293,15 @@ pub async fn run(
     );
     let indicator = Indicator::spawn(indicator_settings(&loaded));
     // Not hosting the shell yet at this point; `start_shell` below corrects it once it is known.
-    let toast = Toast::spawn(toast_settings(
-        &loaded,
-        loaded.config.notifications.enabled.unwrap_or(false),
-    ));
+    let toast = Toast::spawn(
+        toast_settings(
+            &loaded,
+            loaded.config.notifications.enabled.unwrap_or(false),
+        ),
+        move |notification| {
+            let _ = click_tx.send(notification);
+        },
+    );
     let _watcher = tile_config::watch(&config_path, move || {
         let _ = config_tx.send(());
     })
@@ -379,6 +387,7 @@ pub async fn run(
             config: config_rx,
             remap: remap_rx,
             notifications: notifications_rx,
+            clicks: clicks_rx,
         })
         .await;
 
@@ -458,6 +467,7 @@ impl Daemon {
                 Some(()) = rx.config.recv() => reload_at = Some(Instant::now() + RELOAD_DEBOUNCE),
                 Some(Notice::Panic) = rx.remap.recv() => self.stop_remap(REMAP_PANIC),
                 Some(notification) = rx.notifications.recv() => self.show_notification(notification),
+                Some(notification) = rx.clicks.recv() => self.open_clicked_notification(notification),
                 () = until(reload_at) => {
                     reload_at = None;
                     self.reload();

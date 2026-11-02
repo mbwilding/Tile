@@ -139,16 +139,25 @@ queued. `togglednd` mutes popups without touching Windows' own notification or F
 settings; [`notifications.filter`](configuration.md#notifications) does the same per app, or
 overrides one app's duration, by name.
 
-The popup shows the posting app's icon, the same one Windows shows for it elsewhere. Each
-notification carries the app's AUMID (`UserNotification.AppInfo().AppUserModelId()`), and the
-popup resolves its icon from `shell:AppsFolder\<aumid>` through `tile_shell::shell_icon`, the same
-`IShellItemImageFactory` lookup the [launcher](launcher.md) uses for its own rows, so both surfaces
-draw the identical icon for a given app rather than Tile having two icon-resolution paths. A
-notification with no AUMID, or an AUMID `shell_icon` can't resolve, shows with no icon, the same
-as a real app without one. Checked by hand with `scripts/send-test-toast.ps1`: Windows Terminal, a
-Win32 console app with a path-shaped AUMID, and most Store apps all resolved; a couple of
-system apps' own AUMIDs (`Windows.Defender.SecurityCenter`) did not, most likely because their
-real AUMID needs a suffix this one lacks.
+The popup shows the posting app's icon, the same one Windows shows for it elsewhere, with the app
+name centred underneath it, and the title and body to the right. Each notification carries the
+app's AUMID (`UserNotification.AppInfo().AppUserModelId()`), and the popup resolves its icon from
+`shell:AppsFolder\<aumid>` through `tile_shell::shell_icon`, the same `IShellItemImageFactory`
+lookup the [launcher](launcher.md) uses for its own rows, so both surfaces draw the identical icon
+for a given app rather than Tile having two icon-resolution paths. A notification with no AUMID,
+or an AUMID `shell_icon` can't resolve, shows with no icon: the app name goes back to being a line
+above the title instead of a caption under the icon, so its identity is never dropped, and the
+text keeps the width the icon column would have used. Checked by hand with
+`scripts/send-test-toast.ps1`: Windows Terminal, a Win32 console app with a path-shaped AUMID, and
+most Store apps all resolved; a couple of system apps' own AUMIDs
+(`Windows.Defender.SecurityCenter`) did not, most likely because their real AUMID needs a suffix
+this one lacks.
+
+Clicking a popup dismisses it and, with an AUMID, brings that app to the front (`launch::start_app`,
+the same call a launcher row's click makes). It can only do that much: `UserNotificationListener`
+carries the app, title and body, not the launch arguments the original toast would have activated
+the app with, and no other app can legitimately reach those either, so a click can never jump to
+the exact thing the notification was about.
 
 Tile reads notifications with
 `Windows.UI.Notifications.Management.UserNotificationListener`, the API behind Focus Assist's

@@ -99,6 +99,15 @@ impl Daemon {
         }
     }
 
+    /// A popup was clicked: brings its app to the front, if it has an AUMID. This can only reach
+    /// the app itself, not whatever the notification was about: see `tile_platform::toast`'s
+    /// doc comment for why.
+    pub(super) fn open_clicked_notification(&mut self, notification: Notification) {
+        if let Some(aumid) = notification.aumid {
+            crate::launch::start_app(&aumid, false);
+        }
+    }
+
     /// `togglednd`: mutes or unmutes popups, without touching Windows' own notification
     /// settings, so Focus Assist and Action Center behave exactly as the user set them.
     pub(super) fn toggle_dnd(&mut self) {
