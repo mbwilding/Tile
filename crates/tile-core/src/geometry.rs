@@ -64,9 +64,18 @@ impl Rect {
 
     /// Splits along `axis`, giving the first part `ratio` of the space left after the gap.
     pub fn split(&self, axis: Axis, ratio: f32, gap: i32) -> (Self, Self) {
-        match self.split_weighted(axis, &[ratio, 1.0 - ratio], gap)[..] {
-            [a, b] => (a, b),
-            _ => unreachable!("two weights make two parts"),
+        let avail = self.length(axis) - gap;
+        let first = scale(avail, ratio);
+        let second = avail - first;
+        match axis {
+            Axis::Horizontal => (
+                Self::new(self.x, self.y, first, self.h),
+                Self::new(self.x + first + gap, self.y, second, self.h),
+            ),
+            Axis::Vertical => (
+                Self::new(self.x, self.y, self.w, first),
+                Self::new(self.x, self.y + first + gap, self.w, second),
+            ),
         }
     }
 

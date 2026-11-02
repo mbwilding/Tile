@@ -43,7 +43,11 @@ pub fn rgba(size: u32, error: bool) -> Vec<u8> {
                 }
             }
             // The tiles are 2 apart, so a pixel touches at most one.
-            let (tile, count) = hits.iter().enumerate().max_by_key(|(_, c)| **c).unwrap();
+            let (tile, count) =
+                hits.iter().enumerate().fold(
+                    (0, 0),
+                    |best, (i, &c)| if c > best.1 { (i, c) } else { best },
+                );
             let rgb = if tile == 0 { primary } else { rest };
             let alpha = (count * 255 + SAMPLES * SAMPLES / 2) / (SAMPLES * SAMPLES);
             out.extend_from_slice(&[rgb[0], rgb[1], rgb[2], alpha as u8]);

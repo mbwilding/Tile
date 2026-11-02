@@ -83,14 +83,17 @@ struct FontCache(Option<(String, FontSizes, Fonts)>);
 
 impl FontCache {
     fn get(&mut self, face: &str, sizes: FontSizes) -> &Fonts {
-        let stale = self
+        if !self
             .0
             .as_ref()
-            .is_none_or(|(f, s, _)| f != face || *s != sizes);
-        if stale {
-            self.0 = Some((face.to_owned(), sizes, Fonts::new(face, sizes)));
+            .is_some_and(|(f, s, _)| f == face && *s == sizes)
+        {
+            self.0 = None;
         }
-        &self.0.as_ref().expect("the fonts were just made").2
+        let (_, _, fonts) = self
+            .0
+            .get_or_insert_with(|| (face.to_owned(), sizes, Fonts::new(face, sizes)));
+        fonts
     }
 }
 

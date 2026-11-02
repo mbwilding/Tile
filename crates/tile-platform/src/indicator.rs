@@ -113,17 +113,16 @@ impl State {
     }
 
     fn font(&mut self) -> &w::HFONT {
-        if self.font.is_none() {
-            let config = &self.settings.config;
-            let px = (config.font_size.clamp(6, 200) * self.dpi / 72) as i32;
-            let face = &self.settings.style.font;
-            self.font = Some(make_font(face, px, config.bold).unwrap_or_else(|e| {
+        let config = &self.settings.config;
+        let px = (config.font_size.clamp(6, 200) * self.dpi / 72) as i32;
+        let face = &self.settings.style.font;
+        self.font.get_or_insert_with(|| {
+            make_font(face, px, config.bold).unwrap_or_else(|e| {
                 tracing::warn!("indicator font `{face}`: {e}");
                 w::HFONT::CreateFontIndirect(&w::LOGFONT::default())
                     .expect("the default font exists")
-            }));
-        }
-        self.font.as_ref().expect("the font was just made")
+            })
+        })
     }
 
     fn alpha(&self, amount: f32) -> u8 {
