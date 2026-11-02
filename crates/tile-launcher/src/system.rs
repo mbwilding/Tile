@@ -135,10 +135,14 @@ impl Action {
             Self::Open(_) => '\u{E713}',
             Self::Tile(_) => '\u{E765}',
             Self::DisplayOff => '\u{E7F4}',
+            Self::EmptyRecycleBin => '\u{E74D}',
             Self::Power(_) => '\u{E7E8}',
         }
     }
 }
+
+/// The command line of the Recycle Bin row, which the row's icon is picked by.
+pub const RECYCLE_BIN_COMMAND: &str = "explorer.exe shell:RecycleBinFolder";
 
 /// What picking a system row does.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,6 +171,8 @@ pub enum Action {
     Tile(&'static str),
     /// Turn the monitors off until the next input.
     DisplayOff,
+    /// Empty the Recycle Bin, after Windows' own confirmation.
+    EmptyRecycleBin,
 }
 
 /// What the system is doing, as far as it could be read. Whatever is missing (no battery, no
@@ -195,6 +201,8 @@ pub struct Status {
     pub bluetooth: Option<bool>,
     /// The time and date, ready to show.
     pub clock: Option<String>,
+    /// How many items the Recycle Bin holds.
+    pub recycle_bin: Option<u64>,
 }
 
 /// A row: what it is called, what it says underneath, and what it does.
@@ -524,6 +532,26 @@ pub fn entries(status: &Status) -> Vec<Entry> {
         "screen monitor off blank",
         Action::DisplayOff,
     ));
+    let items = status.recycle_bin;
+    out.push(entry(
+        "Recycle Bin",
+        match items {
+            Some(0) => "Empty. Enter to open it in File Explorer".to_owned(),
+            Some(1) => "1 item. Enter to open it in File Explorer".to_owned(),
+            Some(n) => format!("{n} items. Enter to open it in File Explorer"),
+            None => "Enter to open it in File Explorer".to_owned(),
+        },
+        "trash deleted files restore",
+        Action::Open(RECYCLE_BIN_COMMAND),
+    ));
+    if items != Some(0) {
+        out.push(entry(
+            "Empty Recycle Bin",
+            "Windows asks to confirm first",
+            "trash delete files clear",
+            Action::EmptyRecycleBin,
+        ));
+    }
     for (title, uri, keywords) in [
         (
             "Night light",
@@ -814,6 +842,7 @@ mod tests {
             wifi: Some(true),
             bluetooth: Some(false),
             clock: Some("10:42 pm, Saturday 31 October 2026".into()),
+            recycle_bin: Some(3),
             mic: Some(Volume {
                 percent: 70,
                 muted: false,
@@ -1077,6 +1106,21 @@ mod tests {
                 .all(|e| !e.title.starts_with("Set volume"))
         );
         assert!(volume_request("volume").is_none());
+    }
+
+    #[test]
+    fn the_recycle_bin_can_only_be_emptied_when_it_holds_something() {
+        let full = status();
+        assert!(titles("recycle", &full).contains(&"Empty Recycle Bin".to_owned()));
+        assert_eq!(
+            find("recycle bin", &full)[0].subtitle,
+            "3 items. Enter to open it in File Explorer"
+        );
+        let empty = Status {
+            recycle_bin: Some(0),
+            ..full
+        };
+        assert_eq!(titles("recycle", &empty), ["Recycle Bin"]);
     }
 
     #[test]

@@ -95,7 +95,7 @@ launcher:
   opacity: 1.0 # 0.1 to 1.0
   # background, border, foreground, dimmed, selected and selected_foreground
   # are unset and follow theme; set any of them to override it here
-  placeholder: "" # "" for "Search apps, actions, equations and commands"
+  placeholder: "" # "" for "Search apps, actions, equations, conversions and commands"
   calculator: true # `12 * 3` shows = 36; Enter copies it
   commands: true # offer Tile dispatchers and running the text as a command line
   system_items: true # offer audio, microphone, network, Wi-Fi, Bluetooth, battery, power and tray icons in results
@@ -201,8 +201,8 @@ binds:
   super+shift+e: exit
 
 rules:
-  # Standard dialogs float.
-  - class: "^#32770$"
+  # Standard dialogs and file copy, move and delete progress float.
+  - class: '^(#32770|OperationStatusWindow)$'
     float: true
     ignore: false
   # Shell windows are left alone.

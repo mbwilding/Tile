@@ -76,6 +76,23 @@ or `42` stay app searches. It understands:
 A sign binds looser than `^`, so `-2^2` is -4. Multiplication is never implied: write `2 * pi`,
 not `2pi`. Set `calculator: false` to switch it off.
 
+### Unit conversion
+
+A sum followed by a unit, then `in` or `to` and another unit, converts it: `5 km in mi` shows
+`= 3.1068559612 mi` and `20 c in f` shows `= 68 °F`. Enter copies the result. The amount can be a
+calculation (`2 * 3 hours in min`). Units convert only within their kind:
+
+- length: `mm`, `cm`, `m`, `km`, `in`, `ft`, `yd`, `mi`, `nmi`
+- mass: `mg`, `g`, `kg`, `t`, `oz`, `lb`, `st`
+- volume: `ml`, `l`, `tsp`, `tbsp`, `floz`, `cup`, `pt`, `qt`, `gal`
+- time: `ms`, `s`, `min`, `h`, `d`, `wk`
+- data: `b`, `kb`, `mb`, `gb`, `tb` (powers of 1000) and `kib`, `mib`, `gib`, `tib` (powers of 1024)
+- speed: `mps`, `kph`, `mph`, `kn`
+- area: `m2`, `km2`, `ha`, `ft2`, `mi2`, `acre`
+- temperature: `c`, `f`, `k`
+
+Common long names and plurals work too (`kilometres`, `feet`, `celsius`).
+
 ## Commands
 
 There is no prefix: commands are results like any other, after the apps and system items. What
@@ -118,6 +135,8 @@ what you type matches them (`vol`, `bluetooth`, `shut`). The bar's buttons list 
 | **System Properties**, **Environment Variables**, **Control Panel**, **Device Manager**, **Services** | open the classic Windows tools that Start's app list doesn't have |
 | **Display** (type `display`) | opens the display settings: resolution, scale, layout and brightness |
 | **Screens: PC screen only**, **Duplicate**, **Extend**, **Second screen only** | set how the displays are used, as Win+P does |
+| **Recycle Bin** | opens it in File Explorer; the icon is Windows' own, empty or full, and the row says how many items it holds |
+| **Empty Recycle Bin** | empties it, after Windows' own confirmation (only listed when it holds something) |
 | **Turn off display** | switches the monitors off until the next input |
 | **Night light**, **Airplane mode** | open their Settings page |
 | **Next wallpaper**, **Previous wallpaper**, **Random wallpaper**, **Pause wallpaper cycle** | change the [desktop](shell.md#the-desktop)'s wallpaper (only while Tile paints it) |

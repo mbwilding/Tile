@@ -1,6 +1,6 @@
 //! The launcher's calculator: arithmetic with `+ - * / % ^` (`x` multiplies too), brackets,
 //! functions (`sqrt`, `sin`, `ln`, ...), hex numbers (`0x1f`) and the constants `pi`, `tau`
-//! and `e`.
+//! and `e`. A value with units (`5 km in mi`, `20 c in f`) converts between them.
 
 use std::f64::consts::{E, PI, TAU};
 
@@ -12,6 +12,149 @@ pub fn calculation(text: &str) -> Option<f64> {
         return None;
     }
     evaluate(text)
+}
+
+/// What the search `text` answers as a calculation or a unit conversion, ready to show.
+pub fn answer(text: &str) -> Option<String> {
+    convert(text).or_else(|| calculation(text).map(format))
+}
+
+/// A kind of unit; only units of one kind convert to each other.
+#[derive(Clone, Copy, PartialEq)]
+enum Kind {
+    Length,
+    Mass,
+    Volume,
+    Time,
+    Data,
+    Speed,
+    Area,
+    Temperature,
+}
+
+/// Unit names, their kind, and how many of the kind's base unit (metre, gram, litre, second,
+/// byte, metre a second, square metre) one is. Temperature factors are unused.
+#[rustfmt::skip]
+const UNITS: &[(&[&str], Kind, f64)] = &[
+    (&["mm", "millimetre", "millimetres", "millimeter", "millimeters"], Kind::Length, 0.001),
+    (&["cm", "centimetre", "centimetres", "centimeter", "centimeters"], Kind::Length, 0.01),
+    (&["m", "metre", "metres", "meter", "meters"], Kind::Length, 1.0),
+    (&["km", "kilometre", "kilometres", "kilometer", "kilometers"], Kind::Length, 1000.0),
+    (&["in", "inch", "inches"], Kind::Length, 0.0254),
+    (&["ft", "foot", "feet"], Kind::Length, 0.3048),
+    (&["yd", "yard", "yards"], Kind::Length, 0.9144),
+    (&["mi", "mile", "miles"], Kind::Length, 1609.344),
+    (&["nmi"], Kind::Length, 1852.0),
+    (&["mg", "milligram", "milligrams"], Kind::Mass, 0.001),
+    (&["g", "gram", "grams"], Kind::Mass, 1.0),
+    (&["kg", "kilogram", "kilograms", "kilo", "kilos"], Kind::Mass, 1000.0),
+    (&["t", "tonne", "tonnes"], Kind::Mass, 1_000_000.0),
+    (&["oz", "ounce", "ounces"], Kind::Mass, 28.349_523_125),
+    (&["lb", "lbs", "pound", "pounds"], Kind::Mass, 453.592_37),
+    (&["st", "stone"], Kind::Mass, 6_350.293_18),
+    (&["ml", "millilitre", "millilitres", "milliliter", "milliliters"], Kind::Volume, 0.001),
+    (&["l", "litre", "litres", "liter", "liters"], Kind::Volume, 1.0),
+    (&["tsp", "teaspoon", "teaspoons"], Kind::Volume, 0.004_928_92),
+    (&["tbsp", "tablespoon", "tablespoons"], Kind::Volume, 0.014_786_76),
+    (&["floz"], Kind::Volume, 0.029_573_53),
+    (&["cup", "cups"], Kind::Volume, 0.236_588_24),
+    (&["pt", "pint", "pints"], Kind::Volume, 0.473_176_47),
+    (&["qt", "quart", "quarts"], Kind::Volume, 0.946_352_95),
+    (&["gal", "gallon", "gallons"], Kind::Volume, 3.785_411_78),
+    (&["ms", "millisecond", "milliseconds"], Kind::Time, 0.001),
+    (&["s", "sec", "secs", "second", "seconds"], Kind::Time, 1.0),
+    (&["min", "mins", "minute", "minutes"], Kind::Time, 60.0),
+    (&["h", "hr", "hrs", "hour", "hours"], Kind::Time, 3600.0),
+    (&["d", "day", "days"], Kind::Time, 86_400.0),
+    (&["wk", "week", "weeks"], Kind::Time, 604_800.0),
+    (&["b", "byte", "bytes"], Kind::Data, 1.0),
+    (&["kb"], Kind::Data, 1e3),
+    (&["mb"], Kind::Data, 1e6),
+    (&["gb"], Kind::Data, 1e9),
+    (&["tb"], Kind::Data, 1e12),
+    (&["kib"], Kind::Data, 1024.0),
+    (&["mib"], Kind::Data, 1_048_576.0),
+    (&["gib"], Kind::Data, 1_073_741_824.0),
+    (&["tib"], Kind::Data, 1_099_511_627_776.0),
+    (&["mps"], Kind::Speed, 1.0),
+    (&["kph", "kmh", "km/h"], Kind::Speed, 1.0 / 3.6),
+    (&["mph"], Kind::Speed, 0.447_04),
+    (&["kn", "knot", "knots"], Kind::Speed, 1852.0 / 3600.0),
+    (&["m2", "sqm"], Kind::Area, 1.0),
+    (&["km2", "sqkm"], Kind::Area, 1e6),
+    (&["ha", "hectare", "hectares"], Kind::Area, 10_000.0),
+    (&["ft2", "sqft"], Kind::Area, 0.092_903_04),
+    (&["mi2", "sqmi"], Kind::Area, 2_589_988.110_336),
+    (&["acre", "acres"], Kind::Area, 4_046.856_422_4),
+    (&["c", "celsius"], Kind::Temperature, 1.0),
+    (&["f", "fahrenheit"], Kind::Temperature, 1.0),
+    (&["k", "kelvin"], Kind::Temperature, 1.0),
+];
+
+/// The table entry for the unit `name` (lower case, with any degree sign removed).
+fn unit(name: &str) -> Option<&'static (&'static [&'static str], Kind, f64)> {
+    let name = name.trim_start_matches('°');
+    UNITS.iter().find(|(names, ..)| names.contains(&name))
+}
+
+fn to_celsius(value: f64, unit: &str) -> f64 {
+    match unit {
+        "f" => (value - 32.0) * 5.0 / 9.0,
+        "k" => value - 273.15,
+        _ => value,
+    }
+}
+
+fn from_celsius(value: f64, unit: &str) -> f64 {
+    match unit {
+        "f" => value * 9.0 / 5.0 + 32.0,
+        "k" => value + 273.15,
+        _ => value,
+    }
+}
+
+/// How a unit's short name is written in a result.
+fn display(short: &str) -> String {
+    match short {
+        "c" => "°C".into(),
+        "f" => "°F".into(),
+        "k" => "K".into(),
+        other => other.to_owned(),
+    }
+}
+
+/// `5 km in mi`: a calculation ending in a unit, then `in` or `to` and another unit of the same
+/// kind. Gives the value and the target unit, as `3.1068559612 mi`.
+pub fn convert(text: &str) -> Option<String> {
+    let text = text.trim().to_lowercase();
+    let (left, target) = [" in ", " to "]
+        .iter()
+        .find_map(|word| text.rsplit_once(word))?;
+    let left = left.trim_end();
+    // The unit is the longest ending of the sum that names one, so `5km` and `2 m2` both split.
+    let run = left
+        .char_indices()
+        .rev()
+        .find(|&(_, c)| !(c.is_alphanumeric() || c == '/' || c == '°'))
+        .map_or(0, |(i, c)| i + c.len_utf8());
+    let (amount, from_entry) = left[run..]
+        .char_indices()
+        .map(|(i, _)| i + run)
+        .find_map(|i| unit(&left[i..]).map(|entry| (&left[..i], entry)))?;
+    let &(from_names, kind, from_factor) = from_entry;
+    let &(to_names, to_kind, to_factor) = unit(target.trim())?;
+    if kind != to_kind {
+        return None;
+    }
+    let value = evaluate(amount)?;
+    let result = if kind == Kind::Temperature {
+        from_celsius(to_celsius(value, from_names[0]), to_names[0])
+    } else {
+        value * from_factor / to_factor
+    };
+    result
+        .is_finite()
+        .then(|| format!("{} {}", format(result), display(to_names[0])))
 }
 
 /// The value of the expression `text`, or `None` if it isn't one or has no finite value.
@@ -326,6 +469,28 @@ mod tests {
         assert_eq!(calculation("-5"), None);
         assert_eq!(calculation("pi"), None);
         assert_eq!(calculation("code"), None);
+    }
+
+    #[test]
+    fn converts_units() {
+        assert_eq!(convert("5 km in mi").as_deref(), Some("3.1068559612 mi"));
+        assert_eq!(convert("20 c in f").as_deref(), Some("68 °F"));
+        assert_eq!(convert("20 °C to F").as_deref(), Some("68 °F"));
+        assert_eq!(convert("0 k to c").as_deref(), Some("-273.15 °C"));
+        assert_eq!(convert("1 kg to lb").as_deref(), Some("2.2046226218 lb"));
+        assert_eq!(convert("2 * 3 hours in min").as_deref(), Some("360 min"));
+        assert_eq!(convert("1 gib in mib").as_deref(), Some("1024 mib"));
+        assert_eq!(convert("5km in m").as_deref(), Some("5000 m"));
+        assert_eq!(convert("1 m in in").as_deref(), Some("39.3700787402 in"));
+    }
+
+    #[test]
+    fn refuses_bad_conversions() {
+        for text in ["5 km in kg", "5 foo in m", "km in m", "in", "5 km in"] {
+            assert_eq!(convert(text), None, "{text}");
+        }
+        assert_eq!(answer("12 * 3").as_deref(), Some("36"));
+        assert_eq!(answer("notepad"), None);
     }
 
     #[test]

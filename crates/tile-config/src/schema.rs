@@ -110,9 +110,9 @@ pub(crate) fn default_binds() -> BTreeMap<String, String> {
 /// Window rules used when the config has no `rules`.
 fn default_rules() -> Vec<Rule> {
     vec![
-        // Standard dialogs.
+        // Standard dialogs and file copy, move and delete progress.
         Rule {
-            class: Some("^#32770$".into()),
+            class: Some("^(#32770|OperationStatusWindow)$".into()),
             float: Some(true),
             ..Rule::default()
         },
@@ -672,7 +672,7 @@ pub struct Launcher {
     pub selected: Option<Color>,
     /// Text on the selected row. Unset follows `theme.accent_foreground`.
     pub selected_foreground: Option<Color>,
-    /// Shown in the empty search box. Empty shows `Search apps, actions, equations and commands`,
+    /// Shown in the empty search box. Empty shows `Search apps, actions, equations, conversions and commands`,
     /// leaving out what is switched off.
     pub placeholder: String,
     /// Show the value of a search that reads as a calculation (`12 * 3`, `sqrt(2)`) first;
@@ -711,6 +711,7 @@ impl Launcher {
         }
         if self.calculator {
             things.push("equations");
+            things.push("conversions");
         }
         if self.commands {
             things.push("commands");

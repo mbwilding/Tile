@@ -10,7 +10,7 @@ use super::{
     layout::{BAR_BUTTONS, BarAction, FontSizes},
     state::{DEFAULT_GLYPH, RowIcon, State},
 };
-use crate::system::{format_date, format_time};
+use crate::system::{Action, format_date, format_time};
 
 /// The launcher's fonts, at the sizes of a [`FontSizes`].
 struct Fonts {
@@ -103,6 +103,8 @@ enum IconKey {
     App(String),
     /// A program file, by its path.
     File(String),
+    /// The Recycle Bin, empty or full.
+    RecycleBin(bool),
     /// A tray icon's image, by its handle, at a size.
     Tray { handle: isize, size: i32 },
 }
@@ -137,6 +139,13 @@ impl IconCache {
     fn file(&mut self, path: &str, size: i32) -> Option<&Icon> {
         self.get(IconKey::File(path.to_owned()), || {
             tile_shell::shell_icon(path, size)
+        })
+    }
+
+    /// The Recycle Bin's icon as Explorer shows it now, empty or full.
+    fn recycle_bin(&mut self, full: bool, size: i32) -> Option<&Icon> {
+        self.get(IconKey::RecycleBin(full), || {
+            tile_shell::shell_icon("shell:::{645FF040-5081-101B-9F08-00AA002F954E}", size)
         })
     }
 
@@ -355,6 +364,14 @@ pub(super) fn paint(
                         None
                     } else {
                         Some(DEFAULT_GLYPH)
+                    }
+                }
+                Some(RowIcon::RecycleBin { full }) => {
+                    if let Some(icon) = icons.recycle_bin(full, layout.icon) {
+                        icon.draw(dc.ptr() as isize, x, y, layout.icon);
+                        None
+                    } else {
+                        Some(Action::EmptyRecycleBin.glyph())
                     }
                 }
                 Some(RowIcon::Tray(image)) => {

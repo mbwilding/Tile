@@ -22,8 +22,8 @@ rules:
 | `ignore: true` | leave the window alone entirely |
 
 `tile query windows` shows the `exe`, `class` and `title` of every managed window. The default
-rules float standard dialogs and ignore shell windows, PowerToys and ShareX. Dialogs and
-fixed-size windows float even without a rule.
+rules float standard dialogs and file operation progress windows, and ignore shell windows,
+PowerToys and ShareX. Dialogs and fixed-size windows float even without a rule.
 
 Without a `monitor` rule, windows already open at startup go to the monitor they are on, and new
 ones to the monitor under the mouse.

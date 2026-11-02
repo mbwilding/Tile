@@ -158,7 +158,7 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 | `dimmed` | `theme.dimmed` | The app id line and the placeholder. |
 | `selected` | `theme.accent` | The selected row and the caret. |
 | `selected_foreground` | `theme.accent_foreground` | Text on the selected row. |
-| `placeholder` | `""` | Shown in the empty search box. Empty shows `Search apps, actions, equations and commands`, leaving out what is switched off. |
+| `placeholder` | `""` | Shown in the empty search box. Empty shows `Search apps, actions, equations, conversions and commands`, leaving out what is switched off. |
 | `calculator` | `true` | Show the value of a search that reads as a calculation first; Enter copies it. See [calculator](launcher.md#calculator). |
 | `commands` | `true` | Offer Tile's dispatchers and running the text as a command line among the results. See [commands](launcher.md#commands). |
 | `system_items` | `true` | List the system items (volume and the audio devices, microphone, network, Wi-Fi, Bluetooth, battery, clock, power) and tray icons that match what is typed, after the apps. See [system items](launcher.md#system-items-and-tray-icons). |
@@ -336,7 +336,7 @@ launcher:
   opacity: 1.0                  # 0.1 to 1.0
   # background, border, foreground, dimmed, selected and selected_foreground
   # are unset and follow theme; set any of them to override it here
-  placeholder: ""                # "" for "Search apps, actions, equations and commands"
+  placeholder: ""                # "" for "Search apps, actions, equations, conversions and commands"
   calculator: true              # `12 * 3` shows = 36; Enter copies it
   commands: true                # offer Tile dispatchers and running the text as a command line
   system_items: true            # offer audio, microphone, network, Wi-Fi, Bluetooth, battery, power and tray icons in results
@@ -374,8 +374,8 @@ notifications:
 binds: {}                       # added to the default binds; see keybinds.md
 
 rules:
-  # Standard dialogs float.
-  - class: "^#32770$"
+  # Standard dialogs and file copy, move and delete progress float.
+  - class: '^(#32770|OperationStatusWindow)$'
     float: true
     ignore: false
   # Shell windows are left alone.

@@ -7,6 +7,7 @@ use windows_sys::Win32::{
     System::RemoteDesktop::{
         NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
     },
+    UI::Shell::{SHEmptyRecycleBinW, SHQUERYRBINFO, SHQueryRecycleBinW},
     UI::WindowsAndMessaging::{
         GetClassNameW, GetWindowThreadProcessId, HWND_BROADCAST, IsWindow, PostMessageW, SC_CLOSE,
         SC_MONITORPOWER, WM_APP, WM_SYSCOMMAND,
@@ -39,6 +40,26 @@ pub fn turn_off_display() -> bool {
     // SAFETY: posting a message with no pointers to every top-level window; the `2` asks for the
     // monitors to power off.
     unsafe { PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER as usize, 2) != 0 }
+}
+
+/// Empties the Recycle Bin of every drive. Windows asks to confirm and shows its own progress.
+pub fn empty_recycle_bin() -> bool {
+    // SAFETY: no owner window and no root path (every drive); the flags are all zero, so
+    // Windows keeps its confirmation, progress and sound.
+    unsafe { SHEmptyRecycleBinW(std::ptr::null_mut(), std::ptr::null(), 0) >= 0 }
+}
+
+/// How many items the Recycle Bin holds across every drive, if Windows says.
+pub fn recycle_bin_items() -> Option<u64> {
+    let mut info = SHQUERYRBINFO {
+        cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
+        i64Size: 0,
+        i64NumItems: 0,
+    };
+    // SAFETY: no root path (every drive) and `info` is a live struct with `cbSize` set, as the
+    // call requires.
+    let hr = unsafe { SHQueryRecycleBinW(std::ptr::null(), &mut info) };
+    (hr >= 0).then_some(info.i64NumItems.max(0) as u64)
 }
 
 /// Posts `WM_APP + offset` to the window `hwnd`, to wake its thread from another one.

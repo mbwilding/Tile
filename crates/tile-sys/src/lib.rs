@@ -15,8 +15,8 @@ pub use process::{
     spawn_detached,
 };
 pub use window::{
-    class_name, hwnd, pid_of, post_app, post_close, turn_off_display, unwatch_sessions,
-    watch_sessions,
+    class_name, empty_recycle_bin, hwnd, pid_of, post_app, post_close, recycle_bin_items,
+    turn_off_display, unwatch_sessions, watch_sessions,
 };
 
 /// `text` as a NUL-terminated UTF-16 string.

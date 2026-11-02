@@ -342,10 +342,15 @@ mod tests {
             true,
             true,
             true,
-            "Search apps, actions, equations and commands",
+            "Search apps, actions, equations, conversions and commands",
         );
-        check(true, true, false, "Search apps, actions and equations");
-        check(false, true, false, "Search apps and equations");
+        check(
+            true,
+            true,
+            false,
+            "Search apps, actions, equations and conversions",
+        );
+        check(false, true, false, "Search apps, equations and conversions");
         check(false, false, true, "Search apps and commands");
         check(true, false, false, "Search apps and actions");
         check(false, false, false, "Search apps");

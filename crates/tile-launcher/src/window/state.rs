@@ -24,8 +24,8 @@ pub(super) enum Row {
     /// An index into all the apps.
     App(usize),
     Command(CommandEntry),
-    /// The value of the search as a calculation.
-    Calc(f64),
+    /// The answer to the search as a calculation or unit conversion.
+    Calc(String),
     /// An index into the system items.
     System(usize),
     /// An index into the tray icons.
@@ -37,6 +37,10 @@ pub(super) enum RowIcon<'a> {
     /// The app with this `shell:AppsFolder` id.
     App(&'a str),
     Tray(&'a IconImage),
+    /// The Recycle Bin's own icon, which differs when it holds something.
+    RecycleBin {
+        full: bool,
+    },
     /// A character of Windows' icon font, for a row with no picture of its own.
     Glyph(char),
 }
@@ -189,10 +193,7 @@ impl State {
             max_results: config.max_results,
         };
         let searching = !query.trim().is_empty();
-        let sum = config
-            .calculator
-            .then(|| calc::calculation(query))
-            .flatten();
+        let sum = config.calculator.then(|| calc::answer(query)).flatten();
         let mut results: Vec<Row> = sum
             .map(Row::Calc)
             .into_iter()
@@ -356,7 +357,7 @@ impl State {
                 };
                 LauncherEvent::System(entry.action.clone())
             }
-            Some(Row::Calc(value)) => return Picked::Copy(calc::format(*value)),
+            Some(Row::Calc(value)) => return Picked::Copy(value.clone()),
             Some(Row::App(i)) => {
                 let id = self.all[*i].id.clone();
                 if self.config().track_usage {
@@ -416,10 +417,16 @@ impl State {
             }
             Row::System(i) => {
                 let entry = &self.system[*i];
+                let icon = match entry.action {
+                    system::Action::Open(system::RECYCLE_BIN_COMMAND) => RowIcon::RecycleBin {
+                        full: self.status.recycle_bin.is_some_and(|n| n > 0),
+                    },
+                    _ => RowIcon::Glyph(entry.action.glyph()),
+                };
                 (
                     entry.title.as_str().into(),
                     entry.subtitle.as_str().into(),
-                    Some(RowIcon::Glyph(entry.action.glyph())),
+                    Some(icon),
                 )
             }
             Row::Command(CommandEntry::Dispatch(command)) => (
@@ -448,7 +455,7 @@ impl State {
                 Some(RowIcon::Glyph(RUN_GLYPH)),
             ),
             Row::Calc(value) => (
-                format!("= {}", calc::format(*value)).into(),
+                format!("= {value}").into(),
                 "Enter to copy".into(),
                 Some(RowIcon::Glyph(CALC_GLYPH)),
             ),
