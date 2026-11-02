@@ -1,10 +1,11 @@
 //! The operating system's services that Tile reads or drives: audio, power, network, Wi-Fi and
-//! Bluetooth, the single-instance mutex, the console, starting processes, window messages and
-//! safe handles for raw window handles.
+//! Bluetooth, notifications, the single-instance mutex, the console, starting processes, window
+//! messages and safe handles for raw window handles.
 //!
 //! Like the other low-level crates, it holds `unsafe` and exposes a safe API.
 
 pub mod devices;
+pub mod notifications;
 mod process;
 pub mod wifi;
 mod window;

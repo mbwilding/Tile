@@ -107,6 +107,14 @@ workspace_indicator:
   # background: "#89b4fa" # unset follows theme.accent
   # foreground: "#1e1e2e" # unset follows theme.accent_foreground
 
+notifications:
+  enabled: false # show a popup for each new Windows toast notification
+  position: bottom_right # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
+  gap: 16 # px from the edges, unused for center
+  width: 340 # px at 100% scaling
+  duration_ms: 5000 # fully shown
+  fade_ms: 400 # then fades out
+
 # Every default bind. See keybinds.md for the key names and dispatchers.
 binds:
   super+b: exec chrome.exe --new-window

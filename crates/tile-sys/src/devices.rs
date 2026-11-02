@@ -31,10 +31,10 @@ use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATU
 use crate::wide;
 
 /// Keeps COM initialised on this thread until dropped.
-struct Com(bool);
+pub(crate) struct Com(bool);
 
 impl Com {
-    fn init() -> Self {
+    pub(crate) fn init() -> Self {
         // These calls run on short-lived threads. When the last one ends the shared apartment is
         // torn down, but the Windows Runtime caches the factories it made in it, so the next call
         // used freed memory and crashed the process now and then. Holding the apartment open
