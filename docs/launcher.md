@@ -125,13 +125,13 @@ devices are left out. Bluetooth devices can't be connected from here, only throu
 
 ### Tray icons
 
-When Tile hosts the notification area ([shell mode](shell.md)), the apps' tray icons sit in a
-row of their own under the bar at the top of the launcher, centred, for as long as it is open.
-The search box and the results are under that. The window
-widens to hold them when there are more than its width fits. With Explorer's taskbar running,
-Explorer owns the tray and there are none to show.
+When Tile hosts the notification area ([shell mode](shell.md)), the apps' tray icons sit in
+rows in the sidebar at the right of the launcher, under the bar's buttons, for as long as it is
+open. They wrap onto as many rows as the sidebar needs, split evenly, so a long tray makes the
+window taller rather than wider. With Explorer's taskbar running, Explorer owns the tray and there
+are none to show.
 
-- **Hover** an icon to see its name.
+- **Hover** an icon to see its name, which replaces the search box's placeholder.
 - **Click** it as you would on a taskbar. The launcher closes and the app opens or focuses.
 - **Right click** it for the app's own menu. The launcher stays open behind the menu and comes
   back to the front when the menu closes, unless your choice brought another window forward.
@@ -158,10 +158,13 @@ right clicks it, which also leaves the launcher open.
 
 ## The bar
 
-At the top of the launcher is a bar (`bar: false` hides it). On the left it shows the time in
-bold with seconds, ticking while the launcher is open, with the date under it; they never change
-to show anything else. The bar is no taller for it, so both are a little smaller. On the right are icon buttons, drawn with Windows' own icons (Segoe Fluent Icons,
-or Segoe MDL2 Assets on an older Windows): four that open controls, then five for the session.
+The launcher has a sidebar at its right (`bar: false` hides the bar part of it), with the search
+box and the results beside it. At its top the bar shows the time in bold with seconds, ticking
+while the launcher is open, with the date under it; they never change to show anything else.
+Under that are icon buttons, drawn with Windows' own icons (Segoe Fluent Icons, or Segoe MDL2
+Assets on an older Windows): a row of four that open controls, then a row of five for the session.
+The tray icons ([above](#tray-icons)) follow. With neither the bar nor any tray icons there is no
+sidebar, and the search column takes the whole width.
 
 ### Controls
 
@@ -189,8 +192,8 @@ device's row opens Settings.
 
 **Switch user**, **Log out**, **Lock**, **Restart** and **Shut down**. Switch user leaves your
 session running and shows the sign-in screen (`tsdisconnect`). A click does it
-at once, and so does Enter on a row. The window widens to hold the bar when it is wider than the
-launcher.
+at once, and so does Enter on a row. The window widens to hold the sidebar beside a usable search column when `width` is too
+narrow for it.
 
 ## Keys
 
@@ -221,8 +224,8 @@ holds the launch count per app and the 20 most recent. Delete the file to forget
 
 ## Appearance
 
-The window is exactly as tall as what it shows: the bar, the tray icons, the search box and as
-many result rows as there are, up to `max_visible` (6 by default), so it shrinks as the matches
+The window is exactly as tall as what it shows: the sidebar or the search box and as
+many result rows as there are, whichever is taller, up to `max_visible` (6 by default), so it shrinks as the matches
 narrow and grows again as you delete. It keeps its top where it is, and it opens centred for the
 full number of rows. More results than rows scroll.
 

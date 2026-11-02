@@ -31,7 +31,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use winsafe::{self as w, co, gui, prelude::*};
 
 use self::{
-    layout::{BAR_BUTTONS, BarAction, Layout, bar_width},
+    layout::{BAR_BUTTONS, BarAction, Layout, sidebar_width},
     paint::{Resources, paint},
     popups::{
         FIX_WINDOW, MENU_GRACE, MENU_POLL_MS, MENU_TIMER, menu_active, menu_open,
@@ -183,10 +183,10 @@ fn fit_window(wnd: &gui::WindowMain, s: &State) {
     if !hwnd.IsWindowVisible() {
         return;
     }
-    let wanted = s.wanted_height();
     let Ok(rect) = hwnd.GetWindowRect() else {
         return;
     };
+    let wanted = s.wanted_height(rect.right - rect.left);
     if rect.bottom - rect.top != wanted {
         let resized = hwnd.SetWindowPos(
             w::HwndPlace::None,
@@ -326,24 +326,22 @@ fn run(
                 s.dpi = dpi;
                 res.icons.clear();
             }
-            // The icons first, since they decide how wide the window must be to hold them.
+            // The icons first, since they decide how tall the window must be to hold them.
             s.tray = s.registry.items();
             res.icons.forget_tray();
             drop(res);
-            let tray_width = s.layout(w::RECT::default()).tray_width(s.tray.len());
-            let bar_width = if s.config().bar {
-                bar_width(s.font_sizes(), dpi)
+            let side_width = if s.config().bar || !s.tray.is_empty() {
+                sidebar_width(s.font_sizes(), dpi)
             } else {
                 0
             };
             let w = scale(s.config().width.clamp(200, 4000) as i32, dpi)
-                .max(tray_width)
-                .max(bar_width)
+                .max(side_width)
                 .min(area.w);
             s.reset();
             // Centred for the full number of rows, so it keeps its top as it shrinks.
-            let top = cy - s.height_for(s.max_rows()).min(area.h) / 2;
-            let h = s.wanted_height().min(area.h);
+            let top = cy - s.height_for(w, s.max_rows()).min(area.h) / 2;
+            let h = s.wanted_height(w).min(area.h);
             drop(s);
             let placed = hwnd.SetWindowPos(
                 w::HwndPlace::Place(co::HWND_PLACE::TOPMOST),

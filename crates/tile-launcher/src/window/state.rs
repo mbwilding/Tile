@@ -270,23 +270,26 @@ impl State {
         self.config().max_visible.clamp(1, 30)
     }
 
-    /// The window height that fits everything but the list exactly, and `rows` rows of it.
-    pub(super) fn height_for(&self, rows: usize) -> i32 {
+    /// The height of a `width` pixel wide window that fits everything but the list exactly, and
+    /// `rows` rows of it.
+    pub(super) fn height_for(&self, width: i32, rows: usize) -> i32 {
         const TALL: i32 = 20_000;
         let layout = self.layout(w::RECT {
             left: 0,
             top: 0,
-            right: 1000,
+            right: width,
             bottom: TALL,
         });
-        TALL - (layout.list.bottom - layout.list.top) + rows as i32 * layout.row
+        let list = TALL - (layout.list.bottom - layout.list.top) + rows as i32 * layout.row;
+        // The sidebar may be taller than the search column; the list then shows more rows.
+        list.max(layout.side_end + layout.pad)
     }
 
     /// The height that fits the results now: as many rows as there are (at least one, for the
     /// message that there are none), up to the most shown.
-    pub(super) fn wanted_height(&self) -> i32 {
+    pub(super) fn wanted_height(&self, width: i32) -> i32 {
         let rows = self.results.len().clamp(1, self.max_rows());
-        self.height_for(rows)
+        self.height_for(width, rows)
     }
 
     pub(super) fn layout(&self, client: w::RECT) -> Layout {
@@ -302,7 +305,7 @@ impl State {
     /// What is at a point.
     pub(super) fn hit(&self, layout: &Layout, x: i32, y: i32) -> Option<Hit> {
         layout
-            .tray_at(self.tray.len(), x, y)
+            .tray_at(x, y)
             .map(Hit::Tray)
             .or_else(|| layout.bar_button_at(x, y).map(Hit::Bar))
             .or_else(|| {

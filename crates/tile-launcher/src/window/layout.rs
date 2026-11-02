@@ -9,19 +9,21 @@ use crate::system::{Group, Power};
 
 /// Space inside the window's edges, and inside the search box and rows.
 const PAD: i32 = 12;
-/// Space between the bar, the tray icons, the search box and the results.
+/// Space between the sidebar's parts, and between the search box and the results.
 const GAP: i32 = 8;
+/// Space between the search column and the sidebar.
+const GUTTER: i32 = 16;
+/// How many buttons or tray icons a row of the sidebar holds.
+const SIDE_COLUMNS: i32 = 5;
+/// The least width left for the search column beside the sidebar.
+const MAIN_MIN: i32 = 260;
 /// Space between neighbouring bar buttons.
 const BUTTON_GAP: i32 = 6;
-/// Extra space between the panels' buttons and the power buttons.
-const GROUP_GAP: i32 = 14;
 /// A tray icon's size, and the space around it in its cell.
 const TRAY_ICON: i32 = 24;
 const TRAY_CELL_PAD: i32 = 12;
 /// How much taller than the main font the bar is.
 const BAR_PADDING: i32 = 16;
-/// The space the bar leaves beside its clock, besides [`PAD`] at either end.
-const CLOCK_SPACE: i32 = 16;
 /// The bar's height is split [`TIME_SHARE`] to [`DATE_SHARE`] (of [`SHARES`]) between the time
 /// and the date under it.
 const TIME_SHARE: i32 = 11;
@@ -37,7 +39,7 @@ pub(super) enum BarAction {
     Power(Power),
 }
 
-/// The buttons of the bar, left to right: an icon in Windows' icon font and what it does. The
+/// The buttons of the sidebar, in reading order: an icon in Windows' icon font and what it does. The
 /// first [`QUICK_BUTTONS`] open panels, the rest are power buttons.
 pub(super) const BAR_BUTTONS: [(char, BarAction); 9] = [
     ('\u{E767}', BarAction::Panel(Group::Output)),
@@ -108,19 +110,22 @@ pub(super) struct Layout {
     /// The space inside the edges, and inside the search box and rows.
     pub(super) pad: i32,
     pub(super) search: w::RECT,
-    /// The row of tray icons, empty without any.
+    /// The rows of tray icons, empty without any.
     pub(super) strip: w::RECT,
     /// One tray icon's cell width, and the icon's size inside it.
     pub(super) cell: i32,
     pub(super) tray_icon: i32,
-    /// Where the first tray icon's cell starts, so the row is centred.
-    pub(super) tray_x: i32,
-    /// The bar with the clock and the power buttons, empty when it is off.
+    /// How many tray icons there are, and how many rows of the strip they fill.
+    tray_icons: usize,
+    tray_rows: usize,
+    /// The clock at the top of the sidebar, empty when the bar is off.
     pub(super) bar: w::RECT,
-    /// The bar's buttons, in the order of [`BAR_BUTTONS`]; empty without the bar.
+    /// The bar's buttons under the clock, in the order of [`BAR_BUTTONS`]; empty without the bar.
     pub(super) buttons: [w::RECT; BAR_BUTTONS.len()],
     /// Where the bar's date starts: the time is above, the date below.
     pub(super) date_top: i32,
+    /// The bottom of the sidebar's content, which the window must be tall enough for.
+    pub(super) side_end: i32,
     pub(super) list: w::RECT,
     /// A result row's height, and its icon's size (0 without icons).
     pub(super) row: i32,
@@ -146,7 +151,6 @@ impl Layout {
         let (main, small) = (sizes.main, sizes.small);
         let pad = scale(PAD);
         let gap = scale(GAP);
-        let search_h = main + scale(24);
         let (row, icon) = if config.two_lines() {
             (main + small + scale(22), scale(32))
         } else {
@@ -156,61 +160,74 @@ impl Layout {
         let (left, right) = (client.left + pad, client.right - pad);
         let tray_icon = scale(TRAY_ICON);
         let cell = tray_icon + scale(TRAY_CELL_PAD);
-        let strip_h = if tray_icons == 0 { 0 } else { cell };
-        let tray_x = left + ((right - left - tray_icons as i32 * cell) / 2).max(0);
-        // Top to bottom: the bar, the tray icons, then the search box and the results.
+        let pitch = sizes.bar + scale(BUTTON_GAP);
         let bar_h = if config.bar { sizes.bar } else { 0 };
+        // The clock, the buttons and the tray icons stack in a column at the right; the search
+        // box and the results take the rest.
+        let side_w = if bar_h > 0 || tray_icons > 0 {
+            SIDE_COLUMNS * pitch.max(cell)
+        } else {
+            0
+        };
+        let side_left = right - side_w;
+        let main_right = if side_w > 0 {
+            (side_left - scale(GUTTER)).max(left + 1)
+        } else {
+            right
+        };
+        let top = client.top + pad;
         let bar = w::RECT {
-            left,
-            top: client.top + pad,
+            left: side_left,
+            top,
             right,
-            bottom: client.top + pad + bar_h,
+            bottom: top + bar_h,
         };
-        let below_bar = if bar_h > 0 {
-            bar.bottom + gap
-        } else {
-            bar.bottom
-        };
-        let strip = w::RECT {
-            left,
-            top: below_bar,
-            right,
-            bottom: below_bar + strip_h,
-        };
-        let content = if strip_h > 0 {
-            strip.bottom + gap
-        } else {
-            below_bar
-        };
-        // Square buttons from the right edge.
+        let mut y = bar.bottom;
         let mut buttons = [w::RECT::default(); BAR_BUTTONS.len()];
         if bar_h > 0 {
-            let mut x = bar.right;
-            for (i, button) in buttons.iter_mut().enumerate().rev() {
-                if i + 1 == QUICK_BUTTONS {
-                    x -= scale(GROUP_GAP);
+            y += gap;
+            for group in [0..QUICK_BUTTONS, QUICK_BUTTONS..BAR_BUTTONS.len()] {
+                let width = group.len() as i32 * pitch - scale(BUTTON_GAP);
+                let first = side_left + (side_w - width) / 2;
+                for (k, i) in group.enumerate() {
+                    let x = first + k as i32 * pitch;
+                    buttons[i] = w::RECT {
+                        left: x,
+                        top: y,
+                        right: x + bar_h,
+                        bottom: y + bar_h,
+                    };
                 }
-                *button = w::RECT {
-                    left: x - bar_h,
-                    top: bar.top,
-                    right: x,
-                    bottom: bar.bottom,
-                };
-                x -= bar_h + scale(BUTTON_GAP);
+                y += pitch;
             }
+            y -= scale(BUTTON_GAP);
         }
+        // Icons wrap onto as many rows as the sidebar needs.
+        let fit = (side_w / cell.max(1)).max(1) as usize;
+        let tray_rows = tray_icons.div_ceil(fit);
+        if tray_icons > 0 && bar_h > 0 {
+            y += gap;
+        }
+        let strip = w::RECT {
+            left: side_left,
+            top: y,
+            right,
+            bottom: y + tray_rows as i32 * cell,
+        };
+        let side_end = strip.bottom;
+        let search_h = main + scale(24);
         let (search, list) = match config.search_position {
             SearchPosition::Top => {
                 let search = w::RECT {
                     left,
-                    top: content,
-                    right,
-                    bottom: content + search_h,
+                    top,
+                    right: main_right,
+                    bottom: top + search_h,
                 };
                 let list = w::RECT {
                     left,
                     top: search.bottom + gap,
-                    right,
+                    right: main_right,
                     bottom: client.bottom - pad,
                 };
                 (search, list)
@@ -219,13 +236,13 @@ impl Layout {
                 let search = w::RECT {
                     left,
                     top: client.bottom - pad - search_h,
-                    right,
+                    right: main_right,
                     bottom: client.bottom - pad,
                 };
                 let list = w::RECT {
                     left,
-                    top: content,
-                    right,
+                    top,
+                    right: main_right,
                     bottom: search.top - gap,
                 };
                 (search, list)
@@ -238,10 +255,12 @@ impl Layout {
             strip,
             cell,
             tray_icon,
-            tray_x,
+            tray_icons,
+            tray_rows,
             bar,
             buttons,
             date_top: bar.top + bar_h * TIME_SHARE / SHARES,
+            side_end,
             list,
             row,
             icon,
@@ -249,9 +268,22 @@ impl Layout {
         }
     }
 
-    /// The width that holds `icons` tray icons in a row.
-    pub(super) fn tray_width(&self, icons: usize) -> i32 {
-        icons as i32 * self.cell + 2 * self.pad
+    /// The tray icons on strip row `row`, and where the first one's cell starts so the row is
+    /// centred. The icons are split evenly over the rows, the first rows taking the extra.
+    pub(super) fn tray_row(&self, row: usize) -> (std::ops::Range<usize>, i32) {
+        let rows = self.tray_rows.max(1);
+        let (base, extra) = (self.tray_icons / rows, self.tray_icons % rows);
+        let first = row * base + row.min(extra);
+        let end = (first + base + usize::from(row < extra)).min(self.tray_icons);
+        let first = first.min(end);
+        let used = (end - first) as i32 * self.cell;
+        let x = self.strip.left + ((self.strip.right - self.strip.left - used) / 2).max(0);
+        (first..end, x)
+    }
+
+    /// The top of the strip's row `row`.
+    pub(super) fn tray_top(&self, row: usize) -> i32 {
+        self.strip.top + row as i32 * self.cell
     }
 
     /// The bar button at a point.
@@ -259,14 +291,18 @@ impl Layout {
         self.buttons.iter().position(|b| contains(b, x, y))
     }
 
-    /// Which of `icons` tray icons is at a point of the strip.
-    pub(super) fn tray_at(&self, icons: usize, x: i32, y: i32) -> Option<usize> {
-        let strip = self.strip;
-        if strip.bottom <= strip.top || x < self.tray_x || !contains(&strip, x, y) {
+    /// Which tray icon is at a point of the strip.
+    pub(super) fn tray_at(&self, x: i32, y: i32) -> Option<usize> {
+        if !contains(&self.strip, x, y) {
             return None;
         }
-        let index = ((x - self.tray_x) / self.cell.max(1)) as usize;
-        (index < icons).then_some(index)
+        let cell = self.cell.max(1);
+        let (icons, start) = self.tray_row(((y - self.strip.top) / cell) as usize);
+        if x < start {
+            return None;
+        }
+        let index = icons.start + ((x - start) / cell) as usize;
+        icons.contains(&index).then_some(index)
     }
 
     /// Which of `results` result rows is at a point of the list, scrolled by `scroll` rows.
@@ -279,15 +315,12 @@ impl Layout {
     }
 }
 
-/// The width the bar needs for its clock, date and buttons.
-pub(super) const fn bar_width(sizes: FontSizes, dpi: u32) -> i32 {
-    let buttons =
-        BAR_BUTTONS.len() as i32 * (sizes.bar + scale(BUTTON_GAP, dpi)) + scale(GROUP_GAP, dpi);
-    // About 8 characters of the time or 24 of the date, a character being 11/20 of its height.
-    let time = 8 * sizes.time;
-    let date = 24 * sizes.date;
-    let clock = (if time > date { time } else { date }) * 11 / 20;
-    2 * scale(PAD, dpi) + clock + scale(CLOCK_SPACE, dpi) + buttons
+/// The least window width that holds the sidebar beside a usable search column.
+pub(super) const fn sidebar_width(sizes: FontSizes, dpi: u32) -> i32 {
+    let pitch = sizes.bar + scale(BUTTON_GAP, dpi);
+    let cell = scale(TRAY_ICON, dpi) + scale(TRAY_CELL_PAD, dpi);
+    let column = if pitch > cell { pitch } else { cell };
+    2 * scale(PAD, dpi) + SIDE_COLUMNS * column + scale(GUTTER, dpi) + scale(MAIN_MIN, dpi)
 }
 
 #[cfg(test)]
@@ -328,9 +361,9 @@ mod tests {
         assert_eq!(FontSizes::new(100, 96), FontSizes::new(48, 96));
     }
 
-    /// The pixel positions the launcher has always had, so the constants can't drift.
+    /// The pixel positions of the sidebar and the search column, so the constants can't drift.
     #[test]
-    fn lays_out_the_bar_tray_search_and_list() {
+    fn lays_out_the_sidebar_search_and_list() {
         let config = Config {
             bar: true,
             compact: false,
@@ -339,22 +372,37 @@ mod tests {
         };
         let sizes = FontSizes::new(11, 96);
         let layout = Layout::new(&config, sizes, 96, 3, client(560, 400));
-        assert_eq!(sides(layout.bar), (12, 12, 548, 42));
-        assert_eq!(sides(layout.buttons[8]), (518, 12, 548, 42));
-        assert_eq!(sides(layout.buttons[4]), (374, 12, 404, 42));
-        assert_eq!(sides(layout.buttons[3]), (324, 12, 354, 42));
-        assert_eq!(sides(layout.buttons[0]), (216, 12, 246, 42));
+        assert_eq!(sides(layout.bar), (368, 12, 548, 42));
         assert_eq!(layout.date_top, 28);
-        assert_eq!(sides(layout.strip), (12, 50, 548, 86));
-        assert_eq!(
-            (layout.cell, layout.tray_icon, layout.tray_x),
-            (36, 24, 226)
-        );
-        assert_eq!(sides(layout.search), (12, 94, 548, 132));
-        assert_eq!(sides(layout.list), (12, 140, 548, 388));
-        assert_eq!((layout.row, layout.icon, layout.visible), (47, 32, 5));
-        assert_eq!(layout.tray_width(3), 3 * 36 + 24);
-        assert_eq!(bar_width(sizes, 96), 24 + 158 + 16 + 9 * 36 + 14);
+        assert_eq!(sides(layout.buttons[0]), (389, 50, 419, 80));
+        assert_eq!(sides(layout.buttons[3]), (497, 50, 527, 80));
+        assert_eq!(sides(layout.buttons[4]), (371, 86, 401, 116));
+        assert_eq!(sides(layout.buttons[8]), (515, 86, 545, 116));
+        assert_eq!(sides(layout.strip), (368, 124, 548, 160));
+        assert_eq!((layout.cell, layout.tray_icon), (36, 24));
+        assert_eq!(layout.tray_row(0), (0..3, 404));
+        assert_eq!(layout.side_end, 160);
+        assert_eq!(sides(layout.search), (12, 12, 352, 50));
+        assert_eq!(sides(layout.list), (12, 58, 352, 388));
+        assert_eq!((layout.row, layout.icon, layout.visible), (47, 32, 7));
+        assert_eq!(sidebar_width(sizes, 96), 24 + 180 + 16 + 260);
+    }
+
+    #[test]
+    fn wraps_many_tray_icons_onto_even_rows() {
+        let config = Config {
+            bar: false,
+            ..Config::default()
+        };
+        let layout = Layout::new(&config, FontSizes::new(11, 96), 96, 17, client(560, 400));
+        // Five cells fit a row, so 17 icons take four rows of 5, 4, 4 and 4.
+        assert_eq!(sides(layout.strip), (368, 12, 548, 156));
+        assert_eq!(layout.tray_row(0), (0..5, 368));
+        assert_eq!(layout.tray_row(1), (5..9, 386));
+        assert_eq!(layout.tray_row(3), (13..17, 386));
+        assert_eq!(layout.tray_at(387, 60), Some(5));
+        assert_eq!(layout.tray_at(369, 20), Some(0));
+        assert_eq!(layout.tray_at(369, 60), None);
     }
 
     #[test]
@@ -367,9 +415,9 @@ mod tests {
             ..Config::default()
         };
         let layout = Layout::new(&config, FontSizes::new(11, 144), 144, 0, client(840, 600));
-        assert_eq!(sides(layout.bar), (18, 18, 822, 18));
+        assert_eq!(layout.bar.bottom, layout.bar.top);
         assert!(layout.buttons.iter().all(|b| sides(*b) == (0, 0, 0, 0)));
-        assert_eq!(sides(layout.strip), (18, 18, 822, 18));
+        assert_eq!(layout.strip.bottom, layout.strip.top);
         assert_eq!(sides(layout.search), (18, 524, 822, 582));
         assert_eq!(sides(layout.list), (18, 18, 822, 512));
         assert_eq!((layout.row, layout.icon), (53, 0));
@@ -384,13 +432,13 @@ mod tests {
             ..Config::default()
         };
         let layout = Layout::new(&config, FontSizes::new(11, 96), 96, 3, client(560, 400));
-        assert_eq!(layout.bar_button_at(520, 20), Some(8));
-        assert_eq!(layout.bar_button_at(515, 20), None);
-        assert_eq!(layout.tray_at(3, 226, 60), Some(0));
-        assert_eq!(layout.tray_at(3, 300, 60), Some(2));
-        assert_eq!(layout.tray_at(3, 340, 60), None);
-        assert_eq!(layout.row_at(0, 10, 100, 140), Some(0));
-        assert_eq!(layout.row_at(2, 10, 100, 190), Some(3));
-        assert_eq!(layout.row_at(0, 1, 100, 190), None);
+        assert_eq!(layout.bar_button_at(520, 90), Some(8));
+        assert_eq!(layout.bar_button_at(510, 90), None);
+        assert_eq!(layout.tray_at(405, 130), Some(0));
+        assert_eq!(layout.tray_at(480, 130), Some(2));
+        assert_eq!(layout.tray_at(520, 130), None);
+        assert_eq!(layout.row_at(0, 10, 100, 60), Some(0));
+        assert_eq!(layout.row_at(2, 10, 100, 110), Some(3));
+        assert_eq!(layout.row_at(0, 1, 100, 110), None);
     }
 }

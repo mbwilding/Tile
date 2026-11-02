@@ -76,7 +76,7 @@ with an error keeps the switches it has.
 | --- | --- | --- |
 | `tile` | `false` | The window manager is on (the tray's Tile item). Off until switched on. |
 | `remap` | `false` | The key remapper is on (the tray's Remap item). Off until switched on. |
-| `shell` | `false` | Tile is the shell (the tray's Shell item): it hosts the notification area when no taskbar is running, keeps the launcher bound (to `Win+R`, or `Win+D` if that is taken, when you haven't bound it) and shows the tray icons in a row of their own at its top. See [shell mode](shell.md). Turning it on also makes Tile your sign-in shell in place of Explorer from the next sign-in, and Tile keeps that in step with the file: a config with `shell: true` sets it up the first time Tile runs, and editing it back puts Explorer back. Tile started with `--shell`, which that sign-in shell uses, is the shell whatever this says. |
+| `shell` | `false` | Tile is the shell (the tray's Shell item): it hosts the notification area when no taskbar is running, keeps the launcher bound (to `Win+R`, or `Win+D` if that is taken, when you haven't bound it) and shows the tray icons in the launcher's sidebar. See [shell mode](shell.md). Turning it on also makes Tile your sign-in shell in place of Explorer from the next sign-in, and Tile keeps that in step with the file: a config with `shell: true` sets it up the first time Tile runs, and editing it back puts Explorer back. Tile started with `--shell`, which that sign-in shell uses, is the shell whatever this says. |
 | `log` | `false` | Log to the log file (the tray's Log item). |
 
 These are separate from `general.tiling` and `general.remap`, which switch the features off
@@ -151,7 +151,7 @@ The app launcher, opened by the `launcher` dispatcher. See [launcher](launcher.m
 | `calculator` | `true` | Show the value of a search that reads as a calculation first; Enter copies it. See [calculator](launcher.md#calculator). |
 | `commands` | `true` | Offer Tile's dispatchers and running the text as a command line among the results. See [commands](launcher.md#commands). |
 | `system_items` | `true` | List the system items (volume and the audio devices, microphone, network, Wi-Fi, Bluetooth, battery, clock, power) and tray icons that match what is typed, after the apps. See [system items](launcher.md#system-items-and-tray-icons). |
-| `bar` | `true` | Show the bar at the top of the launcher: the time (bold, with seconds) and date, and icon buttons for switch user, log out, lock, restart and shut down. See [the bar](launcher.md#the-bar). |
+| `bar` | `true` | Show the bar in the launcher's sidebar: the time (bold, with seconds) and date, and icon buttons for the controls and for switch user, log out, lock, restart and shut down. See [the bar](launcher.md#the-bar). |
 | `fix_popups` | `true` | Move the popup of a tray icon's app next to the pointer when the app opens it in a monitor's corner (as G HUB does, for want of a taskbar to place it by). See [tray icons](launcher.md#tray-icons). |
 
 ### `workspace_indicator`

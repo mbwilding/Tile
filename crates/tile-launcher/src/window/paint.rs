@@ -180,9 +180,13 @@ pub(super) fn paint(
     let left = co::DT::LEFT | co::DT::VCENTER;
     let centred = co::DT::CENTER | co::DT::VCENTER;
     if s.query.text().is_empty() {
-        let placeholder = s
-            .panel
-            .map_or_else(|| config.placeholder_text(), |g| g.title().to_owned());
+        // A hovered tray icon's name has no room by the icons, so it takes the placeholder's.
+        let hovered = s.tray_hover.and_then(|i| s.tray.get(i));
+        let placeholder = match (hovered, s.panel) {
+            (Some(item), _) => item.name.clone(),
+            (None, Some(group)) => group.title().to_owned(),
+            (None, None) => config.placeholder_text(),
+        };
         text(dc, main, style.dimmed, &placeholder, inner, left)?;
     } else {
         text(dc, main, style.foreground, s.query.text(), inner, left)?;
@@ -203,60 +207,55 @@ pub(super) fn paint(
     let caret_brush = w::HBRUSH::CreateSolidBrush(colorref(style.selected))?;
     dc.FillRect(caret, &caret_brush)?;
 
-    // The tray icons: a row of their own.
+    // The tray icons: rows under the buttons.
     if layout.strip.bottom > layout.strip.top {
         let cell = layout.cell;
         let hover = mix(style.background, style.foreground, 25);
-        let mut end = layout.tray_x;
-        for (i, item) in s.tray.iter().enumerate() {
-            let x = layout.tray_x + i as i32 * cell;
-            if x + cell > layout.strip.right {
-                break;
+        let rows = (layout.strip.bottom - layout.strip.top) / cell.max(1);
+        for row in 0..rows as usize {
+            let (range, start) = layout.tray_row(row);
+            let top = layout.tray_top(row);
+            for i in range.clone() {
+                let item = &s.tray[i];
+                let x = start + (i - range.start) as i32 * cell;
+                let slot = w::RECT {
+                    left: x,
+                    right: x + cell,
+                    top,
+                    bottom: top + cell,
+                };
+                if s.tray_hover == Some(i) {
+                    fill_round(dc, slot, scale(10), hover)?;
+                }
+                let size = layout.tray_icon;
+                let (ix, iy) = (
+                    x + (cell - size) / 2,
+                    slot.top + (slot.bottom - slot.top - size) / 2,
+                );
+                // A tray icon is usually 16 or 32 pixels, small for the size shown. One big enough is
+                // shrunk smoothly; a smaller one gives way to the program's own icon, which Windows
+                // has at larger sizes, and failing that is grown smoothly rather than stretched.
+                let hdc = dc.ptr() as isize;
+                let big_enough = item.icon.as_ref().filter(|_| item.icon_size >= size);
+                if let Some(icon) = big_enough.and_then(|image| icons.tray(image, size)) {
+                    icon.draw(hdc, ix, iy, size);
+                } else if let Some(icon) = (!item.path.is_empty())
+                    .then(|| icons.file(&item.path, size))
+                    .flatten()
+                {
+                    icon.draw(hdc, ix, iy, size);
+                } else if let Some(icon) = item.icon.as_ref().and_then(|i| icons.tray(i, size)) {
+                    icon.draw(hdc, ix, iy, size);
+                } else {
+                    let mut buf = [0; 4];
+                    let initial = item
+                        .name
+                        .chars()
+                        .next()
+                        .map_or("", |c| c.encode_utf8(&mut buf));
+                    text(dc, small, style.dimmed, initial, slot, centred)?;
+                }
             }
-            end = x + cell;
-            let slot = w::RECT {
-                left: x,
-                right: x + cell,
-                ..layout.strip
-            };
-            if s.tray_hover == Some(i) {
-                fill_round(dc, slot, scale(10), hover)?;
-            }
-            let size = layout.tray_icon;
-            let (ix, iy) = (
-                x + (cell - size) / 2,
-                slot.top + (slot.bottom - slot.top - size) / 2,
-            );
-            // A tray icon is usually 16 or 32 pixels, small for the size shown. One big enough is
-            // shrunk smoothly; a smaller one gives way to the program's own icon, which Windows
-            // has at larger sizes, and failing that is grown smoothly rather than stretched.
-            let hdc = dc.ptr() as isize;
-            let big_enough = item.icon.as_ref().filter(|_| item.icon_size >= size);
-            if let Some(icon) = big_enough.and_then(|image| icons.tray(image, size)) {
-                icon.draw(hdc, ix, iy, size);
-            } else if let Some(icon) = (!item.path.is_empty())
-                .then(|| icons.file(&item.path, size))
-                .flatten()
-            {
-                icon.draw(hdc, ix, iy, size);
-            } else if let Some(icon) = item.icon.as_ref().and_then(|i| icons.tray(i, size)) {
-                icon.draw(hdc, ix, iy, size);
-            } else {
-                let mut buf = [0; 4];
-                let initial = item
-                    .name
-                    .chars()
-                    .next()
-                    .map_or("", |c| c.encode_utf8(&mut buf));
-                text(dc, small, style.dimmed, initial, slot, centred)?;
-            }
-        }
-        if let Some(item) = s.tray_hover.and_then(|i| s.tray.get(i)) {
-            let bounds = w::RECT {
-                left: end + pad,
-                ..layout.strip
-            };
-            text(dc, small, style.dimmed, &item.name, bounds, left)?;
         }
     }
 
@@ -266,20 +265,17 @@ pub(super) fn paint(
         let time = format_time(t.wHour, t.wMinute, t.wSecond);
         let date = format_date(t.wYear, t.wMonth, t.wDay, t.wDayOfWeek);
         let bar = layout.bar;
-        let inset = scale(6);
         let time_area = w::RECT {
-            left: bar.left + inset,
-            right: layout.buttons[0].left - pad,
             bottom: layout.date_top,
             ..bar
         };
-        text(dc, &fonts.bold, style.foreground, &time, time_area, left)?;
+        text(dc, &fonts.bold, style.foreground, &time, time_area, centred)?;
         let date_area = w::RECT {
             top: layout.date_top,
             bottom: bar.bottom,
             ..time_area
         };
-        text(dc, &fonts.date, style.dimmed, &date, date_area, left)?;
+        text(dc, &fonts.date, style.dimmed, &date, date_area, centred)?;
         let idle = mix(style.background, style.foreground, 20);
         let hovered = mix(style.background, style.foreground, 40);
         for (i, ((glyph, action), rect)) in BAR_BUTTONS.iter().zip(&layout.buttons).enumerate() {
