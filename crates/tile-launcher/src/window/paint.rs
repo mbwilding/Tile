@@ -187,7 +187,12 @@ pub(super) fn paint(
             (None, Some(group)) => group.title().to_owned(),
             (None, None) => config.placeholder_text(),
         };
-        text(dc, main, style.dimmed, &placeholder, inner, left)?;
+        // Clear of the caret, which sits at the start.
+        let shifted = w::RECT {
+            left: inner.left + scale(8),
+            ..inner
+        };
+        text(dc, main, style.dimmed, &placeholder, shifted, left)?;
     } else {
         text(dc, main, style.foreground, s.query.text(), inner, left)?;
     }
