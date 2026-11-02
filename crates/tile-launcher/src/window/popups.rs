@@ -18,8 +18,10 @@ pub(super) const FIX_WINDOW: Duration = Duration::from_secs(2);
 const POPUP_POLL_MS: u32 = 50;
 /// How often the menu is looked for once the popups are no longer.
 pub(super) const MENU_POLL_MS: u32 = 250;
-/// The window class of a popup menu.
+/// The window class of Windows' own popup menu.
 const MENU_CLASS: &str = "#32768";
+/// The class prefix of every window Tile itself creates, so none is mistaken for a menu.
+const OWN_CLASS_PREFIX: &str = "tile-";
 
 /// Waiting on what a click on a tray icon opens: for its menu to close, and for a popup the app
 /// puts in a monitor's corner (because it can't find the taskbar) to be moved to the pointer.
@@ -34,6 +36,9 @@ pub(super) struct MenuWatch {
     pub(super) at: (i32, i32),
     /// The app's windows that were showing at the click, which are not its popup.
     pub(super) baseline: HashSet<isize>,
+    /// Every visible top-level window, of any app, that was showing at the click, so
+    /// [`menu_open`] can notice a new one even when it isn't [`MENU_CLASS`].
+    pub(super) before: HashSet<isize>,
     /// Checking every [`POPUP_POLL_MS`] still, rather than every [`MENU_POLL_MS`].
     pub(super) fast: bool,
 }
@@ -46,10 +51,62 @@ fn visible_windows(pid: u32) -> HashSet<isize> {
         .collect()
 }
 
-/// Whether a popup menu is showing.
-pub(super) fn menu_open() -> bool {
-    !enumerate(|h| h.IsWindowVisible() && h.GetClassName().is_ok_and(|c| c == MENU_CLASS))
-        .is_empty()
+/// Every visible top-level window right now, of any app, to notice a new one later.
+fn all_visible() -> HashSet<isize> {
+    enumerate(|h| h.IsWindowVisible())
+        .iter()
+        .map(|h| h.ptr() as isize)
+        .collect()
+}
+
+/// Whether a window with these attributes is a freshly opened popup menu: [`MENU_CLASS`], or a
+/// new, visible, borderless, always-on-top window of some other app, which is how most apps that
+/// draw their own menu instead of using Windows' (a Windows 11 style one, WPF, Electron) show
+/// one. Split out from [`menu_open`] so it can be tested without a live window.
+fn is_new_menu(
+    id: isize,
+    visible: bool,
+    class: &str,
+    style: isize,
+    ex_style: isize,
+    before: &HashSet<isize>,
+) -> bool {
+    if !visible {
+        return false;
+    }
+    if class == MENU_CLASS {
+        return true;
+    }
+    if before.contains(&id) || class.starts_with(OWN_CLASS_PREFIX) {
+        return false;
+    }
+    let caption = co::WS::CAPTION.raw() as isize;
+    let topmost = co::WS_EX::TOPMOST.raw() as isize;
+    style & caption != caption && ex_style & topmost == topmost
+}
+
+/// Whether a popup menu is showing, native or drawn by the app itself: see [`is_new_menu`].
+/// `before` is the windows that were already showing when the click that may have opened it
+/// happened (see [`MenuWatch::before`]).
+pub(super) fn menu_open(before: &HashSet<isize>) -> bool {
+    !enumerate(|h| {
+        is_new_menu(
+            h.ptr() as isize,
+            h.IsWindowVisible(),
+            &h.GetClassName().unwrap_or_default(),
+            h.GetWindowLongPtr(co::GWLP::STYLE),
+            h.GetWindowLongPtr(co::GWLP::EXSTYLE),
+            before,
+        )
+    })
+    .is_empty()
+}
+
+/// Whether some window, anywhere, is in a popup menu's modal loop right now. Checked before the
+/// launcher reclaims focus once [`menu_open`] has given up on seeing one, so a menu it still
+/// somehow missed is not closed by stealing its focus.
+pub(super) fn menu_active() -> bool {
+    w::GetGUIThreadInfo(0).is_ok_and(|info| info.flags.has(co::GUI::INMENUMODE))
 }
 
 /// Some apps place the popup of their tray icon by finding the taskbar, which is not there, and
@@ -123,6 +180,108 @@ pub(super) fn watch_menu(
         pid,
         at,
         baseline: pid.map(visible_windows).unwrap_or_default(),
+        before: all_visible(),
         fast: true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BORDERLESS: isize = 0;
+    const CAPTIONED: isize = co::WS::CAPTION.raw() as isize;
+    const TOPMOST: isize = co::WS_EX::TOPMOST.raw() as isize;
+    const NOT_TOPMOST: isize = 0;
+
+    #[test]
+    fn sees_windows_own_menu_class_even_if_already_showing() {
+        let before = HashSet::from([1]);
+        assert!(is_new_menu(
+            1,
+            true,
+            "#32768",
+            CAPTIONED,
+            NOT_TOPMOST,
+            &before
+        ));
+    }
+
+    #[test]
+    fn sees_a_new_borderless_topmost_window_of_another_app() {
+        let before = HashSet::new();
+        assert!(is_new_menu(
+            1,
+            true,
+            "HwndWrapper[App;;1]",
+            BORDERLESS,
+            TOPMOST,
+            &before
+        ));
+    }
+
+    #[test]
+    fn ignores_a_window_that_was_already_showing() {
+        let before = HashSet::from([1]);
+        assert!(!is_new_menu(
+            1,
+            true,
+            "HwndWrapper[App;;1]",
+            BORDERLESS,
+            TOPMOST,
+            &before
+        ));
+    }
+
+    #[test]
+    fn ignores_a_new_window_with_a_caption() {
+        let before = HashSet::new();
+        assert!(!is_new_menu(
+            1,
+            true,
+            "App window",
+            CAPTIONED,
+            TOPMOST,
+            &before
+        ));
+    }
+
+    #[test]
+    fn ignores_a_new_window_that_is_not_topmost() {
+        let before = HashSet::new();
+        assert!(!is_new_menu(
+            1,
+            true,
+            "App window",
+            BORDERLESS,
+            NOT_TOPMOST,
+            &before
+        ));
+    }
+
+    #[test]
+    fn ignores_one_of_tiles_own_windows() {
+        let before = HashSet::new();
+        assert!(!is_new_menu(
+            1,
+            true,
+            "tile-toast",
+            BORDERLESS,
+            TOPMOST,
+            &before
+        ));
+    }
+
+    #[test]
+    fn ignores_a_window_that_is_not_visible() {
+        let before = HashSet::new();
+        assert!(!is_new_menu(
+            1,
+            false,
+            "#32768",
+            CAPTIONED,
+            NOT_TOPMOST,
+            &before
+        ));
     }
 }

@@ -33,7 +33,10 @@ use winsafe::{self as w, co, gui, prelude::*};
 use self::{
     layout::{BAR_BUTTONS, BarAction, Layout, bar_width},
     paint::{Resources, paint},
-    popups::{FIX_WINDOW, MENU_GRACE, MENU_POLL_MS, MENU_TIMER, menu_open, move_corner_popups},
+    popups::{
+        FIX_WINDOW, MENU_GRACE, MENU_POLL_MS, MENU_TIMER, menu_active, menu_open,
+        move_corner_popups,
+    },
     state::{Hit, Picked, Row, State, cursor},
 };
 use crate::{
@@ -470,7 +473,7 @@ fn run(
                 let _ = hwnd.KillTimer(MENU_TIMER);
                 return Ok(());
             }
-            if menu_open() {
+            if menu_open(&watch.before) {
                 watch.seen = true;
                 return Ok(());
             }
@@ -488,7 +491,9 @@ fn run(
             });
             if elsewhere {
                 hide();
-            } else {
+            } else if !menu_active() {
+                // A menu neither it nor `menu_open` noticed may still be open; reclaiming focus
+                // would close it, so only do that when nothing looks like a menu is running.
                 focus_hwnd(hwnd);
                 redraw(hwnd, false);
             }
