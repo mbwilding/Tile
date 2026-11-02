@@ -91,6 +91,26 @@ Tile is the shell is the tray's Shell switch, [`tray.shell`](#tray).
 | --- | --- | --- |
 | `run_startup` | `true` | When Tile starts as the shell, run the `Run` and `RunOnce` registry keys and the Startup folders, as Explorer would. |
 
+### `wallpaper`
+
+The desktop Tile paints in [shell mode](shell.md#the-desktop): a plain colour, or an image over
+it. It is set here only. With Explorer running, Windows paints the desktop and none of this
+applies.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `color` | `"#000000"` | The plain desktop colour. It also shows around an image that doesn't cover the monitor. |
+| `path` | unset | The image shown first. Unset shows `color`, or the first pick from `directory`. |
+| `directory` | unset | A folder of images (PNG, JPEG, BMP, GIF, TIFF, and WebP, HEIC or AVIF where Windows has the codec) to pick from when `path` is unset, and to change to when `cycle` is on. |
+| `recursive` | `true` | Look in the folders under `directory` too. |
+| `fill_mode` | `crop` | How an image fits a monitor: `crop` (covers it, the overflow cut off), `fit` (inside it, `color` around), `stretch`, `center` (its own size) or `tile` (its own size, repeated). |
+| `cycle.enabled` | `false` | Change the wallpaper every `cycle.interval_seconds`, from `directory`. |
+| `cycle.interval_seconds` | `1800` | Seconds between changes, at least `5`. |
+| `cycle.order` | `random` | `random` (every image before any repeats) or `alphabetical` (by path, wrapping round). |
+
+An image that is missing or can't be read leaves `color`, and the log says why. Changing any of
+these in the file applies at once and starts again from `path`.
+
 ### `cursor`
 
 | Key | Default | Meaning |
@@ -270,6 +290,18 @@ tray:
 # Tile as the Windows shell; see shell.md.
 shell:
   run_startup: true             # as the shell, run the Run keys and Startup folders
+
+# The desktop in shell mode; see shell.md.
+wallpaper:
+  color: "#000000"              # plain desktop colour
+  # path: C:\Pictures\a.png     # image shown first
+  # directory: C:\Pictures      # images to pick from and cycle through
+  recursive: true               # include folders under directory
+  fill_mode: crop               # crop | fit | stretch | center | tile
+  cycle:
+    enabled: false              # change the wallpaper on a timer
+    interval_seconds: 1800      # at least 5
+    order: random               # random | alphabetical
 
 cursor:
   warp: true                    # move the pointer onto the window a keybind focuses, then hide it

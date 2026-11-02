@@ -34,7 +34,7 @@ needs.
 | `tile-launcher` | The app launcher: the search, calculator and system items (tested), and its window |
 | `tile-platform` | Win32 for the window manager: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the workspace indicator, the sign-in shell and programs, virtual desktops, Win+L and Click to Do, the current user's registry values and where Tile is installed |
 | `tile-input` | The low-level keyboard and mouse hooks, `SendInput` and hiding the pointer |
-| `tile-shell` | What Explorer provides, for shell mode: the notification area host (`Shell_TrayWnd`), the black backdrop, shell icons and the Store app frames |
+| `tile-shell` | What Explorer provides, for shell mode: the notification area host (`Shell_TrayWnd`), the desktop backdrop (colour or wallpaper), shell icons and the Store app frames |
 | `tile-sys` | Volume, audio devices, battery, network, Wi-Fi and Bluetooth, the single-instance mutex, the console, starting detached processes, window messages and safe handles for raw window handles |
 | `tile` | The program (`Tile.exe`): the daemon, the command line, install/uninstall and its scheduled task |
 

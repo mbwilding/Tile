@@ -28,7 +28,9 @@ windows-sys = { workspace = true, features = [
 # shell's icons.
 windows = { workspace = true, features = [
     "std",
+    "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
     "Win32_System_Com",
     "Win32_System_Com_Marshal",
     "Win32_System_WinRT",

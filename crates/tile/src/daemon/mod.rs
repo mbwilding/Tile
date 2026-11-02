@@ -13,6 +13,7 @@ mod pointer;
 mod shell;
 mod smartscreen;
 mod tracked;
+mod wallpaper;
 
 use std::{
     collections::{HashMap, HashSet},
@@ -38,7 +39,7 @@ use tokio::{
     time::{Instant, MissedTickBehavior, interval, sleep_until},
 };
 
-use self::{lock::WinL, smartscreen::SmartScreen, tracked::Tracked};
+use self::{lock::WinL, smartscreen::SmartScreen, tracked::Tracked, wallpaper::Shown};
 use crate::{
     launch, logging,
     paths::{self, Restore},
@@ -133,8 +134,12 @@ struct Daemon {
     shell_on: bool,
     /// Said that a taskbar is running so Tile leaves the notification area to it.
     taskbar_noted: bool,
-    /// The black desktop Tile paints while it hosts the notification area.
+    /// The desktop Tile paints while it hosts the notification area.
     backdrop: Option<Backdrop>,
+    /// The wallpaper on the desktop.
+    shown: Shown,
+    /// When the wallpaper next changes, if it cycles.
+    wallpaper_at: Option<Instant>,
     /// The window manager is paused (tray "Tile").
     paused: bool,
     /// The key remapper is paused (tray "Remap").
@@ -336,6 +341,8 @@ pub async fn run(
         shell_on: saved.shell,
         taskbar_noted: false,
         backdrop: None,
+        shown: Shown::default(),
+        wallpaper_at: None,
         paused: !saved.tile,
         remap_paused: !saved.remap,
         quit: false,
@@ -436,6 +443,7 @@ impl Daemon {
             tokio::select! {
                 () = until(self.cursor_check_at) => self.check_cursor(),
                 () = until(self.win_l.relock_at) => self.relock(),
+                () = until(self.wallpaper_at) => self.cycle_wallpaper(),
                 () = until(self.heal_at) => {
                     self.heal_at = None;
                     self.heal_borders();

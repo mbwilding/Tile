@@ -17,9 +17,10 @@ pub use notification_filter::{FilterOutcome, NotificationFilters};
 pub use rules::{RuleOutcome, Rules};
 pub(crate) use schema::default_binds;
 pub use schema::{
-    Animations, Color, Config, Corners, Cursor, General, IndicatorPosition, IndicatorStyle,
-    Launcher, LauncherStyle, NotificationFilter, NotificationStyle, Notifications, Remap, Rule,
-    SearchPosition, Shell, Theme, Tray, WorkspaceIndicator,
+    Animations, Color, Config, Corners, Cursor, Cycle, CycleOrder, FillMode, General,
+    IndicatorPosition, IndicatorStyle, Launcher, LauncherStyle, NotificationFilter,
+    NotificationStyle, Notifications, Remap, Rule, SearchPosition, Shell, Theme, Tray, Wallpaper,
+    WorkspaceIndicator,
 };
 pub use watch::watch;
 

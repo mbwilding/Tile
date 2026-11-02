@@ -8,18 +8,23 @@ tray:
   shell: true
   log: true
 
-theme:
-  font: NeoSpleen
+# theme:
+#   font: NeoSpleen
+
+wallpaper:
+  directory: C:\Users\mbwilding\dev\nixos\wallpapers
+  cycle:
+    enabled: true
+    interval_seconds: 180
 
 binds:
-  # default pop up settings menu for things like wifi, bluetooth and audio
-  # super+a: pop-up settings for audio
   super+r: launcher
   super+e: exec explorer.exe "%USERPROFILE%"
   super+c: exec %LOCALAPPDATA%\Microsoft\WinGet\Links\btop.exe
   super+t: exec wtd.exe -w new
   super+p: exec wtd.exe -w new -p "NixOS - Personal"
   super+w: exec wtd.exe -w new -p "NixOS - Work"
+  super+minus: exechidden ecc toggle
   super+semicolon: exec snippingtool.exe /clip
   super+ctrl+h: workspace 1
   super+ctrl+t: workspace 2

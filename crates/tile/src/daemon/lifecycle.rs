@@ -118,6 +118,7 @@ impl Daemon {
                 same.tray = self.loaded.config.tray.clone();
                 let unchanged = same == self.loaded.config;
                 let shell = loaded.config.tray.shell;
+                let wallpaper = loaded.config.wallpaper != self.loaded.config.wallpaper;
                 self.loaded = loaded;
                 // The Shell switch follows the config file, whoever edited it.
                 if shell != self.shell_on {
@@ -135,6 +136,9 @@ impl Daemon {
                 self.update_notifications();
                 self.update_cursor();
                 self.sync_shell();
+                if wallpaper {
+                    self.reload_wallpaper();
+                }
                 match (self.tiling, self.loaded.config.general.tiling) {
                     (false, true) => self.start_tiling(),
                     (true, false) => self.stop_tiling(),

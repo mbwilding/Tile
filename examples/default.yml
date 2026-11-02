@@ -41,6 +41,18 @@ tray:
 shell:
   run_startup: true # as the shell, run the Run keys and Startup folders
 
+# The desktop in shell mode; see docs/shell.md.
+wallpaper:
+  color: "#000000" # plain desktop colour
+  # path: C:\Pictures\a.png # image shown first
+  # directory: C:\Pictures # images to pick from and cycle through
+  recursive: true # include folders under directory
+  fill_mode: crop # crop | fit | stretch | center | tile
+  cycle:
+    enabled: false # change the wallpaper on a timer
+    interval_seconds: 1800 # at least 5
+    order: random # random | alphabetical
+
 cursor:
   warp: true # move the pointer onto the window a keybind focuses, then hide it
   hide_on_key: true # typing hides the pointer until the mouse moves or clicks

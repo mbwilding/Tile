@@ -1,16 +1,15 @@
 //! Shell mode: hosting the notification area and the sign-in shell setting.
 
-use tile_platform::Backdrop;
 use tile_shell::notify::{Host, taskbar_exists};
 
 use super::Daemon;
 use crate::launch;
 
 impl Daemon {
-    /// Removes the black windows, so the desktop shows again, and gives the SmartScreen app
+    /// Removes the desktop windows, so the desktop shows again, and gives the SmartScreen app
     /// check back, now that Tile no longer hosts the notification area.
     pub(super) fn restore_backdrop(&mut self) {
-        self.backdrop = None;
+        self.stop_backdrop();
         self.give_back_smartscreen();
     }
 
@@ -97,7 +96,7 @@ impl Daemon {
                 if self.notify_host.is_some() {
                     tracing::info!("hosting the notification area");
                     if self.backdrop.is_none() {
-                        self.backdrop = Backdrop::black();
+                        self.start_backdrop();
                     }
                     self.take_smartscreen();
                 } else {

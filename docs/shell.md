@@ -66,11 +66,34 @@ helper that starts programs without admin rights and waits for the elevated Tile
 task never starts Tile within 30 seconds, the helper runs Tile itself, without admin rights, and
 logs it to `launcher.log`.
 
+## The desktop
+
+While Tile hosts the notification area it covers each monitor with a window at the very bottom of
+the stack (Windows keeps showing Explorer's last wallpaper otherwise), and removes them when it
+stops. They are black by default. The [`wallpaper`](configuration.md#wallpaper) section sets a
+plain colour, or an image from a path or a folder, fitted to each monitor, and can change it on a
+timer:
+
+```yaml
+wallpaper:
+  color: "#101018"
+  directory: C:\Users\you\Pictures\Wallpapers
+  fill_mode: crop
+  cycle:
+    enabled: true
+    interval_seconds: 600
+    order: random
+```
+
+It is a setting in the config only, with nothing for it in the tray or the launcher. It doesn't
+touch the wallpaper Windows has saved, so that is back as it was with Explorer. With Explorer
+running Tile paints nothing.
+
 ## What you give up
 
-- **No desktop or wallpaper.** Explorer paints both. While Tile hosts the notification area it
-  covers each monitor with a plain black window at the very bottom of the stack (Windows keeps
-  showing Explorer's last wallpaper otherwise), and removes them when it stops. Icons on the desktop are gone.
+- **No Explorer desktop.** Explorer paints the wallpaper and the desktop icons. While Tile hosts
+  the notification area it paints its own [desktop](#the-desktop), black unless you say otherwise.
+  Icons on the desktop are gone.
 - **No Start menu, search or notification centre.** The launcher covers starting apps and the
   volume, network, Bluetooth, battery and clock. Windows' own toast popups and tray balloons,
   drawn by `shellexperiencehost.exe`, are still not shown: that is Explorer-only, like the Store

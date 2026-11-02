@@ -17,6 +17,8 @@ pub struct Config {
     pub tray: Tray,
     /// `shell:`, Tile as the Windows shell.
     pub shell: Shell,
+    /// `wallpaper:`, the desktop Tile paints in shell mode.
+    pub wallpaper: Wallpaper,
     /// `animations:`, for windows moving and resizing.
     pub animations: Animations,
     /// `dwindle:`, the dwindle layout.
@@ -139,6 +141,7 @@ impl Default for Config {
             cursor: Cursor::default(),
             tray: Tray::default(),
             shell: Shell::default(),
+            wallpaper: Wallpaper::default(),
             animations: Animations::default(),
             dwindle: Dwindle::default(),
             master: Master::default(),
@@ -220,6 +223,98 @@ impl Config {
             border: n.border.unwrap_or(theme.accent),
         }
     }
+}
+
+/// The desktop Tile paints while it is the shell: a plain colour, or a wallpaper over it. With
+/// Explorer running, Windows paints the desktop and none of this applies.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Wallpaper {
+    /// The plain desktop colour, which also shows around an image that doesn't cover the monitor.
+    pub color: Color,
+    /// The image shown first. Unset shows `color`, or a pick from `directory`.
+    pub path: Option<String>,
+    /// A folder of images to pick from when `path` is unset and for `cycle`.
+    pub directory: Option<String>,
+    /// Look in the folders under `directory` too.
+    pub recursive: bool,
+    /// How an image is fitted to the monitor.
+    pub fill_mode: FillMode,
+    /// Changing the wallpaper on a timer.
+    pub cycle: Cycle,
+}
+
+impl Default for Wallpaper {
+    fn default() -> Self {
+        Self {
+            color: Color::rgb(0, 0, 0),
+            path: None,
+            directory: None,
+            recursive: true,
+            fill_mode: FillMode::Crop,
+            cycle: Cycle::default(),
+        }
+    }
+}
+
+/// Changing the wallpaper to the next image of `wallpaper.directory` on a timer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Cycle {
+    /// Change the wallpaper every `interval_seconds`.
+    pub enabled: bool,
+    /// Seconds between changes, at least 5.
+    pub interval_seconds: u64,
+    /// Which image comes next.
+    pub order: CycleOrder,
+}
+
+impl Cycle {
+    /// The fewest seconds between changes, so a typo can't thrash the desktop.
+    pub const MIN_INTERVAL_SECONDS: u64 = 5;
+
+    /// The time between changes, within its limit.
+    pub fn interval(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.interval_seconds.max(Self::MIN_INTERVAL_SECONDS))
+    }
+}
+
+impl Default for Cycle {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_seconds: 1800,
+            order: CycleOrder::Random,
+        }
+    }
+}
+
+/// Which image a cycling wallpaper changes to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CycleOrder {
+    /// Any other image, every one before any repeats.
+    #[default]
+    Random,
+    /// By path, wrapping round at the end.
+    Alphabetical,
+}
+
+/// How a wallpaper is fitted to a monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FillMode {
+    /// Scaled to cover the monitor, the overflow cut off.
+    #[default]
+    Crop,
+    /// Scaled to fit inside the monitor, `color` around it.
+    Fit,
+    /// Stretched to the monitor's shape.
+    Stretch,
+    /// Its own size, in the middle.
+    Center,
+    /// Its own size, repeated.
+    Tile,
 }
 
 /// The font, corners and colours shared by everything Tile draws, unless its own section
