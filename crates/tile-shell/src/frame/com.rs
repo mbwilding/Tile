@@ -187,6 +187,18 @@ pub(super) fn present(
     frame_window(frame).ok_or_else(|| "the frame has no window".into())
 }
 
+/// Names `frame` after the app `id`, without putting a window in it.
+pub(super) fn name(frame: &IApplicationFrame, id: &str) -> std::result::Result<(), String> {
+    let id = wide(id);
+    // SAFETY: `id` is NUL-terminated and outlives the call.
+    unsafe {
+        context(
+            frame.set_application_id(PCWSTR(id.as_ptr()), true.into()),
+            "naming the frame",
+        )
+    }
+}
+
 /// Asks the frame host to report each frame's commands, such as close, to this process. The
 /// handler is to be kept for as long as the manager.
 pub(super) fn listen(manager: &IApplicationFrameManager) -> Option<IApplicationFrameEventHandler> {

@@ -10,8 +10,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use windows_sys::Win32::System::Diagnostics::Debug::{
-    SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX, SetErrorMode,
+use windows_sys::Win32::System::{
+    Diagnostics::Debug::{SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX, SetErrorMode},
+    Threading::{GetCurrentProcess, TerminateProcess},
 };
 
 /// How long the session gets to come up.
@@ -71,6 +72,14 @@ pub fn run() -> Result<(), Error> {
     host()
 }
 
+/// Ends the process with `code` at once. The session's thread is still inside Windows when the
+/// check ends, and an ordinary exit runs the runtime's teardown under it and crashes.
+pub fn exit(code: u32) -> ! {
+    // SAFETY: ends this process, which is what is asked.
+    unsafe { TerminateProcess(GetCurrentProcess(), code) };
+    std::process::abort()
+}
+
 /// Creates the session and the lifecycle manager, and runs the session for a moment.
 fn host() -> Result<(), Error> {
     let worker = thread::spawn(crate::uwp::host);
@@ -80,7 +89,10 @@ fn host() -> Result<(), Error> {
             return Err(stopped(worker, "the session didn't come up"));
         }
         if Instant::now() > deadline {
-            return Err(Error::Failed("the session took too long to come up".into()));
+            // Another process may already host the session; that says nothing about this build.
+            return Err(Error::Inconclusive(
+                "the session took too long to come up".into(),
+            ));
         }
         thread::sleep(Duration::from_millis(20));
     }

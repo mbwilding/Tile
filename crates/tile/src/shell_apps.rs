@@ -21,7 +21,7 @@ use crate::paths::data_dir;
 const TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The probe's exit code when it couldn't be run, which says nothing about Windows.
-const INCONCLUSIVE: i32 = 3;
+const INCONCLUSIVE: u32 = 3;
 
 /// What the probe found for one build of Windows and of Tile.
 #[derive(Serialize, Deserialize)]
@@ -135,7 +135,7 @@ fn run_probe() -> Probe {
             Ok(None) if Instant::now() > deadline => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Probe::Failed("it didn't finish".into());
+                return Probe::Inconclusive("it didn't finish".into());
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
             Err(e) => return Probe::Inconclusive(e.to_string()),
@@ -148,7 +148,7 @@ fn run_probe() -> Probe {
     let said = said.trim().to_owned();
     match status.code() {
         Some(0) => Probe::Passed,
-        Some(INCONCLUSIVE) => Probe::Inconclusive(said),
+        Some(code) if code as u32 == INCONCLUSIVE => Probe::Inconclusive(said),
         Some(code) if !said.is_empty() => Probe::Failed(format!("{said} (exit {code})")),
         // A crash ends with the exception's code, such as 0xC0000005.
         Some(code) => Probe::Failed(format!("it crashed (exit {:#x})", code as u32)),
@@ -158,7 +158,7 @@ fn run_probe() -> Probe {
 
 /// `tile --probe-shell`: runs the check and exits with how it went.
 pub fn probe_and_exit() -> ! {
-    let code = match probe::run() {
+    let code: u32 = match probe::run() {
         Ok(()) => 0,
         Err(Error::Failed(reason)) => {
             println!("{reason}");
@@ -169,7 +169,8 @@ pub fn probe_and_exit() -> ! {
             INCONCLUSIVE
         }
     };
-    std::process::exit(code);
+    // Not `std::process::exit`: see `probe::exit`.
+    probe::exit(code);
 }
 
 #[cfg(test)]

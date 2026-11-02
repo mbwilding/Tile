@@ -73,8 +73,9 @@ pub(crate) fn probe() -> Result<(), crate::probe::Error> {
     if class != "ApplicationFrameWindow" {
         return Err(Error::Failed(format!("a frame's window is a {class}")));
     }
-    // What these answer for a window that is no app doesn't matter; that they return does.
-    let _ = com::present(&frame, shell.window, "Tile.Probe");
+    // What these answer for a window that is no app doesn't matter; that they return does. The
+    // frame isn't given a window: the frame host never answers for one that is no app's.
+    let _ = com::name(&frame, "Tile.Probe");
     let _ = com::frames(&manager);
     let _events = com::listen(&manager);
     if let Some(statics) = com::window_statics() {
@@ -124,11 +125,29 @@ struct Framer {
     dormant: HashSet<usize>,
 }
 
+/// How many times the shell window is tried for, and how long between tries.
+const SHELL_TRIES: u32 = 30;
+const SHELL_RETRY: Duration = Duration::from_millis(500);
+
+/// Registers the shell window and takes its key. Windows keeps a process's key a moment after
+/// the process ends, so a helper that replaces another is refused at first and is let in soon.
+fn take_shell() -> Result<Shell, String> {
+    let mut last = String::new();
+    for _ in 0..SHELL_TRIES {
+        match Shell::take() {
+            Ok(shell) => return Ok(shell),
+            Err(e) => last = e,
+        }
+        thread::sleep(SHELL_RETRY);
+    }
+    Err(last)
+}
+
 /// Frames app windows as window events report them, and keeps the frames in step with their
 /// apps every tick while there are any. Without the events, every window is scanned each tick.
 fn run() -> Result<(), String> {
     com::join_apartment();
-    let mut framer = Framer::new(Shell::take()?);
+    let mut framer = Framer::new(take_shell()?);
     let events = windows::WindowEvents::watch();
     if events.complete() {
         tracing::info!("framing Store app windows");

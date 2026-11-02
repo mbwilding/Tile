@@ -14,11 +14,11 @@ use windows_sys::Win32::{
     UI::{
         Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent},
         WindowsAndMessaging::{
-            CHILDID_SELF, CreateWindowExW, EVENT_OBJECT_CLOAKED, EVENT_OBJECT_CREATE,
-            EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED, EnumChildWindows, EnumWindows,
-            GetClientRect, GetForegroundWindow, GetParent, GetSystemMetrics, OBJID_WINDOW,
-            PostMessageW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
-            SetWindowPos, SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT,
+            CHILDID_SELF, CreateWindowExW, DestroyWindow, EVENT_OBJECT_CLOAKED,
+            EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED, EnumChildWindows,
+            EnumWindows, GetClientRect, GetForegroundWindow, GetParent, GetSystemMetrics,
+            OBJID_WINDOW, PostMessageW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE,
+            SWP_NOZORDER, SetWindowPos, SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT,
             WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
         },
     },
@@ -94,8 +94,19 @@ impl Shell {
         }
         // SAFETY: `window` was just created on this thread.
         if unsafe { SetShellWindow(window) } == 0 {
+            // SAFETY: the window made above, on this thread.
+            unsafe { DestroyWindow(window) };
             return Err("another process is the shell".into());
         }
+        Self::acquire(window).inspect_err(|_| {
+            // Left alone it would stay the shell window and fail the next try.
+            // SAFETY: the window made above, on this thread.
+            unsafe { DestroyWindow(window) };
+        })
+    }
+
+    /// Takes the key for the shell window `window`.
+    fn acquire(window: HWND) -> Result<Self, String> {
         let library = wide("win32u.dll");
         // SAFETY: loading a system library by name. The exports are looked up rather than
         // linked, so an update that drops them stops only this, not the whole program.
