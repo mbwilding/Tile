@@ -40,6 +40,20 @@ impl Input {
         self.caret += c.len_utf8();
     }
 
+    /// Pastes `text` at the caret as one line: line breaks and tabs become spaces, other control
+    /// characters are dropped. Returns whether anything went in.
+    pub fn insert_str(&mut self, text: &str) -> bool {
+        let before = self.text.len();
+        for c in text.trim().chars() {
+            match c {
+                '\n' | '\r' | '\t' => self.insert(' '),
+                c if c.is_control() => {}
+                c => self.insert(c),
+            }
+        }
+        self.text.len() != before
+    }
+
     fn prev(&self, at: usize) -> Option<usize> {
         self.text[..at].char_indices().next_back().map(|(i, _)| i)
     }
@@ -194,6 +208,15 @@ mod tests {
         assert_eq!(show(&i), ">|abc");
         assert!(i.end());
         assert_eq!(show(&i), ">abc|");
+    }
+
+    #[test]
+    fn pastes_text_as_one_line() {
+        let mut i = input("ad");
+        assert!(i.left());
+        assert!(i.insert_str("  b\r\nc\u{7}é\n"));
+        assert_eq!(show(&i), "ab  cé|d");
+        assert!(!i.insert_str("\n\u{7}"));
     }
 
     #[test]

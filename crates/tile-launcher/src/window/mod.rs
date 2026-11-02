@@ -701,6 +701,12 @@ fn run(
                 co::VK::END => _ = s.query.end(),
                 co::VK::BACK | co::VK::CHAR_W if ctrl => edited = s.query.delete_word(),
                 co::VK::CHAR_U if ctrl => edited = s.query.delete_to_start(),
+                co::VK::CHAR_V if ctrl => {
+                    edited = paste().is_some_and(|text| s.query.insert_str(&text));
+                }
+                co::VK::INSERT if shift => {
+                    edited = paste().is_some_and(|text| s.query.insert_str(&text));
+                }
                 co::VK::BACK => edited = s.query.backspace(),
                 co::VK::DELETE => edited = s.query.delete(),
                 _ => return Ok(()),
@@ -900,6 +906,20 @@ fn app_menu(hwnd: &w::HWND) -> Option<i32> {
     });
     let _ = menu.DestroyMenu();
     chosen
+}
+
+/// The text on the clipboard, if there is any.
+fn paste() -> Option<String> {
+    let clipboard = w::HWND::NULL.OpenClipboard().ok()?;
+    let bytes = clipboard.GetClipboardData(co::CF::UNICODETEXT).ok()?;
+    let units: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| u16::from_le_bytes(*b))
+        .take_while(|&u| u != 0)
+        .collect();
+    Some(String::from_utf16_lossy(&units))
 }
 
 /// Puts `text` on the clipboard.

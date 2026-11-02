@@ -211,6 +211,7 @@ narrow for it.
 | `Backspace` / `Delete` | delete the character before / after the caret |
 | `Ctrl+Backspace` / `Ctrl+W` | delete the word before the caret |
 | `Ctrl+U` | delete everything before the caret |
+| `Ctrl+V` / `Shift+Insert` | paste the clipboard's text at the caret, on one line |
 
 Keys you remap to the arrows (a `remap` layer) work the same as the arrows.
 
