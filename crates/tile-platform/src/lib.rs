@@ -19,6 +19,7 @@ pub mod registry;
 mod sign_in;
 mod startup;
 mod tile_icon;
+mod toast;
 mod token;
 mod tray;
 mod windows;
@@ -41,6 +42,7 @@ pub use sign_in::{
     conhost, headless_command, is_shell as is_sign_in_shell, set_shell as set_sign_in_shell,
 };
 pub use startup::{commands as startup_commands, first_this_session as first_startup_this_session};
+pub use toast::{Toast, ToastSettings};
 pub use token::{is_elevated, user_sid};
 pub use tray::{Tray, TrayEvent};
 pub use windows::{

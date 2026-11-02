@@ -31,6 +31,8 @@ pub struct Config {
     pub launcher: Launcher,
     /// `workspace_indicator:`, the workspace number that flashes up.
     pub workspace_indicator: WorkspaceIndicator,
+    /// `notifications:`, popups for Windows toast notifications.
+    pub notifications: Notifications,
     /// `super+shift+q: killactive`, added to (or overriding) the default binds unless
     /// `general.default_binds` is off. An empty value unbinds a default.
     pub binds: BTreeMap<String, Option<String>>,
@@ -144,6 +146,7 @@ impl Default for Config {
             remap: Remap::default(),
             launcher: Launcher::default(),
             workspace_indicator: WorkspaceIndicator::default(),
+            notifications: Notifications::default(),
             binds: BTreeMap::new(),
             rules: default_rules(),
         }
@@ -201,6 +204,19 @@ impl Config {
             corners: i.corners.unwrap_or(theme.corners),
             background: i.background.unwrap_or(theme.accent),
             foreground: i.foreground.unwrap_or(theme.accent_foreground),
+        }
+    }
+
+    /// The notification popup's look: `theme`'s window colours, since unlike the indicator it
+    /// isn't an accent to pick out, just a window like the launcher's.
+    pub fn notification_style(&self) -> NotificationStyle {
+        let theme = &self.theme;
+        NotificationStyle {
+            font: theme.font.clone(),
+            corners: theme.corners,
+            background: theme.background,
+            foreground: theme.foreground,
+            dimmed: theme.dimmed,
         }
     }
 }
@@ -276,6 +292,21 @@ pub struct IndicatorStyle {
     pub background: Color,
     /// The workspace number.
     pub foreground: Color,
+}
+
+/// The notification popup's font, corners and colours, resolved against `theme`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotificationStyle {
+    /// The font family.
+    pub font: String,
+    /// Corner rounding.
+    pub corners: Corners,
+    /// The window.
+    pub background: Color,
+    /// The title text.
+    pub foreground: Color,
+    /// The app name and body text.
+    pub dimmed: Color,
 }
 
 /// The window manager's main switches.
@@ -689,6 +720,39 @@ impl Default for WorkspaceIndicator {
             opacity: 0.95,
             background: None,
             foreground: None,
+        }
+    }
+}
+
+/// Popups for Windows toast notifications, read through `UserNotificationListener` since shell
+/// mode has nowhere else to show them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Notifications {
+    /// Show a popup for each new notification. Off by default: reading every notification is a
+    /// deliberate choice, not a silent default.
+    pub enabled: bool,
+    /// Where on the monitor it sits.
+    pub position: IndicatorPosition,
+    /// Pixels between the popup and the edges of the work area it sits against, at 100% scaling.
+    pub gap: u32,
+    /// Width in pixels at 100% scaling. It grows tall enough for the text.
+    pub width: u32,
+    /// How long it stays shown, in milliseconds, before it fades out.
+    pub duration_ms: u64,
+    /// How long it takes to fade out after that, in milliseconds.
+    pub fade_ms: u64,
+}
+
+impl Default for Notifications {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            position: IndicatorPosition::BottomRight,
+            gap: 16,
+            width: 340,
+            duration_ms: 5000,
+            fade_ms: 400,
         }
     }
 }

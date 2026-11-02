@@ -71,8 +71,11 @@ logs it to `launcher.log`.
   covers each monitor with a plain black window at the very bottom of the stack (Windows keeps
   showing Explorer's last wallpaper otherwise), and removes them when it stops. Icons on the desktop are gone.
 - **No Start menu, search or notification centre.** The launcher covers starting apps and the
-  volume, network, Bluetooth, battery and clock. Windows toast notifications and tray balloons
-  are not shown. Win+A still opens quick settings.
+  volume, network, Bluetooth, battery and clock. Windows' own toast popups and tray balloons,
+  drawn by `shellexperiencehost.exe`, are still not shown: that is Explorer-only, like the Store
+  app frames [below](#settings-and-store-apps). Tile can instead read every posted notification
+  through `UserNotificationListener` and show its own popups; see
+  [Notifications](windows-integration.md#notifications). Win+A still opens quick settings.
 - **Alt+Tab, Task View and snapping** are Explorer's; they may be missing or odd. Tile's
   workspaces replace most of that.
 - **Win+E** and the Win key shortcuts that Explorer handles stop working. Bind your own, for

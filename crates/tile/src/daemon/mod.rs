@@ -8,6 +8,7 @@ mod events;
 mod lifecycle;
 mod lock;
 mod manage;
+mod notifications;
 mod pointer;
 mod shell;
 mod tracked;
@@ -24,12 +25,13 @@ use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, WindowId};
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
-    Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Tray, TrayEvent,
-    WinDrag, WinEvent, WinEventHooks, Windows,
+    Backdrop, DragEvent, HotkeyEvent, Hotkeys, Indicator, IndicatorSettings, Toast, ToastSettings,
+    Tray, TrayEvent, WinDrag, WinEvent, WinEventHooks, Windows,
     desktops::{self as vd, DesktopChange},
     foreground,
 };
 use tile_shell::notify::{Host, Registry};
+use tile_sys::notifications::{Listener as NotificationListener, Notification};
 use tokio::{
     sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
     time::{Instant, MissedTickBehavior, interval, sleep_until},
@@ -88,6 +90,7 @@ struct Receivers {
     ipc: UnboundedReceiver<Incoming>,
     config: UnboundedReceiver<()>,
     remap: UnboundedReceiver<Notice>,
+    notifications: UnboundedReceiver<Notification>,
 }
 
 struct Daemon {
@@ -103,6 +106,12 @@ struct Daemon {
     tray: Tray,
     launcher: Launcher,
     indicator: Indicator,
+    /// Popups for Windows toast notifications.
+    toast: Toast,
+    /// Reads posted notifications, while `notifications.enabled` is on and Tile has permission.
+    notify_listener: Option<NotificationListener>,
+    /// Where notifications read by [`Self::notify_listener`] are sent.
+    notify_tx: UnboundedSender<Notification>,
     /// The tray icons apps have added, while Tile hosts the notification area.
     registry: Registry,
     /// The notification area's window, while Tile is the shell and no other taskbar runs.
@@ -160,6 +169,13 @@ fn indicator_settings(loaded: &Loaded) -> IndicatorSettings {
     IndicatorSettings {
         config: loaded.config.workspace_indicator.clone(),
         style: loaded.config.indicator_style(),
+    }
+}
+
+fn toast_settings(loaded: &Loaded) -> ToastSettings {
+    ToastSettings {
+        config: loaded.config.notifications,
+        style: loaded.config.notification_style(),
     }
 }
 
@@ -243,6 +259,7 @@ pub async fn run(
     let (desktop_tx, desktop_rx) = mpsc::unbounded_channel();
     let (remap_tx, remap_rx) = mpsc::unbounded_channel();
     let (drag_tx, drags_rx) = mpsc::unbounded_channel();
+    let (notify_tx, notifications_rx) = mpsc::unbounded_channel();
 
     let (hooks, events) = WinEventHooks::install()
         .await
@@ -260,6 +277,7 @@ pub async fn run(
         registry.clone(),
     );
     let indicator = Indicator::spawn(indicator_settings(&loaded));
+    let toast = Toast::spawn(toast_settings(&loaded));
     let _watcher = tile_config::watch(&config_path, move || {
         let _ = config_tx.send(());
     })
@@ -280,6 +298,9 @@ pub async fn run(
         tray,
         launcher,
         indicator,
+        toast,
+        notify_listener: None,
+        notify_tx,
         registry,
         notify_host: None,
         shell_forced,
@@ -313,6 +334,7 @@ pub async fn run(
         daemon.start_tiling();
     }
     daemon.update_remap();
+    daemon.update_notifications();
     daemon.update_cursor();
     daemon.tray.set_logging(logging::enabled());
     daemon.tray.set_shell(daemon.shell_wanted());
@@ -336,6 +358,7 @@ pub async fn run(
             ipc: ipc_rx,
             config: config_rx,
             remap: remap_rx,
+            notifications: notifications_rx,
         })
         .await;
 
@@ -414,6 +437,7 @@ impl Daemon {
                 Some(incoming) = rx.ipc.recv() => self.on_ipc(incoming),
                 Some(()) = rx.config.recv() => reload_at = Some(Instant::now() + RELOAD_DEBOUNCE),
                 Some(Notice::Panic) = rx.remap.recv() => self.stop_remap(REMAP_PANIC),
+                Some(notification) = rx.notifications.recv() => self.show_notification(notification),
                 () = until(reload_at) => {
                     reload_at = None;
                     self.reload();
@@ -468,6 +492,8 @@ impl Daemon {
         paths::save_restore(&Restore::default());
         self.launcher.shutdown();
         self.indicator.shutdown();
+        self.toast.shutdown();
+        self.notify_listener = None;
         self.tray.shutdown();
         if let Some(host) = self.notify_host.take() {
             host.stop();
