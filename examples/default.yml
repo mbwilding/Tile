@@ -111,7 +111,7 @@ notifications:
   enabled: ~ # unset follows shell mode; true/false always shows or never does
   position: top_right # center | top | top_left | top_right | bottom | bottom_left | bottom_right | left | right
   gap: 16 # px from the edges, unused for center
-  width: 340 # px at 100% scaling
+  width: 380 # px at 100% scaling
   duration_ms: 5000 # fully shown
   fade_ms: 400 # then fades out
   max_visible: 3 # popups stacked at once; the rest wait their turn
