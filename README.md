@@ -15,11 +15,15 @@ Windows gives you a pile of overlapping rectangles and asks you to arrange them 
 does it for you. Open a window and it takes its place, close one and the rest fill the gap. Your
 hands stay on the keyboard, and the layout is always tidy.
 
-**One tool, not three.** A tiling window manager, a hotkey daemon and a key remapper normally
+### One tool, not three
+
+A tiling window manager, a hotkey daemon and a key remapper normally
 means three programs to install, configure and keep running. Tile is a single small Rust
 executable with one YAML file, and it reloads that file the moment you save it.
 
-**Layouts that suit the work.** Pick one per workspace and switch with a single key. The windows
+### Layouts that suit the work
+
+Pick one per workspace and switch with a single key. The windows
 keep their order when you do.
 
 | | |
@@ -29,14 +33,18 @@ keep their order when you do.
 | ![Scrolling](docs/images/scrolling.png) | ![Even](docs/images/even.png) |
 | **Scrolling**: an endless strip of columns that follows your focus | **Even**: equal shares for every window |
 
-**Built for big and odd-shaped screens.** Every monitor has its own workspaces, and portrait
+### Built for big and odd-shaped screens
+
+Every monitor has its own workspaces, and portrait
 monitors switch to stacked rows on their own. Rotate the monitor and Tile adapts.
 
 ![A portrait monitor with three windows stacked in equal rows](docs/images/portrait.png)
 
-**A launcher that does more than launch.** `Win+R` searches everything Start lists, then goes
-further: it runs command lines, runs Tile commands, does sums, and finds volume, Wi-Fi,
-Bluetooth, power and tray icon items. See [Launcher](docs/launcher.md).
+### The launcher
+
+`Win+R` searches everything Start lists, then goes further: it runs command lines, runs Tile
+commands, does sums, and finds volume, Wi-Fi, Bluetooth, power and tray icon items. See
+[Launcher](docs/launcher.md).
 
 | | |
 | --- | --- |
@@ -45,18 +53,26 @@ Bluetooth, power and tray icon items. See [Launcher](docs/launcher.md).
 | ![The launcher offering Tile's own commands](docs/images/launcher-commands.png) | ![The launcher finding apps, Wi-Fi and config items](docs/images/launcher-settings.png) |
 | **Tile's own commands**, ready to run | **Apps, system settings and Tile's config** in one search |
 
-**Replace the Windows shell.** Switch on [shell mode](docs/shell.md) and Tile becomes your
+### Replace the Windows shell
+
+Switch on [shell mode](docs/shell.md) and Tile becomes your
 shell, so Explorer's taskbar, desktop and Start menu never run. All that is left is your tiled
 windows, with the launcher doing the Start menu's job, tray icons and system controls included.
 It is one tick in the tray menu, and unticking it brings Explorer back at your next sign-in.
 
-**Keys that do what you mean.** Home-row mods, tap/hold keys, layers and key sequences are built
+### Keys that do what you mean
+
+Home-row mods, tap/hold keys, layers and key sequences are built
 in, with no second program and nothing to sync between the two.
 
-**Scriptable.** `tile query` prints state as JSON and `tile subscribe` streams events, so a
+### Scriptable
+
+`tile query` prints state as JSON and `tile subscribe` streams events, so a
 status bar or a script can follow along. `tile dispatch` runs anything a keybind can.
 
-**Leaves no mess behind.** Everything Tile changes is undone when it stops, even after a crash
+### Leaves no mess behind
+
+Everything Tile changes is undone when it stops, even after a crash
 or a hard kill.
 
 ## Features
