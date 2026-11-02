@@ -115,9 +115,9 @@ impl Daemon {
                 self.tray.set_config_error(None);
                 // Our own save of a tray switch lands here too; nothing else changed.
                 let mut same = loaded.config.clone();
-                same.tray = self.loaded.config.tray.clone();
+                same.features = self.loaded.config.features.clone();
                 let unchanged = same == self.loaded.config;
-                let shell = loaded.config.tray.shell;
+                let shell = loaded.config.features.shell;
                 let wallpaper = loaded.config.wallpaper != self.loaded.config.wallpaper;
                 self.loaded = loaded;
                 // The Shell switch follows the config file, whoever edited it.

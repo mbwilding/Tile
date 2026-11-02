@@ -33,6 +33,10 @@ impl State {
                 let next = self.active_layout().unwrap_or(self.default_layout).next();
                 self.set_layout(next)
             }
+            Command::ResetLayout => {
+                let kind = self.active_layout().unwrap_or(self.default_layout);
+                self.set_layout(kind)
+            }
             Command::SwapWithMaster
             | Command::ToggleSplit
             | Command::ScrollerProportion(_)
@@ -176,6 +180,29 @@ impl State {
         let area = self.area_of(n);
         let settings = self.settings.clone();
         if let Some(ws) = self.workspaces.get_mut(&n) {
+            // The keys move an edge: right and down move it that way, even when it is the left or
+            // top edge of a window against the far side that the divider is on.
+            let (dx, dy) = match ws.layout.kind() {
+                LayoutKind::Scrolling => (dx, dy),
+                _ => {
+                    let bounds = settings.tiling_area(area);
+                    let own = ws
+                        .layout
+                        .arrange(area, Some(id), &settings)
+                        .into_iter()
+                        .find(|t| t.id == id)
+                        .map(|t| t.rect);
+                    own.map_or((dx, dy), |r| {
+                        let flip = |at_far: bool, at_near: bool, d: i32| {
+                            if at_far && !at_near { -d } else { d }
+                        };
+                        (
+                            flip(r.x + r.w >= bounds.x + bounds.w, r.x <= bounds.x, dx),
+                            flip(r.y + r.h >= bounds.y + bounds.h, r.y <= bounds.y, dy),
+                        )
+                    })
+                }
+            };
             ws.layout.resize(id, dx, dy, area, &settings);
         }
         self.sync()

@@ -30,16 +30,12 @@ theme:
   accent_foreground: "#1e1e2e" # text on accent
   inactive: "#45475a" # border of unfocused windows
 
-# The tray's switches. Tile saves these when you change them in the tray.
-tray:
+# What is switched on. Tile saves these when you tick them in the tray.
+features:
   tile: false # window manager on (starts off)
   remap: false # key remapper on (starts off)
   shell: false # Tile is the shell: hosts tray icons, keeps the launcher bound
   log: false
-
-# Tile as the Windows shell; see shell.md.
-shell:
-  run_startup: true # as the shell, run the Run keys and Startup folders
 
 # The desktop in shell mode; see docs/shell.md.
 wallpaper:
@@ -190,6 +186,7 @@ binds:
   super+f: togglefloating
   super+o: fullscreen
   super+space: cyclelayout
+  super+0: resetlayout
   super+n: cyclenext
   super+z: lock
   super+s: togglesplit

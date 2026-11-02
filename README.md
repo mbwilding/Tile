@@ -92,7 +92,7 @@ terminal can leave windows hidden and the pointer blank until Tile next starts (
 ## Configuration
 
 Tile runs on its built-in defaults. On first run it creates `%APPDATA%\Tile\config.yml` holding
-only the tray's switches (Tile, Remap, Shell, Log), which it saves there as you change them.
+only the `features` switches (Tile, Remap, Shell, Log), which it saves there as you change them.
 Add a section and key to change anything else; saved changes apply immediately, and a broken
 config turns the tray icon red while the last good one stays in use. [Configuration](docs/configuration.md) has every setting and the whole default
 config to copy and paste, and [`examples/`](examples) has complete configs to start from.

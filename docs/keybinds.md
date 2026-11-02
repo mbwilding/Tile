@@ -20,6 +20,7 @@ binds, so they see keys as remapped: a home-row `Win` works for `Win+` binds.
 | `Win+Enter` | make the window the main one (swap with master) |
 | `Win+F` / `Win+O` | toggle floating / fullscreen |
 | `Win+Space` | next layout |
+| `Win+0` | reset the layout, undoing resizes |
 | `Win+N` | focus the next window in layout order |
 | `Win+Z` | lock the computer |
 | `Win+Arrows` / `Win+H/J/K/L` | move focus (to the nearest window on the next monitor at the edge) |
@@ -83,13 +84,14 @@ A `binds` value is `<dispatcher> [arguments]`. `tile dispatch` runs the same one
 | `togglefloating` / `fullscreen` | toggle floating / fullscreen |
 | `movefocus <l\|r\|u\|d>` | focus the nearest window that way, or the nearest one on the next monitor |
 | `movewindow <l\|r\|u\|d>` | move the window that way, to the next monitor at the edge |
-| `resizeactive <dx> <dy>` | grow (or shrink, with negative values) by pixels |
+| `resizeactive <dx> <dy>` | move the window's edge by pixels, right and down for positive values. A tiled window against the right or bottom of the monitor moves its left or top edge, so the divider follows the key from either side. A floating window grows (or shrinks) |
 | `cyclenext` / `cycleprev` | focus the next / previous window in layout order |
 | `workspace <n>` | switch to workspace `n` (1-255) on the focused monitor, or on every monitor when `independent_workspaces` is off; the [workspace indicator](configuration.md#workspace_indicator) flashes its number |
 | `movetoworkspace <n>` | move the window to workspace `n` and follow it |
 | `movetoworkspacesilent <n>` | move the window to workspace `n` and stay |
 | `focusmonitor <l\|r\|u\|d>` | focus the next monitor that way |
 | `layout <name>` / `cyclelayout` | set / step through the workspace's layout |
+| `resetlayout` | rebuild the workspace's layout as new, keeping the window order: undoes resizing and flipped splits, and in the scrolling layout gives each window its own column again |
 | `swapwithmaster` | master / dwindle: swap the window with the main one (or the main one with the next) |
 | `togglesplit` | dwindle: flip the direction of the window's split |
 | `scroller_proportion <0.05-1.0>` | scrolling: set the column's width |

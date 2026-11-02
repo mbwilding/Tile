@@ -8,7 +8,7 @@ the windows keep their order when you switch. Options are in
 | Layout | Description |
 | --- | --- |
 | `dwindle` | A binary tree. Each new window splits the focused one along its longer side. `togglesplit` flips a split, and dragging a tile's edge changes its ratio. |
-| `master` | `master.count` windows in a column on the left (`mfact` of the width), the rest stacked on the right. `swapwithmaster` promotes a window. |
+| `master` | `master.count` windows in a column on the left (`mfact` of the width), the rest stacked on the right. `swapwithmaster` promotes a window. `resizeactive` changes the column's width and, with a `dy`, how tall the window is against the others in its column. |
 | `monocle` | Every window fills the workspace. Move focus steps through them. |
 | `scrolling` | An endless horizontal strip of columns, scrolled to keep the focus in view. Columns can hold several windows (`consumewindow`, `expelwindow`), and off-screen columns are hidden. |
 | `even` | Every window gets an equal share: side by side on a landscape monitor, stacked as equal rows on a portrait one. Resizing does nothing, since every share is equal. |

@@ -13,10 +13,8 @@ pub struct Config {
     pub theme: Theme,
     /// `cursor:`, the mouse pointer.
     pub cursor: Cursor,
-    /// `tray:`, the tray's switches.
-    pub tray: Tray,
-    /// `shell:`, Tile as the Windows shell.
-    pub shell: Shell,
+    /// `features:`, what is switched on, saved when the tray's items are ticked.
+    pub features: Features,
     /// `wallpaper:`, the desktop Tile paints in shell mode.
     pub wallpaper: Wallpaper,
     /// `animations:`, for windows moving and resizing.
@@ -51,6 +49,7 @@ const DEFAULT_BINDS: &[(&str, &str)] = &[
     ("super+f", "togglefloating"),
     ("super+o", "fullscreen"),
     ("super+space", "cyclelayout"),
+    ("super+0", "resetlayout"),
     ("super+n", "cyclenext"),
     ("super+z", "lock"),
     ("super+left", "movefocus l"),
@@ -139,8 +138,7 @@ impl Default for Config {
             general: General::default(),
             theme: Theme::default(),
             cursor: Cursor::default(),
-            tray: Tray::default(),
-            shell: Shell::default(),
+            features: Features::default(),
             wallpaper: Wallpaper::default(),
             animations: Animations::default(),
             dwindle: Dwindle::default(),
@@ -472,10 +470,10 @@ impl Default for General {
     }
 }
 
-/// The tray's switches, saved here whenever they are changed so they survive a restart.
+/// What is switched on, saved here whenever the tray's items are ticked so it survives a restart.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Tray {
+pub struct Features {
     /// Window management is on. Off until switched on.
     pub tile: bool,
     /// Key remapping is on. Off until switched on.
@@ -485,22 +483,6 @@ pub struct Tray {
     /// Tile is the shell: it hosts the notification area when no taskbar is running, keeps the
     /// launcher bound and lists the tray icons in it.
     pub shell: bool,
-}
-
-/// Tile as the Windows shell, in place of Explorer's taskbar. Whether it is the shell is the
-/// tray's Shell switch (`tray.shell`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct Shell {
-    /// Run the `Run` and `RunOnce` registry keys and the Startup folders when Tile starts as
-    /// the shell, as Explorer would.
-    pub run_startup: bool,
-}
-
-impl Default for Shell {
-    fn default() -> Self {
-        Self { run_startup: true }
-    }
 }
 
 /// The mouse pointer.

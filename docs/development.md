@@ -29,7 +29,7 @@ needs.
 | --- | --- |
 | `tile-core` | Platform-independent window manager model: state, one state per virtual desktop, layouts with their defaults and limits, dispatchers, geometry and easing (unit tested) |
 | `tile-remap` | The key remapper: layers and overloads as a pure state machine, its config parser and the key names shared with keybinds (unit tested) |
-| `tile-config` | YAML schema, keybind parsing, window rules, the tray switches and file watching (tested against `docs/` and `examples/`) |
+| `tile-config` | YAML schema, keybind parsing, window rules, the feature switches and file watching (tested against `docs/` and `examples/`) |
 | `tile-ipc` | Named-pipe JSON protocol |
 | `tile-launcher` | The app launcher: the search, calculator and system items (tested), and its window |
 | `tile-platform` | Win32 for the window manager: window events, placement and animation, the keybind hook, the Win+drag mouse hook, tray, the workspace indicator, the sign-in shell and programs, virtual desktops, Win+L and Click to Do, the current user's registry values and where Tile is installed |

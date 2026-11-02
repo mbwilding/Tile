@@ -59,8 +59,7 @@ impl Daemon {
     pub(super) fn start_shell(&mut self) {
         let bare = !taskbar_exists();
         self.sync_shell();
-        let shell = &self.loaded.config.shell;
-        if self.notify_host.is_none() || !bare || !shell.run_startup {
+        if self.notify_host.is_none() || !bare {
             return;
         }
         if !tile_platform::first_startup_this_session() {

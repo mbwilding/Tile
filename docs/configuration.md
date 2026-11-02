@@ -2,8 +2,8 @@
 
 Tile reads `%APPDATA%\Tile\config.yml`, or `config.yaml` if that is the one there (`tile
 config` prints the path). Tile runs on its built-in defaults, so the file only needs the settings
-you want to change. On first run it creates `config.yml` holding just `tray`, the tray's
-switches, which Tile saves there whenever you change them. Add a section and key to change
+you want to change. On first run it creates `config.yml` holding just `features`, the
+switches Tile saves there whenever you tick one in the tray. Add a section and key to change
 anything else; the [default config](#the-default-config) below lists them all to copy from. Saved changes apply immediately,
 and `tile check [file]` reports what is wrong with a config. A bad config is not applied; the
 previous one is kept, and the tray icon turns red until the file is fixed (see
@@ -66,9 +66,9 @@ by default; set one there to override the theme for just that part.
 | `accent_foreground` | `"#1e1e2e"` | Text on `accent`: the launcher's selected row and the workspace number. |
 | `inactive` | `"#45475a"` | The border of tiled windows without focus. |
 
-### `tray`
+### `features`
 
-The tray menu's switches. Tile writes these itself when you change one, and reads them at
+What is switched on: the tray menu's items. Tile writes these itself when you change one, and reads them at
 startup, so you rarely need to edit them. It writes only the switch you changed, so a config
 with an error keeps the switches it has.
 
@@ -80,16 +80,7 @@ with an error keeps the switches it has.
 | `log` | `false` | Log to the log file (the tray's Log item). |
 
 These are separate from `general.tiling` and `general.remap`, which switch the features off
-entirely: a feature runs only when both its `general` setting and its tray switch are on.
-
-### `shell`
-
-Tile as the Windows shell, in place of Explorer's taskbar. See [shell mode](shell.md). Whether
-Tile is the shell is the tray's Shell switch, [`tray.shell`](#tray).
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `run_startup` | `true` | When Tile starts as the shell, run the `Run` and `RunOnce` registry keys and the Startup folders, as Explorer would. |
+entirely: a feature runs only when both its `general` setting and its `features` switch are on.
 
 ### `wallpaper`
 
@@ -280,16 +271,12 @@ theme:
   accent_foreground: "#1e1e2e"  # text on accent
   inactive: "#45475a"           # border of unfocused windows
 
-# The tray's switches. Tile saves these when you change them in the tray.
-tray:
+# What is switched on. Tile saves these when you tick them in the tray.
+features:
   tile: false                   # window manager on (starts off)
   remap: false                  # key remapper on (starts off)
   shell: false                  # Tile is the shell: hosts tray icons, keeps the launcher bound
   log: false
-
-# Tile as the Windows shell; see shell.md.
-shell:
-  run_startup: true             # as the shell, run the Run keys and Startup folders
 
 # The desktop in shell mode; see shell.md.
 wallpaper:

@@ -1,4 +1,6 @@
-use super::{Layout, LayoutSettings, Tile, WindowList, clamp_ratio, equal_tiles};
+use std::collections::HashMap;
+
+use super::{Layout, LayoutSettings, Tile, WindowList, clamp_ratio};
 use crate::{
     WindowId,
     geometry::{Axis, Rect, ratio_of},
@@ -9,7 +11,12 @@ use crate::{
 pub struct Master {
     windows: WindowList,
     mfact: f32,
+    /// How tall each window is next to the others of its column; 1.0 where unset.
+    weights: HashMap<WindowId, f32>,
 }
+
+/// The least share of its column a window can be given.
+const MIN_WEIGHT: f32 = 0.1;
 
 impl Master {
     /// An empty layout with the master column at `s.master_mfact`.
@@ -17,6 +24,7 @@ impl Master {
         Self {
             windows: WindowList::default(),
             mfact: s.master_mfact,
+            weights: HashMap::new(),
         }
     }
 
@@ -33,6 +41,24 @@ impl Master {
         } else {
             windows.swap(pos, 0);
         }
+    }
+
+    fn weight(&self, id: WindowId) -> f32 {
+        self.weights.get(&id).copied().unwrap_or(1.0)
+    }
+
+    /// Stacks `ids` in `rect`, each as tall as its weight says.
+    fn column(&self, rect: Rect, ids: &[WindowId], gap: i32) -> Vec<Tile> {
+        let weights: Vec<f32> = ids.iter().map(|id| self.weight(*id)).collect();
+        rect.split_weighted(Axis::Vertical, &weights, gap)
+            .into_iter()
+            .zip(ids)
+            .map(|(rect, id)| Tile {
+                id: *id,
+                rect,
+                visible: true,
+            })
+            .collect()
     }
 }
 
@@ -53,6 +79,7 @@ impl Layout for Master {
 
     fn remove(&mut self, id: WindowId) {
         self.windows.remove(id);
+        self.weights.remove(&id);
     }
 
     fn windows(&self) -> Vec<WindowId> {
@@ -62,12 +89,12 @@ impl Layout for Master {
     fn arrange(&mut self, area: Rect, _focused: Option<WindowId>, s: &LayoutSettings) -> Vec<Tile> {
         let windows = &self.windows.0;
         if windows.len() <= s.master_count {
-            return equal_tiles(area, Axis::Vertical, windows, s.gaps_in);
+            return self.column(area, windows, s.gaps_in);
         }
         let (master_area, stack_area) = area.split(Axis::Horizontal, self.mfact, s.gaps_in);
         let (masters, stack) = windows.split_at(s.master_count);
-        let mut tiles = equal_tiles(master_area, Axis::Vertical, masters, s.gaps_in);
-        tiles.extend(equal_tiles(stack_area, Axis::Vertical, stack, s.gaps_in));
+        let mut tiles = self.column(master_area, masters, s.gaps_in);
+        tiles.extend(self.column(stack_area, stack, s.gaps_in));
         tiles
     }
 
@@ -75,7 +102,7 @@ impl Layout for Master {
         self.windows.swap(a, b);
     }
 
-    fn resize(&mut self, id: WindowId, dx: i32, _dy: i32, area: Rect, s: &LayoutSettings) {
+    fn resize(&mut self, id: WindowId, dx: i32, dy: i32, area: Rect, s: &LayoutSettings) {
         let Some(pos) = self.windows.position(id) else {
             return;
         };
@@ -86,6 +113,18 @@ impl Layout for Master {
             -change
         };
         self.mfact = clamp_ratio(self.mfact + signed);
+
+        let windows = &self.windows.0;
+        let column = if windows.len() <= s.master_count || pos < s.master_count {
+            &windows[..s.master_count.min(windows.len())]
+        } else {
+            &windows[s.master_count..]
+        };
+        if dy != 0 && column.len() > 1 {
+            let total: f32 = column.iter().map(|w| self.weight(*w)).sum();
+            let grown = self.weight(id) + ratio_of(dy, area.h) * total;
+            self.weights.insert(id, grown.max(MIN_WEIGHT));
+        }
     }
 }
 
@@ -116,5 +155,29 @@ mod tests {
 
         m.resize(WindowId(3), 100, 0, area, &s);
         assert_eq!(m.arrange(area, None, &s)[0].rect.w, 600);
+    }
+
+    #[test]
+    fn resizing_vertically_trades_height_within_the_column() {
+        let s = LayoutSettings {
+            gaps_in: 0,
+            gaps_out: 0,
+            ..LayoutSettings::default()
+        };
+        let area = Rect::new(0, 0, 1000, 900);
+        let mut m = Master::new(&s);
+        for id in 1..=3 {
+            m.insert(WindowId(id), None, area, &s);
+        }
+        m.resize(WindowId(2), 0, 150, area, &s);
+        let tiles = m.arrange(area, None, &s);
+        assert_eq!(tiles[0].rect.w, 500);
+        assert_eq!(tiles[1].rect.h + tiles[2].rect.h, 900);
+        assert!(tiles[1].rect.h > 450 && tiles[2].rect.h < 450);
+        // A lone master has no neighbour to trade with.
+        let mut lone = Master::new(&s);
+        lone.insert(WindowId(1), None, area, &s);
+        lone.resize(WindowId(1), 0, 150, area, &s);
+        assert_eq!(lone.arrange(area, None, &s)[0].rect.h, 900);
     }
 }

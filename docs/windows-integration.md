@@ -6,7 +6,7 @@ How Tile fits in with Windows, and what it changes.
 
 | Path | Contents |
 | --- | --- |
-| `%APPDATA%\Tile\config.yml` | [Config](configuration.md), created on first run with only the tray switches |
+| `%APPDATA%\Tile\config.yml` | [Config](configuration.md), created on first run with only the `features` switches |
 | `%LOCALAPPDATA%\Tile\logs` | Daily log files, while logging is on |
 | `%LOCALAPPDATA%\Tile\restore.json` | What to undo if Tile dies, while it runs |
 | `%LOCALAPPDATA%\Tile\launcher.json` | The [launcher](launcher.md)'s launch history, while `launcher.track_usage` is on |
@@ -19,7 +19,7 @@ How Tile fits in with Windows, and what it changes.
 The menu holds Tile, Remap, Shell and Log, then Open logs and Open config, then Quit.
 
 Tile and Remap switch the window manager and the key remapper on or off on their own, and are
-remembered across restarts in the config's `tray` section. Tile starts on and Remap off. Shell
+remembered across restarts in the config's `features` section. Tile starts on and Remap off. Shell
 makes Tile the [shell](shell.md) (it starts off). Launch
 and close binds work either way. Log switches logging on or off (nothing is logged until then, or
 until `--log` is passed: `Tile.exe --log tile=debug` logs every keybind it handles).

@@ -316,7 +316,7 @@ pub async fn run(
     .ok();
     tokio::spawn(server.serve(ipc_tx));
 
-    let saved = loaded.config.tray.clone();
+    let saved = loaded.config.features.clone();
     let mut daemon = Daemon {
         desktops: fresh_desktops(&loaded),
         windows: Windows::new(),
@@ -409,7 +409,7 @@ pub async fn run(
 impl Daemon {
     /// Applies `change` to the tray's switches and saves them to the config file.
     fn save_switches(&mut self, change: impl FnOnce(&mut Settings)) {
-        settings::update(&self.config_path, &mut self.loaded.config.tray, change);
+        settings::update(&self.config_path, &mut self.loaded.config.features, change);
     }
 
     /// The daemon's state for the window `id`, made empty if there is none yet.

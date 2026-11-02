@@ -17,9 +17,9 @@ pub use notification_filter::{FilterOutcome, NotificationFilters};
 pub use rules::{RuleOutcome, Rules};
 pub(crate) use schema::default_binds;
 pub use schema::{
-    Animations, Color, Config, Corners, Cursor, Cycle, CycleOrder, FillMode, General,
+    Animations, Color, Config, Corners, Cursor, Cycle, CycleOrder, Features, FillMode, General,
     IndicatorPosition, IndicatorStyle, Launcher, LauncherStyle, NotificationFilter,
-    NotificationStyle, Notifications, Remap, Rule, SearchPosition, Shell, Theme, Tray, Wallpaper,
+    NotificationStyle, Notifications, Remap, Rule, SearchPosition, Theme, Wallpaper,
     WorkspaceIndicator,
 };
 pub use watch::watch;
@@ -53,7 +53,7 @@ pub enum ConfigError {
 }
 
 impl ConfigError {
-    /// A one-line form for the tray: serde's list of every expected field is cut, and the line
+    /// A one-line form for the features: serde's list of every expected field is cut, and the line
     /// number is kept.
     pub fn summary(&self) -> String {
         match self {
@@ -170,7 +170,7 @@ impl Loaded {
 }
 
 /// `%APPDATA%\Tile\config.yml`, or `config.yaml` when only that exists. Created on first run
-/// with only the tray switches in it (see [`create_if_missing`]); everything else comes from the
+/// with only the feature switches in it (see [`create_if_missing`]); everything else comes from the
 /// built-in defaults.
 pub fn default_path() -> PathBuf {
     let dir = dirs::config_dir()
@@ -187,7 +187,7 @@ pub fn default_path() -> PathBuf {
 
 const NEW_FILE_HEADER: &str = "\
 ---
-# Tile config. Only the tray switches are saved here; everything else uses the built-in
+# Tile config. Only the feature switches are saved here; everything else uses the built-in
 # defaults. To change one, add its section and key. docs/configuration.md lists them all,
 # with the whole default config to copy. Saved changes are applied live.
 
@@ -250,22 +250,26 @@ fn set_bools(text: &str, section: &str, pairs: &[(&str, bool)]) -> String {
     out
 }
 
-fn tray_pairs(tray: &Tray) -> [(&'static str, bool); 4] {
+fn feature_pairs(features: &Features) -> [(&'static str, bool); 4] {
     [
-        ("tile", tray.tile),
-        ("remap", tray.remap),
-        ("shell", tray.shell),
-        ("log", tray.log),
+        ("tile", features.tile),
+        ("remap", features.remap),
+        ("shell", features.shell),
+        ("log", features.log),
     ]
 }
 
-/// Creates the config file, and its folder, if there is none, holding only the tray switches at
+/// Creates the config file, and its folder, if there is none, holding only the feature switches at
 /// their defaults: everything else comes from the built-in defaults.
 pub fn create_if_missing(path: &Path) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    let text = set_bools(NEW_FILE_HEADER, "tray", &tray_pairs(&Tray::default()));
+    let text = set_bools(
+        NEW_FILE_HEADER,
+        "features",
+        &feature_pairs(&Features::default()),
+    );
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -281,13 +285,13 @@ pub fn create_if_missing(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Saves the tray switches that differ between `before` and `after` into `tray:` of the config
+/// Saves the feature switches that differ between `before` and `after` into `features:` of the config
 /// file, leaving the rest of it, the other switches included, as it is. That keeps the file's
 /// switches even when it doesn't load and `before` holds the defaults.
-pub fn write_tray(path: &Path, before: &Tray, after: &Tray) -> io::Result<()> {
-    let changed: Vec<_> = tray_pairs(after)
+pub fn write_features(path: &Path, before: &Features, after: &Features) -> io::Result<()> {
+    let changed: Vec<_> = feature_pairs(after)
         .into_iter()
-        .zip(tray_pairs(before))
+        .zip(feature_pairs(before))
         .filter(|(new, old)| new != old)
         .map(|(new, _)| new)
         .collect();
@@ -302,7 +306,7 @@ pub fn write_tray(path: &Path, before: &Tray, after: &Tray) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(path, set_bools(&text, "tray", &changed))
+    fs::write(path, set_bools(&text, "features", &changed))
 }
 
 #[cfg(test)]
@@ -374,19 +378,19 @@ mod tests {
     }
 
     #[test]
-    fn new_file_holds_only_the_tray_and_runs_on_defaults() {
+    fn new_file_holds_only_the_features_and_runs_on_defaults() {
         let dir = std::env::temp_dir().join(format!("tile-config-{}", std::process::id()));
         let path = dir.join("config.yml");
         create_if_missing(&path).unwrap();
         let text = fs::read_to_string(&path).unwrap();
-        assert!(text.contains("tray:") && text.contains("  remap: false"));
+        assert!(text.contains("features:") && text.contains("  remap: false"));
         assert_eq!(Loaded::parse(&text).unwrap().config, Config::default());
-        let tray = Tray {
+        let features = Features {
             tile: true,
-            ..Tray::default()
+            ..Features::default()
         };
-        write_tray(&path, &Tray::default(), &tray).unwrap();
-        assert_eq!(Loaded::load(&path).unwrap().config.tray, tray);
+        write_features(&path, &Features::default(), &features).unwrap();
+        assert_eq!(Loaded::load(&path).unwrap().config.features, features);
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -397,15 +401,15 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             &path,
-            "general:\n  tilin: true\ntray:\n  tile: true\n  log: true\n",
+            "general:\n  tilin: true\nfeatures:\n  tile: true\n  log: true\n",
         )
         .unwrap();
-        let before = Tray::default();
-        let after = Tray {
+        let before = Features::default();
+        let after = Features {
             remap: true,
             ..before.clone()
         };
-        write_tray(&path, &before, &after).unwrap();
+        write_features(&path, &before, &after).unwrap();
         let text = fs::read_to_string(&path).unwrap();
         assert!(
             text.contains("  tile: true\n  log: true\n  remap: true"),
@@ -417,14 +421,14 @@ mod tests {
 
     #[test]
     fn set_bools_edits_in_place() {
-        let text = "general:\n  gaps_in: 2\n\ntray:  # switches\n    tile: false  # on\n\ncursor:\n  warp: false\n";
-        let out = set_bools(text, "tray", &[("tile", true), ("remap", true)]);
+        let text = "general:\n  gaps_in: 2\n\nfeatures:  # switches\n    tile: false  # on\n\ncursor:\n  warp: false\n";
+        let out = set_bools(text, "features", &[("tile", true), ("remap", true)]);
         assert_eq!(
             out,
-            "general:\n  gaps_in: 2\n\ntray:  # switches\n    tile: true  # on\n    remap: true\n\ncursor:\n  warp: false\n"
+            "general:\n  gaps_in: 2\n\nfeatures:  # switches\n    tile: true  # on\n    remap: true\n\ncursor:\n  warp: false\n"
         );
-        let out = set_bools("general:\n  tiling: true\n", "tray", &[("tile", true)]);
-        assert_eq!(out, "general:\n  tiling: true\n\ntray:\n  tile: true\n");
+        let out = set_bools("general:\n  tiling: true\n", "features", &[("tile", true)]);
+        assert_eq!(out, "general:\n  tiling: true\n\nfeatures:\n  tile: true\n");
     }
 
     #[test]

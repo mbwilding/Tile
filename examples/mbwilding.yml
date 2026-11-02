@@ -1,8 +1,5 @@
 ---
-general:
-  disable_start_menu: true
-
-tray:
+features:
   tile: true
   remap: false
   shell: true

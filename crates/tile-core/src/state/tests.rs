@@ -519,6 +519,23 @@ fn resizing_a_tiled_window_changes_its_split() {
 }
 
 #[test]
+fn resize_keys_move_the_divider_the_way_they_point_from_either_side() {
+    // W on the left, X on the right: Right moves the divider right whichever is focused.
+    let mut s = opened(1, &[W, X]);
+    s.window_focused(W);
+    let from_left = placed(&s.apply(&Command::ResizeActive(100, 0)), W)
+        .unwrap()
+        .w;
+    assert!(from_left > 500);
+    s.apply(&Command::ResizeActive(-100, 0));
+    s.window_focused(X);
+    let from_right = placed(&s.apply(&Command::ResizeActive(100, 0)), W)
+        .unwrap()
+        .w;
+    assert_eq!(from_right, from_left);
+}
+
+#[test]
 fn resizing_with_nothing_focused_does_nothing() {
     let mut s = state(1);
     assert!(s.apply(&Command::ResizeActive(10, 10)).is_empty());
@@ -624,6 +641,17 @@ fn layouts_switch_and_cycle() {
     assert_eq!(placed(&effects, W), placed(&effects, X));
     s.apply(&Command::CycleLayout);
     assert_eq!(s.active_layout(), Some(LayoutKind::Scrolling));
+    assert_eq!(s.snapshot_windows().len(), 2);
+}
+
+#[test]
+fn resetting_the_layout_undoes_resizing() {
+    let mut s = opened(1, &[W, X]);
+    let before = s.sync();
+    s.apply(&Command::ResizeActive(100, 0));
+    assert_ne!(placed(&s.sync(), W), placed(&before, W));
+    s.apply(&Command::ResetLayout);
+    assert_eq!(placed(&s.sync(), W), placed(&before, W));
     assert_eq!(s.snapshot_windows().len(), 2);
 }
 

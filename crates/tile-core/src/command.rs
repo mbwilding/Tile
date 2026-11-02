@@ -45,6 +45,8 @@ pub enum Command {
     Layout(LayoutKind),
     /// Step the workspace through the layouts.
     CycleLayout,
+    /// Rebuild the workspace's layout as new, undoing every resize and split change.
+    ResetLayout,
     /// Scrolling layout: set the focused column's width as a fraction of the monitor.
     ScrollerProportion(f32),
     /// Scrolling layout: step the focused column through the width presets.
@@ -139,6 +141,7 @@ pub const DISPATCHERS: &[(&str, &str)] = &[
     ("focusmonitor", "<l|r|u|d>"),
     ("layout", "<dwindle|master|monocle|scrolling|even>"),
     ("cyclelayout", ""),
+    ("resetlayout", ""),
     ("scroller_proportion", "<0.05-1.0>"),
     ("cycleproportion", ""),
     ("consumewindow", "<l|r>"),
@@ -284,6 +287,7 @@ impl FromStr for Command {
                     _ => return Err(ParseError::BadArg(name, arg.into(), "0.05-1.0")),
                 }
             }
+            "resetlayout" => Self::ResetLayout,
             "cycleproportion" => Self::CycleProportion,
             "consumewindow" => Self::ConsumeWindow(parse_direction(n, rest)?),
             "expelwindow" => Self::ExpelWindow,
@@ -339,6 +343,7 @@ impl fmt::Display for Command {
             Self::FocusMonitor(d) => write!(f, "focusmonitor {d}"),
             Self::Layout(kind) => write!(f, "layout {kind}"),
             Self::CycleLayout => f.write_str("cyclelayout"),
+            Self::ResetLayout => f.write_str("resetlayout"),
             Self::ScrollerProportion(p) => write!(f, "scroller_proportion {p}"),
             Self::CycleProportion => f.write_str("cycleproportion"),
             Self::ConsumeWindow(d) => write!(f, "consumewindow {d}"),
@@ -381,6 +386,7 @@ mod tests {
             "consumewindow r",
             "desktop 2",
             "movetodesktop next",
+            "resetlayout",
             "pin",
             "lock",
             "launcher",

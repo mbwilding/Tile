@@ -23,13 +23,13 @@ tile install          # the shell has to live somewhere that stays
 ```
 
 Then tick **Shell** in the tray menu, run the `toggleshell` dispatcher, or set `shell: true`
-under `tray` in your config. It takes effect at your next sign-in. Ticking it sets your user's
+under `features` in your config. It takes effect at your next sign-in. Ticking it sets your user's
 Winlogon `Shell` value to `Tile.exe --shell`, which needs no admin rights and affects only your
 account, and turns on "Launch folder windows in a separate process" so a folder window doesn't
 bring Explorer's taskbar back. Unticking it puts Explorer back from the next sign-in.
 
-The switch is the config's `tray.shell`, and Tile keeps the sign-in shell in step with it every
-time it starts and whenever the file changes. So a config with `shell: true` is enough on a
+The switch is the config's `features.shell`, and Tile keeps the sign-in shell in step with it every
+time it starts and whenever the file changes. So a config with `shell: true` under `features` is enough on a
 first run, and a config set back to `false` restores Explorer.
 
 The launcher is how you start everything in shell mode, so in shell mode it is always bound. If
@@ -38,7 +38,7 @@ you haven't bound the `launcher` dispatcher yourself, Tile binds it to `Win+R`, 
 
 ### Without signing out
 
-The tray's **Shell** item (next to Tile and Remap, remembered in `tray.shell`) makes a running
+The tray's **Shell** item (next to Tile and Remap, remembered in `features.shell`) makes a running
 Tile act as the shell whenever no taskbar is running. With it on, end
 Explorer (`taskkill /f /im explorer.exe`) and Tile starts hosting the notification area within a
 couple of seconds. Apps that were running add their tray icons again when Tile announces the new
@@ -57,8 +57,8 @@ window or menu. The menu appears where the pointer is.
 `RunOnce` (removing each entry as it runs), then `Run`, from `HKLM` and `HKCU`, then the shared
 and your own Startup folders. Entries switched off in Task Manager are skipped, and so is Tile's
 own `--launcher` entry, because the shell instance already does that job. It happens once per
-sign-in session, so restarting Tile doesn't start everything twice. `shell.run_startup: false`
-turns it off.
+sign-in session, so restarting Tile doesn't start everything twice. It is part of being the shell, so
+there is no setting for it.
 
 **Admin rights.** `tile install` runs Tile as administrator through a sign-in task. As the
 shell, Windows also starts `Tile.exe --shell` with your normal rights. That copy serves as the
@@ -183,7 +183,7 @@ with no warning, as they were before.
 
 If Tile crashes or you quit it, you are left on a black screen. Press `Ctrl+Alt+Del`, open Task
 Manager, choose Run new task and run `explorer.exe`. To go back for good, untick Shell in the
-tray (or set `tray.shell: false` in the config), then sign out and in.
+tray (or set `features.shell: false` in the config), then sign out and in.
 
 The shell is only as good as the config it loads. A config with errors keeps the last good one
 (or the built-in defaults), and the default binds still work, so keep `general.default_binds` on

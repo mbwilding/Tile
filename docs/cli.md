@@ -17,7 +17,7 @@ tile install / uninstall       # see the README; `cargo deploy` installs a check
 `%APPDATA%\Tile\config.yml`, when it runs and for `tile config` and `tile check` (unless `check`
 is given a file).
 
-Becoming the Windows shell is the tray's Shell item (or `tray.shell` in the config, or the
+Becoming the Windows shell is the tray's Shell item (or `features.shell` in the config, or the
 `toggleshell` dispatcher), not a `tile` command; see [shell mode](shell.md).
 
 `tile query windows` is the way to find the `exe`, `class` and `title` to write
