@@ -2,6 +2,7 @@
 //! reload.
 
 mod keys;
+mod notification_filter;
 mod rules;
 mod schema;
 mod watch;
@@ -12,12 +13,13 @@ use std::{
 };
 
 pub use keys::{Keybind, Modifiers};
+pub use notification_filter::{FilterOutcome, NotificationFilters};
 pub use rules::{RuleOutcome, Rules};
 pub(crate) use schema::default_binds;
 pub use schema::{
     Animations, Color, Config, Corners, Cursor, General, IndicatorPosition, IndicatorStyle,
-    Launcher, LauncherStyle, NotificationStyle, Notifications, Remap, Rule, SearchPosition, Shell,
-    Theme, Tray, WorkspaceIndicator,
+    Launcher, LauncherStyle, NotificationFilter, NotificationStyle, Notifications, Remap, Rule,
+    SearchPosition, Shell, Theme, Tray, WorkspaceIndicator,
 };
 pub use watch::watch;
 
@@ -38,6 +40,9 @@ pub enum ConfigError {
     /// A window rule's pattern is invalid.
     #[error("rule #{0}: {1}")]
     Rule(usize, String),
+    /// A `notifications.filter` entry's pattern is invalid.
+    #[error("notifications.filter #{0}: {1}")]
+    NotificationFilter(usize, String),
     /// The remap layers have errors, every one listed.
     #[error("remap: {}", .0.join("; "))]
     Remap(Vec<String>),
@@ -81,6 +86,8 @@ pub struct Loaded {
     pub binds: Vec<(Keybind, Command)>,
     /// `rules`, compiled.
     pub rules: Rules,
+    /// `notifications.filter`, compiled.
+    pub notification_filters: NotificationFilters,
     /// `remap`, compiled for the remapping engine.
     pub remap: tile_remap::Config,
     /// `launcher.hide`, compiled.
@@ -137,6 +144,7 @@ impl Loaded {
             binds.push((bind, command));
         }
         let rules = Rules::compile(&config.rules)?;
+        let notification_filters = NotificationFilters::compile(&config.notifications.filter)?;
         let remap = tile_remap::Config::compile(&config.remap.layers, config.remap.modifier_guard)
             .map_err(ConfigError::Remap)?;
         let launcher_hide = regex::RegexSetBuilder::new(&config.launcher.hide)
@@ -147,6 +155,7 @@ impl Loaded {
             config,
             binds,
             rules,
+            notification_filters,
             remap,
             launcher_hide,
         })
