@@ -32,8 +32,6 @@ use crate::{
     win::is_window,
 };
 
-/// How long an app gets to close after being asked before it is ended.
-const CLOSE_GRACE: Duration = Duration::from_secs(3);
 /// How many tries, a tick apart, frame one app window before giving up on it.
 const MAX_TRIES: u8 = 20;
 /// How often empty frames are looked for, and every window is checked in case an event was
@@ -89,8 +87,6 @@ pub(crate) fn probe() -> Result<(), crate::probe::Error> {
 
 /// A Store app window and the frame it sits in.
 struct Frame {
-    /// When the app was asked to close.
-    closing: Option<Instant>,
     /// The frame object, which goes away with its last reference.
     com: IApplicationFrame,
     manager: IApplicationFrameManager,
@@ -333,7 +329,6 @@ impl Framer {
         self.shell.uncloak(&[window, app]);
         std::mem::forget(orphan);
         Ok(Frame {
-            closing: None,
             frame: window,
             app,
             com: frame,
@@ -352,10 +347,9 @@ impl Framer {
                 continue;
             };
             if let Some(f) = self.frames.iter_mut().find(|f| f.frame == window) {
-                f.closing.get_or_insert_with(Instant::now);
-                // Gone at once; the app gets its grace period to exit out of sight.
+                // Ended rather than asked: Settings crashes in its own teardown on WM_CLOSE.
                 windows::hide(f.frame);
-                windows::post_close(f.app);
+                windows::end_process(f.app);
             }
         }
         if self.statics.is_none() {
@@ -368,7 +362,7 @@ impl Framer {
                 if frame {
                     com::destroy_frame(&f.manager, &f.com);
                 } else if app {
-                    windows::post_close(f.app);
+                    windows::end_process(f.app);
                 }
                 return false;
             }
@@ -377,9 +371,6 @@ impl Framer {
                 if f.resumes % 10 == 0 {
                     com::resume(&f.package);
                 }
-            }
-            if f.closing.is_some_and(|asked| asked.elapsed() > CLOSE_GRACE) {
-                windows::end_process(f.app);
             }
             let title = windows::copy_title(f.frame, f.app, &f.title);
             if !title.is_empty() {

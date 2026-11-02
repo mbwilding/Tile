@@ -17,9 +17,9 @@ use windows_sys::Win32::{
             CHILDID_SELF, CreateWindowExW, DestroyWindow, EVENT_OBJECT_CLOAKED,
             EVENT_OBJECT_CREATE, EVENT_OBJECT_SHOW, EVENT_OBJECT_UNCLOAKED, EnumChildWindows,
             EnumWindows, GetClientRect, GetForegroundWindow, GetParent, GetSystemMetrics,
-            OBJID_WINDOW, PostMessageW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE,
-            SWP_NOZORDER, SetWindowPos, SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT,
-            WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
+            OBJID_WINDOW, SM_CXSCREEN, SM_CYSCREEN, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER,
+            SetWindowPos, SetWindowTextW, ShowWindow, WINEVENT_OUTOFCONTEXT,
+            WINEVENT_SKIPOWNPROCESS,
         },
     },
 };
@@ -363,13 +363,7 @@ pub(super) fn hide(window: HWND) {
     unsafe { ShowWindow(window, SW_HIDE) };
 }
 
-/// Asks `window` to close.
-pub(super) fn post_close(window: HWND) {
-    // SAFETY: a plain message post; a stale window just makes it fail.
-    unsafe { PostMessageW(window, WM_CLOSE, 0, 0) };
-}
-
-/// Ends the process that owns `window`, for an app that didn't close when asked.
+/// Ends the process that owns `window`.
 pub(super) fn end_process(window: HWND) {
     if let Some(process) = open_process(pid_of(window), PROCESS_TERMINATE) {
         // SAFETY: `process` is open with the right to end it.
