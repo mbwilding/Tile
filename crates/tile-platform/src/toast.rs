@@ -3,10 +3,15 @@
 //! queued. Each popup counts down with a thin progress bar, pausing while the pointer hovers it;
 //! a click dismisses it early. Like the launcher, it runs on its own thread with its window made
 //! up front, and never takes focus.
+//!
+//! The posting app's icon is drawn from its AUMID through `tile_shell::shell_icon`, the same
+//! `shell:AppsFolder` lookup the launcher uses for its own rows, so a notification shows the
+//! identical icon Windows shows elsewhere for that app. A notification with no AUMID, or one
+//! `shell_icon` can't resolve, shows with no icon rather than guessing at one another way.
 
 use std::{
     cell::RefCell,
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     rc::Rc,
     sync::mpsc,
     time::{Duration, Instant},
@@ -14,12 +19,13 @@ use std::{
 
 use tile_config::{Color, IndicatorPosition, NotificationStyle, Notifications as Config};
 use tile_core::Rect;
+use tile_shell::Icon;
 use tile_sys::notifications::Notification;
 use winsafe::{self as w, co, guard::DeleteObjectGuard, gui, prelude::*};
 
 use crate::gui::{
-    Mailbox, WindowThread, colorref, fill_round_bordered, make_font, paint_buffered, scale,
-    set_transparent, style_popup, text, text_wrapped,
+    Mailbox, WindowThread, colorref, fill_round_bordered, init_com, make_font, paint_buffered,
+    scale, set_transparent, style_popup, text, text_wrapped,
 };
 
 const FADE_TIMER: usize = 1;
@@ -28,10 +34,19 @@ const FRAME_MS: u32 = 15;
 const BODY_LINES: i32 = 3;
 /// Space between stacked cards, at 100% scaling. Separate from `notifications.gap`, which is
 /// the space to the work area's edge.
-const CARD_GAP: u32 = 8;
+const CARD_GAP: u32 = 10;
 /// The countdown bar's height, and the gap above it, at 100% scaling.
 const BAR_HEIGHT: u32 = 3;
 const BAR_GAP: u32 = 10;
+/// The posting app's icon, square, at 100% scaling. Bigger than the launcher's row icons: with no
+/// list of rows to fit several of, there's room to make it the card's visual anchor, the way
+/// Windows' own toasts do.
+const ICON_SIZE: u32 = 48;
+/// Space between the icon and the text column, at 100% scaling.
+const ICON_GAP: u32 = 14;
+/// Space between the title and the body text, at 100% scaling: enough to read as two separate
+/// lines of hierarchy rather than one run-on block.
+const TITLE_GAP: u32 = 4;
 /// A colour vanishingly unlikely to be a real theme colour, used as this window's transparent
 /// colour key so the gaps between stacked cards show whatever is behind them.
 const TRANSPARENT_KEY: Color = Color::rgb(1, 2, 3);
@@ -117,6 +132,17 @@ fn fade(elapsed: Duration, hold: Duration, fade: Duration) -> Option<f32> {
     (fading < fade).then(|| 1.0 - fading.as_secs_f32() / fade.as_secs_f32())
 }
 
+/// A visible card's bounds and the text it needs painted, pulled out of [`Card`] up front so the
+/// paint loop below doesn't hold a borrow of `State` across the font and icon lookups it does.
+struct PaintRow {
+    row: w::RECT,
+    app: String,
+    aumid: Option<String>,
+    title: String,
+    body: String,
+    remaining: Option<f32>,
+}
+
 /// A notification waiting its turn, not shown yet.
 struct Pending {
     notification: Notification,
@@ -190,6 +216,32 @@ impl Card {
     }
 }
 
+/// The posting apps' icons, keyed by AUMID, made at the size they are drawn. `None` for an AUMID
+/// whose icon couldn't be resolved, so a miss isn't retried every paint.
+#[derive(Default)]
+struct IconCache(HashMap<String, Option<Icon>>);
+
+impl IconCache {
+    /// The icon for `aumid`, made at `size` pixels the first time it is asked for.
+    fn get(&mut self, aumid: &str, size: i32) -> Option<&Icon> {
+        self.0
+            .entry(aumid.to_owned())
+            .or_insert_with(|| tile_shell::shell_icon(&format!("shell:AppsFolder\\{aumid}"), size))
+            .as_ref()
+    }
+
+    /// Forgets icons for apps `keep` no longer finds anywhere in the stack, so the cache doesn't
+    /// grow as apps post notifications and then roll off.
+    fn evict(&mut self, keep: impl Fn(&str) -> bool) {
+        self.0.retain(|aumid, _| keep(aumid));
+    }
+
+    /// Forgets every icon, for a new size.
+    fn clear(&mut self) {
+        self.0.clear();
+    }
+}
+
 struct State {
     settings: ToastSettings,
     queue: VecDeque<Pending>,
@@ -200,6 +252,7 @@ struct State {
     dpi: u32,
     font: Option<DeleteObjectGuard<w::HFONT>>,
     small_font: Option<DeleteObjectGuard<w::HFONT>>,
+    icons: IconCache,
 }
 
 impl State {
@@ -235,7 +288,7 @@ impl State {
         let padding = self.scale(16);
         let rows = i32::from(self.config().show_app_name) + 1 + BODY_LINES;
         let bar = self.scale(BAR_GAP + BAR_HEIGHT);
-        padding * 2 + line * rows + bar
+        padding * 2 + line * rows + self.scale(TITLE_GAP) + bar
     }
 
     /// Moves cards from the queue into `visible`, up to `max_visible`. The first one promoted
@@ -258,6 +311,20 @@ impl State {
         let config = self.config().clone();
         self.visible.retain(|c| c.amount(&config).is_some());
         self.refill();
+        self.evict_icons();
+    }
+
+    /// Drops icons for apps no longer anywhere in the queue or the visible stack.
+    fn evict_icons(&mut self) {
+        let (visible, queue) = (&self.visible, &self.queue);
+        self.icons.evict(|aumid| {
+            visible
+                .iter()
+                .any(|c| c.notification.aumid.as_deref() == Some(aumid))
+                || queue
+                    .iter()
+                    .any(|p| p.notification.aumid.as_deref() == Some(aumid))
+        });
     }
 
     /// Lays out the visible cards top to bottom in a window `w` pixels wide, caching each one's
@@ -294,6 +361,8 @@ fn style_window(hwnd: &w::HWND, settings: &ToastSettings) {
 }
 
 fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mailbox<Request>) {
+    // For the posting apps' icons, which come from the shell.
+    let _com = init_com();
     let wnd = gui::WindowMain::new(gui::WindowMainOpts {
         title: "Tile notification",
         class_name: "tile-toast",
@@ -313,6 +382,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
         dpi: 96,
         font: None,
         small_font: None,
+        icons: IconCache::default(),
     }));
 
     wnd.on().wm_create({
@@ -350,6 +420,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                 s.dpi = dpi;
                 s.font = None;
                 s.small_font = None;
+                s.icons.clear();
             }
             let width = s.config().width.clamp(120, 2000);
             let w = s.scale(width).min(area.w);
@@ -451,6 +522,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
             if let Some(i) = s.hit(p.coords.x, p.coords.y) {
                 s.visible.remove(i);
                 s.refill();
+                s.evict_icons();
                 drop(s);
                 relayout();
             }
@@ -472,24 +544,37 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                 let radius = s.scale(12);
                 let padding = s.scale(16);
                 let line = s.scale(20);
-                let title_px = s.scale(14 * 72 / 96);
-                let small_px = s.scale(12 * 72 / 96);
+                // `make_font` takes a pixel height directly, so these are plain pixel sizes like
+                // `line` above, not points: a leftover `pt`-to-`px` conversion here was shrinking
+                // both by a quarter for no reason.
+                let title_px = s.scale(14);
+                let small_px = s.scale(12);
                 let bar_h = s.scale(BAR_HEIGHT);
                 let bar_gap = s.scale(BAR_GAP);
-                let rows: Vec<(w::RECT, String, String, String, Option<f32>)> = s
+                let icon_px = s.scale(ICON_SIZE);
+                let icon_gap = s.scale(ICON_GAP);
+                let title_gap = s.scale(TITLE_GAP);
+                let rows: Vec<PaintRow> = s
                     .visible
                     .iter()
-                    .map(|c| {
-                        (
-                            c.row,
-                            c.notification.app.clone(),
-                            c.notification.title.clone(),
-                            c.notification.body.clone(),
-                            c.remaining(s.config()),
-                        )
+                    .map(|c| PaintRow {
+                        row: c.row,
+                        app: c.notification.app.clone(),
+                        aumid: c.notification.aumid.clone(),
+                        title: c.notification.title.clone(),
+                        body: c.notification.body.clone(),
+                        remaining: c.remaining(s.config()),
                     })
                     .collect();
-                for (row, app, title, body, remaining) in rows {
+                for PaintRow {
+                    row,
+                    app,
+                    aumid,
+                    title,
+                    body,
+                    remaining,
+                } in rows
+                {
                     if row.bottom <= row.top {
                         continue;
                     }
@@ -501,9 +586,24 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                         style.border,
                         border_width,
                     )?;
-                    let mut cursor_y = row.top + padding;
+                    let text_top = row.top + padding;
+                    let body_bottom = row.bottom - padding - bar_gap - bar_h;
+                    // The icon is vertically centred on the text block (app name, title and body,
+                    // but not the countdown bar below it), so it reads as that block's anchor
+                    // whatever mix of those lines a given card actually shows.
+                    let icon = aumid
+                        .as_deref()
+                        .and_then(|aumid| s.icons.get(aumid, icon_px));
+                    let text_left = if let Some(icon) = icon {
+                        let icon_y = text_top + ((body_bottom - text_top - icon_px) / 2).max(0);
+                        icon.draw(dc.ptr() as isize, row.left + padding, icon_y, icon_px);
+                        row.left + padding + icon_px + icon_gap
+                    } else {
+                        row.left + padding
+                    };
+                    let mut cursor_y = text_top;
                     let text_bounds = |top: i32, bottom: i32| w::RECT {
-                        left: row.left + padding,
+                        left: text_left,
                         top,
                         right: row.right - padding,
                         bottom,
@@ -527,8 +627,7 @@ fn run(settings: ToastSettings, requests: mpsc::Receiver<Request>, mailbox: Mail
                         text_bounds(cursor_y, cursor_y + line),
                         co::DT::LEFT,
                     )?;
-                    cursor_y += line;
-                    let body_bottom = row.bottom - padding - bar_gap - bar_h;
+                    cursor_y += line + title_gap;
                     text_wrapped(
                         dc,
                         s.font(small_px, false),
@@ -599,6 +698,7 @@ mod tests {
     fn notification(app: &str) -> Notification {
         Notification {
             app: app.into(),
+            aumid: None,
             title: "title".into(),
             body: "body".into(),
         }
@@ -637,6 +737,7 @@ mod tests {
             dpi: 96,
             font: None,
             small_font: None,
+            icons: IconCache::default(),
         };
         for app in ["one", "two", "three"] {
             state.queue.push_back(pending(app));
