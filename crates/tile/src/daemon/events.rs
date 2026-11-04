@@ -56,6 +56,10 @@ impl Daemon {
         if self.paused || !self.tiling {
             return;
         }
+        // The rings check on a timer now and then; this has them look at once.
+        if !matches!(event, WinEvent::NameChange(_)) {
+            self.rings.follow();
+        }
         match event {
             WinEvent::Show(id) | WinEvent::Uncloaked(id) => {
                 if !self.desktops.is_managed(id) {

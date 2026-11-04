@@ -45,14 +45,15 @@ pub struct Ring {
 /// How long the rings wait between frames if DWM can't say when one is drawn.
 const FOLLOW: Duration = Duration::from_millis(8);
 
-/// How often a ring checks its window while nothing is moving.
-const WATCH: Duration = Duration::from_millis(40);
+/// How often the rings look at their windows while nothing is moving, as a safety net: the
+/// daemon tells the rings when a window moves, is shown, hidden or comes to the front.
+const WATCH: Duration = Duration::from_millis(250);
 
 /// How many frames without a change before the rings stop following every frame.
 const QUIET_FRAMES: u32 = 30;
 
 /// How often the ticker checks whether there are rings to follow.
-const IDLE: Duration = Duration::from_millis(50);
+const IDLE: Duration = Duration::from_millis(500);
 
 enum Request {
     Set(Vec<Ring>),
@@ -62,22 +63,36 @@ enum Request {
 }
 
 /// The border rings, on their own thread.
-pub struct Borders(WindowThread<Request>);
+pub struct Borders {
+    thread: WindowThread<Request>,
+    /// Wakes the ticker to follow the windows now.
+    poke: mpsc::Sender<()>,
+}
 
 impl Borders {
     /// Starts the thread.
     pub fn spawn() -> Self {
-        Self(WindowThread::spawn("borders", run))
+        let (poke, wake) = mpsc::channel();
+        let thread = WindowThread::spawn("borders", move |requests, mailbox| {
+            run(requests, mailbox, wake);
+        });
+        Self { thread, poke }
+    }
+
+    /// Tells the rings a window may have moved or changed, so they look at once instead of at
+    /// the next safety-net check.
+    pub fn follow(&self) {
+        let _ = self.poke.send(());
     }
 
     /// Makes these the rings that are drawn: new ones appear, moved ones follow, others go.
     pub fn set(&self, rings: Vec<Ring>) {
-        self.0.send(Request::Set(rings));
+        self.thread.send(Request::Set(rings));
     }
 
     /// Closes the rings and stops the thread.
     pub fn shutdown(&mut self) {
-        self.0.shutdown(Request::Quit);
+        self.thread.shutdown(Request::Quit);
     }
 }
 
@@ -93,34 +108,51 @@ fn coverage(x: f32, y: f32, w: f32, h: f32, radius: f32) -> f32 {
 
 /// The pixels, top row first, of a `width` by `height` ring `thickness` thick whose inside has
 /// corners of `radius`: premultiplied BGRA, as `UpdateLayeredWindow` wants.
+///
+/// Only the band and the corners are painted: the rest of a window-sized bitmap stays clear, and
+/// walking all of it on every colour change is what made the rings expensive.
 fn render(width: i32, height: i32, thickness: i32, radius: i32, color: Color) -> Vec<u8> {
     let mut pixels = vec![0u8; (width * height * 4) as usize];
-    let t = thickness as f32;
+    let corner = (radius + thickness).min(width / 2).min(height / 2);
+    let t = thickness.min(corner);
+    let solid = [color.b, color.g, color.r, 255];
+    let mut fill = |x0: i32, x1: i32, y0: i32, y1: i32| {
+        for y in y0..y1 {
+            let start = ((y * width + x0) * 4) as usize;
+            let end = ((y * width + x1) * 4) as usize;
+            for pixel in pixels[start..end].as_chunks_mut::<4>().0 {
+                *pixel = solid;
+            }
+        }
+    };
+    // The straight edges between the corners.
+    fill(corner, width - corner, 0, t);
+    fill(corner, width - corner, height - t, height);
+    fill(0, t, corner, height - corner);
+    fill(width - t, width, corner, height - corner);
+    // The four corners, where the ring bends and its edges are smooth.
+    let (fw, fh, ft) = (width as f32, height as f32, thickness as f32);
     let outer_radius = (radius + thickness) as f32;
-    let (inner_w, inner_h) = (width as f32 - 2.0 * t, height as f32 - 2.0 * t);
-    let corner = radius + thickness;
-    for y in 0..height {
-        let edge_row = y < thickness || y >= height - thickness;
-        let corner_row = y < corner || y >= height - corner;
-        for x in 0..width {
-            let edge = edge_row || x < thickness || x >= width - thickness;
-            let in_corner = corner_row && (x < corner || x >= width - corner);
-            let alpha = if in_corner {
+    let (inner_w, inner_h) = (fw - 2.0 * ft, fh - 2.0 * ft);
+    for (x0, y0) in [
+        (0, 0),
+        (width - corner, 0),
+        (0, height - corner),
+        (width - corner, height - corner),
+    ] {
+        for y in y0..y0 + corner {
+            for x in x0..x0 + corner {
                 let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
-                let outer = coverage(px, py, width as f32, height as f32, outer_radius);
-                let inner = coverage(px - t, py - t, inner_w, inner_h, radius as f32);
-                (outer - inner).max(0.0)
-            } else if edge {
-                1.0
-            } else {
-                continue;
-            };
-            let at = ((y * width + x) * 4) as usize;
-            let premultiplied = |c: u8| (f32::from(c) * alpha).round() as u8;
-            pixels[at] = premultiplied(color.b);
-            pixels[at + 1] = premultiplied(color.g);
-            pixels[at + 2] = premultiplied(color.r);
-            pixels[at + 3] = (alpha * 255.0).round() as u8;
+                let outer = coverage(px, py, fw, fh, outer_radius);
+                let inner = coverage(px - ft, py - ft, inner_w, inner_h, radius as f32);
+                let alpha = (outer - inner).max(0.0);
+                let at = ((y * width + x) * 4) as usize;
+                let premultiplied = |c: u8| (f32::from(c) * alpha).round() as u8;
+                pixels[at] = premultiplied(color.b);
+                pixels[at + 1] = premultiplied(color.g);
+                pixels[at + 2] = premultiplied(color.r);
+                pixels[at + 3] = (alpha * 255.0).round() as u8;
+            }
         }
     }
     pixels
@@ -140,6 +172,8 @@ struct Overlay {
     insets: Option<([i32; 4], (i32, i32))>,
     /// How many times the ring has been moved, redrawn or hidden, to tell when nothing changes.
     changes: u32,
+    /// The cut last made, so an unchanged one isn't made again: it is a costly call.
+    cut: Option<Option<[i32; 4]>>,
 }
 
 impl Drop for Overlay {
@@ -158,6 +192,7 @@ impl Overlay {
             ring: None,
             insets: None,
             changes: 0,
+            cut: None,
         })
     }
 
@@ -240,10 +275,14 @@ impl Overlay {
     }
 
     /// Cuts the ring at the edge of its clip, once it is where it goes.
-    fn cut(&self, ring: &Ring, origin: w::POINT, size: w::SIZE) {
+    fn cut(&mut self, ring: &Ring, origin: w::POINT, size: w::SIZE) {
         if let Some(clip) = ring.clip {
             let outer = Rect::new(origin.x, origin.y, size.cx, size.cy);
-            tile_sys::set_window_clip(self.hwnd.ptr() as isize, visible_part(outer, clip));
+            let part = visible_part(outer, clip);
+            if self.cut != Some(part) {
+                tile_sys::set_window_clip(self.hwnd.ptr() as isize, part);
+                self.cut = Some(part);
+            }
         }
     }
 
@@ -318,7 +357,7 @@ impl Overlay {
     }
 }
 
-fn run(requests: mpsc::Receiver<Request>, mailbox: Mailbox<Request>) {
+fn run(requests: mpsc::Receiver<Request>, mailbox: Mailbox<Request>, wake: mpsc::Receiver<()>) {
     let wnd = gui::WindowMain::new(gui::WindowMainOpts {
         title: "Tile borders",
         class_name: "tile-borders",
@@ -346,16 +385,23 @@ fn run(requests: mpsc::Receiver<Request>, mailbox: Mailbox<Request>) {
         move || {
             while running.load(Ordering::Relaxed) {
                 if !following.load(Ordering::Relaxed) {
-                    thread::sleep(IDLE);
+                    // Nothing to follow: sleep until poked, or until it is time to look again.
+                    if let Err(mpsc::RecvTimeoutError::Disconnected) = wake.recv_timeout(IDLE) {
+                        break;
+                    }
                 } else if busy.load(Ordering::Relaxed) {
+                    while wake.try_recv().is_ok() {}
                     // Right after the compositor draws a frame, so a ring moves with its window.
                     if w::DwmFlush().is_err() {
                         thread::sleep(FOLLOW);
                     }
                     mailbox.send(Request::Follow);
                 } else {
-                    // Nothing moved lately: look only now and then, to catch the next move.
-                    thread::sleep(WATCH);
+                    // Nothing moved lately: look when poked, and now and then anyway.
+                    if let Err(mpsc::RecvTimeoutError::Disconnected) = wake.recv_timeout(WATCH) {
+                        break;
+                    }
+                    while wake.try_recv().is_ok() {}
                     mailbox.send(Request::Follow);
                 }
             }
@@ -446,6 +492,64 @@ mod tests {
 
     fn alpha_at(pixels: &[u8], width: i32, x: i32, y: i32) -> u8 {
         pixels[((y * width + x) * 4 + 3) as usize]
+    }
+
+    /// The original, which walks every pixel: the reference the faster one must match.
+    fn render_every_pixel(
+        width: i32,
+        height: i32,
+        thickness: i32,
+        radius: i32,
+        color: Color,
+    ) -> Vec<u8> {
+        let mut pixels = vec![0u8; (width * height * 4) as usize];
+        let t = thickness as f32;
+        let outer_radius = (radius + thickness) as f32;
+        let (inner_w, inner_h) = (width as f32 - 2.0 * t, height as f32 - 2.0 * t);
+        let corner = radius + thickness;
+        for y in 0..height {
+            let edge_row = y < thickness || y >= height - thickness;
+            let corner_row = y < corner || y >= height - corner;
+            for x in 0..width {
+                let edge = edge_row || x < thickness || x >= width - thickness;
+                let in_corner = corner_row && (x < corner || x >= width - corner);
+                let alpha = if in_corner {
+                    let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                    let outer = coverage(px, py, width as f32, height as f32, outer_radius);
+                    let inner = coverage(px - t, py - t, inner_w, inner_h, radius as f32);
+                    (outer - inner).max(0.0)
+                } else if edge {
+                    1.0
+                } else {
+                    continue;
+                };
+                let at = ((y * width + x) * 4) as usize;
+                let premultiplied = |c: u8| (f32::from(c) * alpha).round() as u8;
+                pixels[at] = premultiplied(color.b);
+                pixels[at + 1] = premultiplied(color.g);
+                pixels[at + 2] = premultiplied(color.r);
+                pixels[at + 3] = (alpha * 255.0).round() as u8;
+            }
+        }
+        pixels
+    }
+
+    #[test]
+    fn painting_only_the_band_gives_the_same_pixels() {
+        for (w, h, t, r) in [
+            (60, 40, 3, 8),
+            (200, 120, 5, 8),
+            (1904, 400, 3, 8),
+            (30, 30, 2, 8),
+            (90, 60, 1, 0),
+        ] {
+            let color = Color::rgb(200, 100, 50);
+            assert_eq!(
+                render(w, h, t, r, color),
+                render_every_pixel(w, h, t, r, color),
+                "{w}x{h} t={t} r={r}"
+            );
+        }
     }
 
     #[test]
