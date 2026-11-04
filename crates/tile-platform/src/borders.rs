@@ -19,7 +19,10 @@ use tile_config::Color;
 use tile_core::Rect;
 use winsafe::{self as w, co, gui, prelude::*};
 
-use crate::gui::{Mailbox, WindowThread, scale};
+use crate::{
+    frame::visible_part,
+    gui::{Mailbox, WindowThread, scale},
+};
 
 /// Windows 11's window corner radius, in pixels at 100% scaling.
 const WINDOW_RADIUS: i32 = 8;
@@ -35,6 +38,8 @@ pub struct Ring {
     pub color: Color,
     /// How far the ring reaches beyond the frame, in pixels at 100% scaling.
     pub width: u32,
+    /// The part of the screen the ring may show in, as for its window.
+    pub clip: Option<Rect>,
 }
 
 /// How long the rings wait between frames if DWM can't say when one is drawn.
@@ -234,6 +239,14 @@ impl Overlay {
         }
     }
 
+    /// Cuts the ring at the edge of its clip, once it is where it goes.
+    fn cut(&self, ring: &Ring, origin: w::POINT, size: w::SIZE) {
+        if let Some(clip) = ring.clip {
+            let outer = Rect::new(origin.x, origin.y, size.cx, size.cy);
+            tile_sys::set_window_clip(self.hwnd.ptr() as isize, visible_part(outer, clip));
+        }
+    }
+
     /// Draws `ring` round its frame, redrawing the pixels only if the look changed.
     fn place(&mut self, ring: &Ring) -> w::SysResult<()> {
         self.ring = Some(*ring);
@@ -260,6 +273,7 @@ impl Overlay {
                 self.origin = origin;
                 self.changes += 1;
             }
+            self.cut(ring, origin, size);
             self.stack_above(&target);
             return Ok(());
         }
@@ -294,6 +308,7 @@ impl Overlay {
             &blend,
             co::ULW::ALPHA,
         )?;
+        self.cut(ring, origin, size);
         self.hwnd.ShowWindow(co::SW::SHOWNOACTIVATE);
         self.stack_above(&target);
         self.drawn = Some(look);

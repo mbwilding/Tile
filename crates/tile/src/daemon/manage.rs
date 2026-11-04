@@ -82,6 +82,9 @@ impl Daemon {
         if tracked.undecorated == Some(true) && alive {
             self.windows.set_decorated(id, true);
         }
+        if tracked.clipped && alive {
+            self.windows.unclip(id);
+        }
         if self.desktops.is_hidden(id) && alive {
             self.windows.show(id);
         }

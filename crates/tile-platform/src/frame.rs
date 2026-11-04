@@ -29,6 +29,10 @@ pub(crate) struct Placement {
     /// Wait until the app has processed the move and painted it, as the movers do for each
     /// frame; otherwise the move is posted to the window's thread.
     pub sync: bool,
+    /// The part of the screen the window may show in. The rest is cut off, so a window part way
+    /// off its monitor doesn't appear on the next one. A clip the whole window fits in removes
+    /// the cut. `None` leaves the window as it is.
+    pub clip: Option<Rect>,
 }
 
 /// Moves `hwnd` so its visible frame covers `visible`, given its invisible `insets`.
@@ -44,7 +48,8 @@ pub(crate) fn set_frame(
         visible.h + insets.top + insets.bottom,
     );
     let mut flags = co::SWP::NOZORDER | co::SWP::NOACTIVATE | co::SWP::NOOWNERZORDER;
-    if !how.sync {
+    // A cut is relative to the window's position, so the move must land before it is made.
+    if !how.sync && how.clip.is_none() {
         flags |= co::SWP::ASYNCWINDOWPOS;
     }
     if how.force {
@@ -69,6 +74,10 @@ pub(crate) fn set_frame(
         // Crossing monitors with different DPI makes apps rescale themselves; apply twice.
         hwnd.SetWindowPos(w::HwndPlace::None, pos, size, flags)?;
     }
+    if let Some(clip) = how.clip {
+        let outer = Rect::new(pos.x, pos.y, size.cx, size.cy);
+        tile_sys::set_window_clip(hwnd.ptr() as isize, visible_part(outer, clip));
+    }
     if how.sync || how.settled {
         let everything = w::RECT {
             left: 0,
@@ -87,4 +96,58 @@ pub(crate) fn set_frame(
         let _ = hwnd.RedrawWindow(everything, &w::HRGN::NULL, redraw);
     }
     Ok(())
+}
+
+/// The part of `outer` inside `clip`, in `outer`'s own coordinates as left, top, right, bottom.
+/// `None` when all of it is inside; an empty rectangle when none of it is.
+pub(crate) fn visible_part(outer: Rect, clip: Rect) -> Option<[i32; 4]> {
+    let left = outer.x.max(clip.x);
+    let top = outer.y.max(clip.y);
+    let right = outer.right().min(clip.right());
+    let bottom = outer.bottom().min(clip.bottom());
+    if (left, top, right, bottom) == (outer.x, outer.y, outer.right(), outer.bottom()) {
+        return None;
+    }
+    if right <= left || bottom <= top {
+        return Some([0; 4]);
+    }
+    Some([
+        left - outer.x,
+        top - outer.y,
+        right - outer.x,
+        bottom - outer.y,
+    ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MONITOR: Rect = Rect {
+        x: 0,
+        y: 0,
+        w: 1000,
+        h: 800,
+    };
+
+    #[test]
+    fn a_window_inside_the_clip_is_not_cut() {
+        assert_eq!(visible_part(Rect::new(100, 0, 400, 800), MONITOR), None);
+    }
+
+    #[test]
+    fn a_window_over_the_edge_keeps_only_what_is_inside() {
+        let outer = Rect::new(800, 0, 400, 800);
+        assert_eq!(visible_part(outer, MONITOR), Some([0, 0, 200, 800]));
+        let outer = Rect::new(-150, 0, 400, 800);
+        assert_eq!(visible_part(outer, MONITOR), Some([150, 0, 400, 800]));
+    }
+
+    #[test]
+    fn a_window_wholly_outside_shows_nothing() {
+        assert_eq!(
+            visible_part(Rect::new(1000, 0, 400, 800), MONITOR),
+            Some([0; 4])
+        );
+    }
 }

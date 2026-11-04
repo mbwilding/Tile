@@ -26,3 +26,18 @@ pub fn monitors() -> Vec<MonitorInfo> {
     out.sort_by_key(|m| (m.rect.x, m.rect.y));
     out
 }
+
+/// The hardware path of every monitor, which names its model and port; see
+/// `tile_config::monitor_key`. Monitors Windows can't name are left out.
+pub fn monitor_paths() -> Vec<(MonitorId, String)> {
+    let mut out = Vec::new();
+    let _ = w::HDC::NULL.EnumDisplayMonitors(None, |hmon: w::HMONITOR, _, _| {
+        if let Ok(info) = hmon.GetMonitorInfo()
+            && let Some(path) = tile_sys::monitor_interface(&info.szDevice())
+        {
+            out.push((MonitorId(hmon.ptr() as isize), path));
+        }
+        true
+    });
+    out
+}

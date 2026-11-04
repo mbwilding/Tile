@@ -37,7 +37,13 @@ impl State {
                 let kind = self.active_layout().unwrap_or(self.default_layout);
                 self.set_layout(kind)
             }
-            Command::SwapWithMaster | Command::ToggleSplit => self.layout_specific(command),
+            Command::SwapWithMaster
+            | Command::ToggleSplit
+            | Command::ScrollerProportion(_)
+            | Command::CycleProportion
+            | Command::ConsumeWindow(_)
+            | Command::ExpelWindow
+            | Command::CenterColumn => self.layout_specific(command),
             // Handled by the daemon.
             Command::ExecHidden(_)
             | Command::FocusOrExec(_)
@@ -178,22 +184,27 @@ impl State {
         if let Some(ws) = self.workspaces.get_mut(&n) {
             // The keys move an edge: right and down move it that way, even when it is the left or
             // top edge of a window against the far side that the divider is on.
-            let bounds = settings.tiling_area(area);
-            let own = ws
-                .layout
-                .arrange(area, Some(id), &settings)
-                .into_iter()
-                .find(|t| t.id == id)
-                .map(|t| t.rect);
-            let (dx, dy) = own.map_or((dx, dy), |r| {
-                let flip = |at_far: bool, at_near: bool, d: i32| {
-                    if at_far && !at_near { -d } else { d }
-                };
-                (
-                    flip(r.x + r.w >= bounds.x + bounds.w, r.x <= bounds.x, dx),
-                    flip(r.y + r.h >= bounds.y + bounds.h, r.y <= bounds.y, dy),
-                )
-            });
+            let (dx, dy) = match ws.layout.kind() {
+                LayoutKind::Scrolling => (dx, dy),
+                _ => {
+                    let bounds = settings.tiling_area(area);
+                    let own = ws
+                        .layout
+                        .arrange(area, Some(id), &settings)
+                        .into_iter()
+                        .find(|t| t.id == id)
+                        .map(|t| t.rect);
+                    own.map_or((dx, dy), |r| {
+                        let flip = |at_far: bool, at_near: bool, d: i32| {
+                            if at_far && !at_near { -d } else { d }
+                        };
+                        (
+                            flip(r.x + r.w >= bounds.x + bounds.w, r.x <= bounds.x, dx),
+                            flip(r.y + r.h >= bounds.y + bounds.h, r.y <= bounds.y, dy),
+                        )
+                    })
+                }
+            };
             ws.layout.resize(id, dx, dy, area, &settings);
         }
         self.sync()
@@ -273,6 +284,11 @@ impl State {
             (LayoutState::Dwindle(d), Command::ToggleSplit) => {
                 d.toggle_split(id, s.tiling_area(area), s);
             }
+            (LayoutState::Scrolling(l), Command::ScrollerProportion(p)) => l.set_proportion(id, *p),
+            (LayoutState::Scrolling(l), Command::CycleProportion) => l.cycle_proportion(id, s),
+            (LayoutState::Scrolling(l), Command::ConsumeWindow(dir)) => l.consume(id, *dir),
+            (LayoutState::Scrolling(l), Command::ExpelWindow) => l.expel(id, s),
+            (LayoutState::Scrolling(l), Command::CenterColumn) => l.center(),
             _ => return Vec::new(),
         }
         self.sync()

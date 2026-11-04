@@ -20,6 +20,9 @@ pub struct Restore {
     pub hidden: Vec<isize>,
     /// Windows whose title bar we removed.
     pub undecorated: Vec<isize>,
+    /// Windows we cut to their monitor (the scrolling layout).
+    #[serde(default)]
+    pub clipped: Vec<isize>,
     /// We disabled Win+L (the `DisableLockWorkstation` policy) to use it as a keybind.
     #[serde(default)]
     pub lock_disabled: bool,
@@ -35,6 +38,7 @@ impl Restore {
     pub fn is_empty(&self) -> bool {
         self.hidden.is_empty()
             && self.undecorated.is_empty()
+            && self.clipped.is_empty()
             && !self.lock_disabled
             && !self.cursor_hidden
             && !self.smartscreen_disabled
@@ -42,7 +46,7 @@ impl Restore {
 
     /// Undoes everything recorded here.
     pub fn apply(&self) {
-        tile_platform::restore_windows(&self.hidden, &self.undecorated);
+        tile_platform::restore_windows(&self.hidden, &self.undecorated, &self.clipped);
         if self.lock_disabled {
             tile_platform::set_lock_disabled(false);
         }
@@ -126,6 +130,7 @@ mod tests {
         let restore = Restore {
             hidden: vec![1, 2],
             undecorated: vec![3],
+            clipped: vec![4],
             lock_disabled: true,
             cursor_hidden: true,
             smartscreen_disabled: true,

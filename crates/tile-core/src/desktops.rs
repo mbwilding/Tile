@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    Effect, LayoutKind, LayoutSettings, ManageOptions, MonitorInfo, State, WindowId, WindowInfo,
+    Effect, LayoutKind, LayoutSettings, ManageOptions, MonitorId, MonitorInfo, State, WindowId,
+    WindowInfo,
 };
 
 /// A virtual desktop, identified by its GUID.
@@ -21,6 +22,7 @@ pub struct Desktops {
     settings: LayoutSettings,
     layout: LayoutKind,
     monitors: Vec<MonitorInfo>,
+    preferred: HashMap<MonitorId, LayoutKind>,
 }
 
 impl Desktops {
@@ -35,6 +37,7 @@ impl Desktops {
             settings,
             layout,
             monitors: Vec::new(),
+            preferred: HashMap::new(),
         }
     }
 
@@ -50,8 +53,10 @@ impl Desktops {
 
     fn state_mut(&mut self, desktop: DesktopId) -> &mut State {
         let (settings, layout, monitors) = (&self.settings, self.layout, &self.monitors);
+        let preferred = &self.preferred;
         self.states.entry(desktop).or_insert_with(|| {
             let mut state = State::new(settings.clone(), layout);
+            state.set_preferred_layouts(preferred.clone());
             state.set_monitors(monitors.clone());
             state
         })
@@ -158,6 +163,14 @@ impl Desktops {
             effects.extend(self.scope_to(desktop, changed));
         }
         effects
+    }
+
+    /// Sets the layout new workspaces start with on each monitor, on every desktop.
+    pub fn set_preferred_layouts(&mut self, preferred: HashMap<MonitorId, LayoutKind>) {
+        for state in self.states.values_mut() {
+            state.set_preferred_layouts(preferred.clone());
+        }
+        self.preferred = preferred;
     }
 
     /// Updates the monitors on every desktop.

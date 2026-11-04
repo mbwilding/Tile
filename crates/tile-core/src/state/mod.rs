@@ -65,11 +65,17 @@ pub enum Effect {
         id: WindowId,
         /// Where its visible frame goes.
         rect: Rect,
+        /// The part of the screen it may show in, when it can reach past its monitor: the cut
+        /// that keeps a scrolled window from appearing on the next monitor.
+        clip: Option<Rect>,
     },
     /// Show a window that was hidden.
     Show(WindowId),
     /// Hide a window, as its workspace isn't shown.
     Hide(WindowId),
+    /// Hide a window that scrolled off the monitor of a workspace that is shown, once it has
+    /// slid off the edge.
+    Park(WindowId),
     /// Give a window the keyboard focus.
     Focus(WindowId),
     /// Nothing on the focused monitor can take focus: put it on the desktop, so Windows
@@ -109,6 +115,8 @@ pub struct State {
     focused_monitor: usize,
     settings: LayoutSettings,
     default_layout: LayoutKind,
+    /// The layout new workspaces start with on a monitor, instead of the default.
+    preferred: HashMap<MonitorId, LayoutKind>,
 }
 
 impl State {
@@ -124,7 +132,14 @@ impl State {
             focused_monitor: 0,
             settings,
             default_layout,
+            preferred: HashMap::new(),
         }
+    }
+
+    /// Sets the layout new workspaces start with on each monitor, which wins over the default
+    /// layout. Workspaces that exist keep theirs.
+    pub fn set_preferred_layouts(&mut self, preferred: HashMap<MonitorId, LayoutKind>) {
+        self.preferred = preferred;
     }
 
     /// The window with focus, if Tile manages it.
@@ -217,7 +232,6 @@ impl State {
                 let area = self.area_of(key);
                 if let Some(ws) = self.workspaces.get_mut(&key)
                     && ws.layout.kind() == previous
-                    && area.h <= area.w
                 {
                     ws.layout = ws.layout.convert(default_layout, area, &self.settings);
                 }
@@ -246,27 +260,6 @@ impl State {
             .unwrap_or_default()
     }
 
-    /// The layout a workspace starts with on `area`: even on portrait, else the default.
-    fn layout_for(&self, area: Rect) -> LayoutKind {
-        if area.h > area.w {
-            LayoutKind::Even
-        } else {
-            self.default_layout
-        }
-    }
-
-    /// A monitor was rotated: portrait switches to even, and back from it on landscape.
-    fn adopt_orientation(&mut self, n: u8, area: Rect) {
-        let want = self.layout_for(area);
-        let Some(ws) = self.workspaces.get_mut(&n) else {
-            return;
-        };
-        let kind = ws.layout.kind();
-        if want != kind && (want == LayoutKind::Even || kind == LayoutKind::Even) {
-            ws.layout = ws.layout.convert(want, area, &self.settings);
-        }
-    }
-
     /// The workspace `monitor` has for `label`, created on first use.
     fn workspace_for(&mut self, label: u8, monitor: MonitorId) -> u8 {
         if let Some(key) = self.labels.get(&(monitor, label)) {
@@ -275,10 +268,12 @@ impl State {
         let key = (1..=u8::MAX)
             .find(|k| !self.workspaces.contains_key(k))
             .unwrap_or(u8::MAX);
-        let area = self
-            .monitor_index(monitor)
-            .map_or_else(Rect::default, |i| self.monitors[i].info.work_area);
-        let ws = Workspace::new(monitor, label, self.layout_for(area), &self.settings);
+        let kind = self
+            .preferred
+            .get(&monitor)
+            .copied()
+            .unwrap_or(self.default_layout);
+        let ws = Workspace::new(monitor, label, kind, &self.settings);
         self.workspaces.insert(key, ws);
         self.labels.insert((monitor, label), key);
         key
@@ -339,12 +334,11 @@ impl State {
         let old = std::mem::take(&mut self.monitors);
         let present: HashSet<MonitorId> = infos.iter().map(|i| i.id).collect();
         for info in infos {
-            let before = old.iter().find(|m| m.info.id == info.id);
-            let rotated = before.is_some_and(|m| {
-                (m.info.work_area.h > m.info.work_area.w) != (info.work_area.h > info.work_area.w)
-            });
-            let kept = before.map(|m| m.workspace);
-            let (id, area) = (info.id, info.work_area);
+            let kept = old
+                .iter()
+                .find(|m| m.info.id == info.id)
+                .map(|m| m.workspace);
+            let id = info.id;
             self.monitors.push(Monitor {
                 info,
                 workspace: kept.unwrap_or(0),
@@ -352,9 +346,6 @@ impl State {
             let ws = kept.unwrap_or_else(|| self.workspace_for(1, id));
             if let Some(m) = self.monitors.last_mut() {
                 m.workspace = ws;
-            }
-            if rotated {
-                self.adopt_orientation(ws, area);
             }
         }
         self.rehome_orphans(&present);
@@ -389,6 +380,9 @@ impl State {
                 .filter(|f| windows.get(f).is_some_and(|m| m.workspace == *n))
                 .or_else(|| ws.history.last().copied());
             let mut tiles = ws.layout.arrange(monitor.info.work_area, focus, settings);
+            let clip =
+                (ws.layout.kind() == LayoutKind::Scrolling).then_some(monitor.info.work_area);
+            let tiled = tiles.len();
             tiles.extend(ws.floating.iter().filter_map(|id| {
                 windows.get(id).map(|m| Tile {
                     id: *id,
@@ -396,19 +390,28 @@ impl State {
                     visible: true,
                 })
             }));
-            for tile in tiles {
+            for (i, tile) in tiles.into_iter().enumerate() {
                 if tile.visible {
                     let rect = if ws.fullscreen == Some(tile.id) {
                         monitor.info.rect
                     } else {
                         tile.rect
                     };
-                    places.push(Effect::Place { id: tile.id, rect });
+                    let clip = clip.filter(|_| i < tiled && ws.fullscreen != Some(tile.id));
+                    places.push(Effect::Place {
+                        id: tile.id,
+                        rect,
+                        clip,
+                    });
                     if hidden.remove(&tile.id) {
                         shows.push(Effect::Show(tile.id));
                     }
                 } else if hidden.insert(tile.id) {
-                    hides.push(Effect::Hide(tile.id));
+                    hides.push(if clip.is_some() {
+                        Effect::Park(tile.id)
+                    } else {
+                        Effect::Hide(tile.id)
+                    });
                 }
             }
             for id in &ws.minimized {

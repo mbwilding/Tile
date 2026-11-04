@@ -148,6 +148,40 @@ directly above its window in the stacking order, not topmost, so anything over t
 its ring too. It still needs a gap at least as wide beside the window, or it covers a neighbour's
 edge.
 
+## Scrolling and monitor edges
+
+Windows has one desktop across all monitors, so a window moved part way off its monitor shows on
+the next one. The scrolling layout does that all the time, and the first version showed columns
+sliding in on the neighbouring monitor. Tile now cuts each window of a scrolling workspace to
+its monitor's work area with `SetWindowRgn`, which works on windows of other processes. The
+region is the part of the window's outer rect (its invisible resize borders and shadow
+included) inside the work area, and is set after every placement and every animation frame, so
+the cut follows the window as it moves. A window wholly outside gets an empty region and shows
+nothing. Windows draws a window's own border and shadow outside that region, so on a cut window Tile
+takes the border away (`DWMWA_COLOR_NONE`) and draws its own ring at the full `border_width`
+instead. Border rings are cut the same way, to their monitor, so the ring of a fullscreen window doesn't
+spill onto the next one. The cut is lifted when a window leaves the scrolling
+layout, is released or when Tile exits, and the file Tile keeps for its watchdog lists cut
+windows so they are freed after a crash too.
+
+Some apps (File Explorer, Windows Terminal) reset or ignore a window region when they resize,
+so the cut alone leaks. When Tile paints the desktop itself (shell mode), it also hides the
+overflow behind the other monitors' backdrops. Stacking order is one list for every monitor, so
+Tile puts the scrolling monitor's backdrop at the very bottom and each of its scrolling windows
+directly beneath the lowest of the other backdrops: over its own backdrop and under theirs, so
+whatever reaches the next monitor is covered by that monitor's wallpaper. Windows raises a
+window when it takes focus, so Tile puts it back on every focus change, and a window that stops
+scrolling is raised again so it isn't left under a backdrop. This works while one monitor
+scrolls. With two, each would have to be under the other's backdrop, which can't be done, so
+Tile stacks nothing and only the cut is left. Without Tile's backdrop (Explorer paints the
+desktop) there is nothing to hide behind either.
+
+A column only shows while any of it is on the monitor. One that scrolls into view starts just
+past the monitor's edge and slides in under the cut, and one that scrolls out slides off the edge
+and is hidden there, as a window on another workspace is. With animations off they just appear
+and disappear. On monitors with different scaling, an app may rescale for the moment it is
+partly over the other monitor.
+
 ## Notifications
 
 A popup, top-right by default, shows for each new Windows toast notification while Tile hosts the

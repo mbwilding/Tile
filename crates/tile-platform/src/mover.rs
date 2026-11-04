@@ -13,7 +13,10 @@ use tile_core::{
 };
 use winsafe as w;
 
-use crate::frame::{Insets, Placement, set_frame};
+use crate::{
+    frame::{Insets, Placement, set_frame},
+    windows::put_below,
+};
 
 /// One window's move from `from` to `to` (visible frames) over `duration`.
 #[derive(Debug, Clone, Copy)]
@@ -32,6 +35,13 @@ pub struct Animation {
     pub insets: Insets,
     /// Skip `WM_WINDOWPOSCHANGING` so app minimum sizes can't refuse it.
     pub force: bool,
+    /// The part of the screen the window may show in; see [`Windows::place`](crate::Windows::place).
+    pub clip: Option<Rect>,
+    /// Hide the window once it has arrived: it slid off the edge of its monitor.
+    pub hide_when_done: bool,
+    /// Keep the window directly beneath the window with this handle on every frame: the
+    /// backdrop of the next monitor, which hides what the window overflows onto it.
+    pub under: Option<isize>,
 }
 
 impl Animation {
@@ -133,6 +143,9 @@ fn run(hwnd: &w::HWND, shared: &Shared) {
                 started.elapsed().as_secs_f64() * 1000.0
             );
             if done || !hwnd.IsWindow() {
+                if done && animation.hide_when_done {
+                    let _ = hwnd.ShowWindowAsync(w::co::SW::HIDE);
+                }
                 break;
             }
             // Wait for the compositor's next frame (vsync) before drawing the next one.
@@ -147,7 +160,12 @@ fn draw(hwnd: &w::HWND, visible: Rect, animation: &Animation, settled: bool) {
         force: animation.force,
         settled,
         sync: true,
+        clip: animation.clip,
     };
+    if let Some(anchor) = animation.under {
+        // Before the move, so a window that was raised never shows over the next monitor.
+        put_below(hwnd, anchor);
+    }
     if let Err(e) = set_frame(hwnd, visible, animation.insets, how) {
         tracing::debug!("mover: SetWindowPos failed: {e}");
     }

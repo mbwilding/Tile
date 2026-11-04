@@ -71,7 +71,7 @@ fn float(s: &mut State, id: WindowId) {
 
 fn placed(effects: &[Effect], id: WindowId) -> Option<Rect> {
     effects.iter().rev().find_map(|e| match e {
-        Effect::Place { id: i, rect } if *i == id => Some(*rect),
+        Effect::Place { id: i, rect, .. } if *i == id => Some(*rect),
         _ => None,
     })
 }
@@ -182,7 +182,7 @@ fn focus_enters_the_nearest_window_on_the_next_monitor() {
 }
 
 #[test]
-fn portrait_monitors_start_with_even() {
+fn portrait_monitors_start_with_the_default_layout() {
     let mut s = State::new(LayoutSettings::default(), LayoutKind::Dwindle);
     s.set_monitors(vec![
         monitor(1, 0),
@@ -193,9 +193,7 @@ fn portrait_monitors_start_with_even() {
         },
     ]);
     let layouts: Vec<_> = s.snapshot_workspaces().iter().map(|w| w.layout).collect();
-    assert_eq!(layouts, vec![LayoutKind::Dwindle, LayoutKind::Even]);
-    s.set_monitors(vec![monitor(1, 0), monitor(2, 1000)]);
-    assert_eq!(s.snapshot_workspaces()[1].layout, LayoutKind::Dwindle);
+    assert_eq!(layouts, vec![LayoutKind::Dwindle, LayoutKind::Dwindle]);
 }
 
 #[test]
@@ -253,6 +251,43 @@ fn minimize_and_restore() {
     assert_eq!(placed(&effects, W), Some(Rect::new(0, 0, 1000, 960)));
     let effects = s.window_restored(X);
     assert_eq!(placed(&effects, X), Some(Rect::new(500, 0, 500, 960)));
+}
+
+#[test]
+fn scrolling_hides_columns_wholly_off_screen() {
+    let mut s = state(1);
+    s.apply(&Command::Layout(LayoutKind::Scrolling));
+    open(&mut s, W);
+    open(&mut s, X);
+    let effects = open(&mut s, Y);
+    assert!(effects.contains(&Effect::Park(W)));
+    let effects = (0..2)
+        .flat_map(|_| s.apply(&Command::MoveFocus(Direction::Left)))
+        .collect::<Vec<_>>();
+    assert!(effects.contains(&Effect::Show(W)));
+    assert_eq!(s.focused(), Some(W));
+}
+
+fn clip_of(effects: &[Effect], id: WindowId) -> Option<Option<Rect>> {
+    effects.iter().find_map(|e| match e {
+        Effect::Place { id: i, clip, .. } if *i == id => Some(*clip),
+        _ => None,
+    })
+}
+
+#[test]
+fn only_scrolling_windows_are_cut_to_their_monitor() {
+    let mut s = state(1);
+    open(&mut s, W);
+    open(&mut s, X);
+    assert_eq!(clip_of(&s.sync(), W), Some(None));
+    s.apply(&Command::Layout(LayoutKind::Scrolling));
+    let area = s.focused_monitor().unwrap().work_area;
+    let effects = s.sync();
+    assert_eq!(clip_of(&effects, W), Some(Some(area)));
+    assert_eq!(clip_of(&effects, X), Some(Some(area)));
+    s.apply(&Command::Layout(LayoutKind::Monocle));
+    assert_eq!(clip_of(&s.sync(), W), Some(None));
 }
 
 #[test]
@@ -639,7 +674,7 @@ fn layouts_switch_and_cycle() {
     let effects = s.sync();
     assert_eq!(placed(&effects, W), placed(&effects, X));
     s.apply(&Command::CycleLayout);
-    assert_eq!(s.active_layout(), Some(LayoutKind::Even));
+    assert_eq!(s.active_layout(), Some(LayoutKind::Scrolling));
     assert_eq!(s.snapshot_windows().len(), 2);
 }
 
@@ -658,9 +693,43 @@ fn resetting_the_layout_undoes_resizing() {
 fn layout_commands_ignore_other_layouts() {
     let mut s = opened(1, &[W]);
     s.apply(&Command::Layout(LayoutKind::Monocle));
-    for command in [Command::ToggleSplit, Command::SwapWithMaster] {
+    for command in [
+        Command::CycleProportion,
+        Command::ScrollerProportion(0.5),
+        Command::ExpelWindow,
+        Command::CenterColumn,
+        Command::ConsumeWindow(Direction::Left),
+        Command::ToggleSplit,
+        Command::SwapWithMaster,
+    ] {
         assert!(s.apply(&command).is_empty(), "{command:?}");
     }
+}
+
+#[test]
+fn new_workspaces_start_with_the_layout_last_used_on_their_monitor() {
+    let mut s = State::new(LayoutSettings::default(), LayoutKind::Dwindle);
+    s.set_preferred_layouts([(MonitorId(1), LayoutKind::Scrolling)].into());
+    s.set_monitors(vec![monitor(1, 0), monitor(2, 1000)]);
+    s.apply(&Command::FocusMonitor(Direction::Left));
+    assert_eq!(s.active_layout(), Some(LayoutKind::Scrolling));
+    s.apply(&Command::FocusMonitor(Direction::Right));
+    assert_eq!(s.active_layout(), Some(LayoutKind::Dwindle));
+}
+
+#[test]
+fn scrolling_commands_change_the_columns() {
+    let mut s = state(1);
+    s.apply(&Command::Layout(LayoutKind::Scrolling));
+    open(&mut s, W);
+    open(&mut s, X);
+    let before = s.sync();
+    let after = s.apply(&Command::ScrollerProportion(1.0));
+    assert_ne!(placed(&before, X), placed(&after, X));
+    assert!(!s.apply(&Command::CycleProportion).is_empty());
+    assert!(!s.apply(&Command::CenterColumn).is_empty());
+    assert!(!s.apply(&Command::ConsumeWindow(Direction::Left)).is_empty());
+    assert!(!s.apply(&Command::ExpelWindow).is_empty());
 }
 
 #[test]

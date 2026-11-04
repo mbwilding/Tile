@@ -193,39 +193,70 @@ const NEW_FILE_HEADER: &str = "\
 
 ";
 
-/// Sets `key: value` for each pair in the top-level `section:` of `text`, keeping everything
-/// else (comments, other keys, order). Missing keys are added, and so is the section.
-fn set_bools(text: &str, section: &str, pairs: &[(&str, bool)]) -> String {
-    let header = format!("{section}:");
+/// Sets `key: value` for each pair in the section at `path` of `text` (like `["general",
+/// "layout", "monitors"]`), keeping everything else (comments, other keys, order). Missing keys
+/// are added, and so are missing sections.
+fn set_values<V: std::fmt::Display>(text: &str, path: &[&str], pairs: &[(&str, V)]) -> String {
     let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
-    let mut start = lines
-        .iter()
-        .position(|l| l.split('#').next().unwrap_or("").trim_end() == header);
-    if start.is_none() {
-        if lines.last().is_some_and(|l| !l.trim().is_empty()) {
-            lines.push(String::new());
-        }
-        lines.push(header);
-        start = Some(lines.len() - 1);
-    }
-    let start = start.unwrap_or(0);
-    let top_level = |l: &str| !l.is_empty() && !l.starts_with([' ', '\t', '#']);
-    for (key, value) in pairs {
-        let end = lines[start + 1..]
-            .iter()
-            .position(|l| top_level(l))
-            .map_or(lines.len(), |i| start + 1 + i);
-        let indent = (start + 1..end)
+    let indent_of = |l: &str| l.len() - l.trim_start().len();
+    // Comments at the left edge head whatever section follows, so they don't count.
+    let is_text = |l: &str| !l.trim().is_empty() && !l.starts_with('#');
+    let content = |l: &str| l.split('#').next().unwrap_or("").trim_end().to_owned();
+    // Where a new line goes in `lo..hi`: after the last line of text, or at the start.
+    let after_text = |lines: &[String], lo: usize, hi: usize| {
+        (lo..hi)
+            .rev()
+            .find(|&i| is_text(&lines[i]))
+            .map_or(lo, |i| i + 1)
+    };
+    // The indentation of the lines in `lo..hi`, or two more than `parent` if there are none.
+    let indent_in = |lines: &[String], lo: usize, hi: usize, parent: &str| {
+        (lo..hi)
             .map(|i| &lines[i])
-            .find(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
-            .map_or("  ".to_owned(), |l| {
-                l[..l.len() - l.trim_start().len()].to_owned()
-            });
-        let existing = (start + 1..end).find(|&i| {
-            lines[i]
-                .trim_start()
-                .strip_prefix(key)
-                .is_some_and(|rest| rest.starts_with(':'))
+            .find(|l| is_text(l))
+            .map_or_else(|| format!("{parent}  "), |l| l[..indent_of(l)].to_owned())
+    };
+
+    let (mut lo, mut hi) = (0, lines.len());
+    let mut indent = String::new();
+    for (depth, name) in path.iter().enumerate() {
+        let header = format!("{indent}{name}:");
+        let found = (lo..hi).find(|&i| {
+            is_text(&lines[i])
+                && indent_of(&lines[i]) == indent.len()
+                && content(&lines[i]) == header
+        });
+        let at = if let Some(i) = found {
+            i
+        } else {
+            let mut pos = if depth == 0 {
+                lines.len()
+            } else {
+                after_text(&lines, lo, hi)
+            };
+            if depth == 0 && lines.last().is_some_and(|l| !l.trim().is_empty()) {
+                lines.push(String::new());
+                pos += 1;
+            }
+            lines.insert(pos, header);
+            hi = if depth == 0 { lines.len() } else { hi + 1 };
+            pos
+        };
+        let base = indent_of(&lines[at]);
+        let end = (at + 1..hi)
+            .find(|&i| is_text(&lines[i]) && indent_of(&lines[i]) <= base)
+            .unwrap_or(hi);
+        lo = at + 1;
+        hi = end;
+        indent = indent_in(&lines, lo, hi, &indent);
+    }
+    for (key, value) in pairs {
+        let existing = (lo..hi).find(|&i| {
+            indent_of(&lines[i]) == indent.len()
+                && lines[i]
+                    .trim_start()
+                    .strip_prefix(key)
+                    .is_some_and(|rest| rest.starts_with(':'))
         });
         match existing {
             Some(i) => {
@@ -237,11 +268,9 @@ fn set_bools(text: &str, section: &str, pairs: &[(&str, bool)]) -> String {
                 };
             }
             None => {
-                let at = (start + 1..end)
-                    .rev()
-                    .find(|&i| !lines[i].trim().is_empty())
-                    .map_or(start + 1, |i| i + 1);
+                let at = after_text(&lines, lo, hi);
                 lines.insert(at, format!("{indent}{key}: {value}"));
+                hi += 1;
             }
         }
     }
@@ -265,9 +294,9 @@ pub fn create_if_missing(path: &Path) -> io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    let text = set_bools(
+    let text = set_values(
         NEW_FILE_HEADER,
-        "features",
+        &["features"],
         &feature_pairs(&Features::default()),
     );
     match fs::OpenOptions::new()
@@ -283,6 +312,48 @@ pub fn create_if_missing(path: &Path) -> io::Result<()> {
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
         Err(e) => Err(e),
     }
+}
+
+/// The name a monitor has under `general.layout.monitors:`, from its hardware path (see
+/// `tile_platform::monitor_paths`): its model and the port it is on, like `DEL4146-4352`. The
+/// model stays with the monitor and the port tells identical ones apart, unlike Windows'
+/// `DISPLAYn` numbers, which change. `None` for a path that isn't a monitor's.
+pub fn monitor_key(path: &str) -> Option<String> {
+    let mut parts = path.trim_start_matches(['\\', '?']).split('#');
+    if !parts.next()?.eq_ignore_ascii_case("DISPLAY") {
+        return None;
+    }
+    let model = parts.next().filter(|m| !m.is_empty())?;
+    let port = parts
+        .next()
+        .and_then(|instance| instance.rsplit_once("UID"))
+        .map(|(_, uid)| uid.trim_matches(|c: char| !c.is_ascii_alphanumeric()))
+        .filter(|uid| !uid.is_empty());
+    Some(match port {
+        Some(port) => format!("{model}-{port}"),
+        None => model.to_owned(),
+    })
+}
+
+/// Saves `layout` as the last used on `monitor` (a [`monitor_key`]) in `general.layout.monitors:` of the config
+/// file, leaving the rest of it as it is.
+pub fn write_layout(path: &Path, monitor: &str, layout: tile_core::LayoutKind) -> io::Result<()> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::from(NEW_FILE_HEADER),
+        Err(e) => return Err(e),
+    };
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(
+        path,
+        set_values(
+            &text,
+            &["general", "layout", "monitors"],
+            &[(monitor, layout)],
+        ),
+    )
 }
 
 /// Saves the feature switches that differ between `before` and `after` into `features:` of the config
@@ -306,7 +377,7 @@ pub fn write_features(path: &Path, before: &Features, after: &Features) -> io::R
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(path, set_bools(&text, "features", &changed))
+    fs::write(path, set_values(&text, &["features"], &changed))
 }
 
 #[cfg(test)]
@@ -425,15 +496,157 @@ mod tests {
     }
 
     #[test]
-    fn set_bools_edits_in_place() {
+    fn a_new_key_goes_before_the_comments_of_the_next_section() {
+        let text = "monitors:
+  A: even
+
+# theme:
+#   font: X
+
+binds: {}
+";
+        let out = set_values(text, &["monitors"], &[("B", "master")]);
+        assert_eq!(
+            out,
+            "monitors:
+  A: even
+  B: master
+
+# theme:
+#   font: X
+
+binds: {}
+"
+        );
+    }
+
+    #[test]
+    fn nested_sections_are_found_or_made() {
+        let text = "general:
+  gaps_in: 2
+  layout:
+    default: master  # mine
+    monitors:
+      A: even
+  gaps_out: 3
+
+binds: {}
+";
+        let path = &["general", "layout", "monitors"];
+        let out = set_values(text, path, &[("A", "scrolling"), ("B", "master")]);
+        assert_eq!(
+            out,
+            "general:
+  gaps_in: 2
+  layout:
+    default: master  # mine
+    monitors:
+      A: scrolling
+      B: master
+  gaps_out: 3
+
+binds: {}
+"
+        );
+        let out = set_values(
+            "general:
+  gaps_in: 2
+
+binds: {}
+",
+            path,
+            &[("A", "even")],
+        );
+        assert_eq!(
+            out,
+            "general:
+  gaps_in: 2
+  layout:
+    monitors:
+      A: even
+
+binds: {}
+"
+        );
+        let out = set_values("", path, &[("A", "even")]);
+        assert_eq!(
+            out,
+            "general:
+  layout:
+    monitors:
+      A: even
+"
+        );
+    }
+
+    #[test]
+    fn set_values_edits_in_place() {
         let text = "general:\n  gaps_in: 2\n\nfeatures:  # switches\n    tile: false  # on\n\ncursor:\n  warp: false\n";
-        let out = set_bools(text, "features", &[("tile", true), ("remap", true)]);
+        let out = set_values(text, &["features"], &[("tile", true), ("remap", true)]);
         assert_eq!(
             out,
             "general:\n  gaps_in: 2\n\nfeatures:  # switches\n    tile: true  # on\n    remap: true\n\ncursor:\n  warp: false\n"
         );
-        let out = set_bools("general:\n  tiling: true\n", "features", &[("tile", true)]);
+        let out = set_values(
+            "general:\n  tiling: true\n",
+            &["features"],
+            &[("tile", true)],
+        );
         assert_eq!(out, "general:\n  tiling: true\n\nfeatures:\n  tile: true\n");
+    }
+
+    #[test]
+    fn a_monitor_keeps_its_last_layout_in_the_file() {
+        assert_eq!(
+            monitor_key(
+                r"\\?\DISPLAY#DEL4146#5&2a3c91f&0&UID4352#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}"
+            ),
+            Some("DEL4146-4352".into())
+        );
+        assert_eq!(
+            monitor_key(r"\\?\DISPLAY#GSM5B09#4&1e2f&0&UID0#{x}"),
+            Some("GSM5B09-0".into())
+        );
+        assert_eq!(
+            monitor_key(r"\\?\DISPLAY#AOC2790#5&1&0&0#{x}"),
+            Some("AOC2790".into())
+        );
+        assert_eq!(monitor_key(r"\\.\DISPLAY1"), None);
+        assert_eq!(monitor_key(""), None);
+        let dir = std::env::temp_dir().join(format!("tile-config-monitors-{}", std::process::id()));
+        let path = dir.join("config.yml");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            &path,
+            "# mine
+general:
+  gaps_in: 2
+",
+        )
+        .unwrap();
+        write_layout(&path, "DEL4146-4352", tile_core::LayoutKind::Scrolling).unwrap();
+        write_layout(&path, "DEL4146-4352", tile_core::LayoutKind::Even).unwrap();
+        write_layout(&path, "GSM5B09-0", tile_core::LayoutKind::Master).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            text.starts_with(
+                "# mine
+general:
+  gaps_in: 2
+"
+            ),
+            "{text}"
+        );
+        let config = Loaded::parse(&text).unwrap().config;
+        assert_eq!(
+            config.general.layout.monitors["DEL4146-4352"],
+            tile_core::LayoutKind::Even
+        );
+        assert_eq!(
+            config.general.layout.monitors["GSM5B09-0"],
+            tile_core::LayoutKind::Master
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -388,12 +388,17 @@ impl Windows {
     /// Whenever the size changes the old contents are discarded, so apps like Explorer don't
     /// keep stale fragments while resizing. `settled` marks the last placement of a move (not
     /// an animation frame): the frame is recomputed and the whole window repainted.
+    ///
+    /// `clip` is the part of the screen the window may show in: a window moved part way off its
+    /// monitor is cut at the monitor's edge instead of appearing on the next one. A clip the
+    /// window fits inside removes an earlier cut, and `None` leaves the window alone.
     pub fn place(
         &mut self,
         id: WindowId,
         target: Rect,
         force: bool,
         settled: bool,
+        clip: Option<Rect>,
     ) -> Result<(), PlaceError> {
         let Self {
             handles, insets, ..
@@ -407,12 +412,64 @@ impl Windows {
             force,
             settled,
             sync: false,
+            clip,
         };
         set_frame(hwnd, target, insets, how).map_err(|e| match e {
             co::ERROR::ACCESS_DENIED => PlaceError::AccessDenied,
             co::ERROR::INVALID_WINDOW_HANDLE => PlaceError::Gone,
             other => PlaceError::Other(other),
         })
+    }
+
+    /// Puts the window directly beneath the window with handle `anchor` in the stacking order,
+    /// if it isn't there, without activating it.
+    pub fn stack_below(&self, id: WindowId, anchor: isize) {
+        if let Some(hwnd) = self.handles.get(&id) {
+            put_below(hwnd, anchor);
+        }
+    }
+
+    /// Raises the window to the top of the stacking order, without activating it.
+    pub fn raise(&self, id: WindowId) {
+        if let Some(hwnd) = self.handles.get(&id) {
+            let _ = hwnd.SetWindowPos(
+                w::HwndPlace::Place(co::HWND_PLACE::TOP),
+                w::POINT::default(),
+                w::SIZE::default(),
+                co::SWP::NOMOVE
+                    | co::SWP::NOSIZE
+                    | co::SWP::NOACTIVATE
+                    | co::SWP::NOOWNERZORDER
+                    | co::SWP::ASYNCWINDOWPOS,
+            );
+        }
+    }
+
+    /// Lifts the cut [`place`](Self::place) gave the window.
+    pub fn unclip(&self, id: WindowId) {
+        if let Some(hwnd) = self.handles.get(&id) {
+            tile_sys::set_window_clip(hwnd.ptr() as isize, None);
+        }
+    }
+
+    /// Shows the window directly beneath the window with handle `anchor`, in one step.
+    /// Showing a hidden window raises it to the top, and the gap before it could be put back
+    /// is long enough to see.
+    pub fn show_under(&self, id: WindowId, anchor: isize) {
+        let (Some(hwnd), Some(anchor)) = (self.handles.get(&id), tile_sys::hwnd(anchor)) else {
+            return;
+        };
+        let _ = hwnd.SetWindowPos(
+            w::HwndPlace::Hwnd(anchor),
+            w::POINT::default(),
+            w::SIZE::default(),
+            co::SWP::NOMOVE
+                | co::SWP::NOSIZE
+                | co::SWP::NOACTIVATE
+                | co::SWP::NOOWNERZORDER
+                | co::SWP::NOSENDCHANGING
+                | co::SWP::SHOWWINDOW,
+        );
     }
 
     /// Shows the window without activating it. Returns at once.
@@ -483,6 +540,14 @@ impl Windows {
         }
     }
 
+    /// Takes away the window's own border (`DWMWA_COLOR_NONE`). DWM draws that border outside
+    /// the window's region, so it would show on the next monitor where the window is cut.
+    pub fn hide_border(&self, id: WindowId) {
+        if let Some(hwnd) = self.handles.get(&id) {
+            tile_sys::hide_border(hwnd.ptr() as isize);
+        }
+    }
+
     /// Whether the window's border currently has `color`; `None` if DWM won't say.
     /// Apps (Chromium/Electron especially) can overwrite the color we set.
     pub fn border_is(&self, id: WindowId, color: Option<Color>) -> Option<bool> {
@@ -546,9 +611,73 @@ fn set_caption(hwnd: &w::HWND, on: bool) -> bool {
     true
 }
 
-/// Puts back windows a previous instance changed: re-adds title bars and re-shows hidden
-/// windows. Used on startup, from the panic hook and by the watchdog process.
-pub fn restore_windows(hidden: &[isize], undecorated: &[isize]) {
+/// Puts `hwnd` directly beneath the window with handle `anchor`, if it isn't there.
+pub(crate) fn put_below(hwnd: &w::HWND, anchor: isize) {
+    let Some(anchor) = tile_sys::hwnd(anchor) else {
+        return;
+    };
+    if hwnd
+        .GetWindow(co::GW::HWNDPREV)
+        .is_ok_and(|above| above == anchor)
+    {
+        return;
+    }
+    if let Err(e) = hwnd.SetWindowPos(
+        w::HwndPlace::Hwnd(anchor),
+        w::POINT::default(),
+        w::SIZE::default(),
+        // Without NOOWNERZORDER, File Explorer ignores being put behind a window. NOSENDCHANGING
+        // keeps this from waiting on a busy app while the window is in front.
+        co::SWP::NOMOVE
+            | co::SWP::NOSIZE
+            | co::SWP::NOACTIVATE
+            | co::SWP::NOOWNERZORDER
+            | co::SWP::NOSENDCHANGING,
+    ) {
+        tracing::debug!(
+            "stacking {:#x} under the backdrop failed: {e}",
+            hwnd.ptr() as isize
+        );
+    }
+}
+
+/// Sends the window with handle `raw` to the bottom of the stacking order, if it isn't there.
+pub fn send_to_bottom(raw: isize) {
+    let Some(hwnd) = tile_sys::hwnd(raw) else {
+        return;
+    };
+    if hwnd.GetWindow(co::GW::HWNDNEXT).is_err() {
+        return;
+    }
+    let _ = hwnd.SetWindowPos(
+        w::HwndPlace::Place(co::HWND_PLACE::BOTTOM),
+        w::POINT::default(),
+        w::SIZE::default(),
+        co::SWP::NOMOVE | co::SWP::NOSIZE | co::SWP::NOACTIVATE,
+    );
+}
+
+/// Whichever of the windows with these handles is lowest in the stacking order.
+pub fn lowest_of(raws: &[isize]) -> Option<isize> {
+    let mut walk = tile_sys::hwnd(*raws.first()?)?
+        .GetWindow(co::GW::HWNDLAST)
+        .ok()?;
+    for _ in 0..10_000 {
+        let raw = walk.ptr() as isize;
+        if raws.contains(&raw) {
+            return Some(raw);
+        }
+        walk = walk.GetWindow(co::GW::HWNDPREV).ok()?;
+    }
+    None
+}
+
+/// Puts back windows a previous instance changed: re-adds title bars, lifts cuts and re-shows
+/// hidden windows. Used on startup, from the panic hook and by the watchdog process.
+pub fn restore_windows(hidden: &[isize], undecorated: &[isize], clipped: &[isize]) {
+    for &raw in clipped {
+        tile_sys::set_window_clip(raw, None);
+    }
     for &raw in undecorated {
         if let Some(hwnd) = tile_sys::hwnd(raw) {
             set_caption(&hwnd, true);

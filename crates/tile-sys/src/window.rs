@@ -4,6 +4,10 @@
 use std::ffi::c_void;
 
 use windows_sys::Win32::{
+    Graphics::Dwm::{DWMWA_BORDER_COLOR, DwmSetWindowAttribute},
+    Graphics::Gdi::{
+        CreateRectRgn, DISPLAY_DEVICEW, DeleteObject, EnumDisplayDevicesW, SetWindowRgn,
+    },
     System::RemoteDesktop::{
         NOTIFY_FOR_THIS_SESSION, WTSRegisterSessionNotification, WTSUnRegisterSessionNotification,
     },
@@ -27,6 +31,68 @@ pub fn watch_sessions(hwnd: isize) -> bool {
 pub fn unwatch_sessions(hwnd: isize) {
     // SAFETY: as for `watch_sessions`.
     unsafe { WTSUnRegisterSessionNotification(hwnd as *mut c_void) };
+}
+
+/// `EDD_GET_DEVICE_INTERFACE_NAME`: report the monitor's hardware path.
+const EDD_GET_DEVICE_INTERFACE_NAME: u32 = 1;
+
+/// The hardware path of the monitor on the display `device` (like `\.\DISPLAY1`), which names
+/// its model and the port it is on: `\?\DISPLAY#DEL4146#5&2a3c91f&0&UID4352#{...}`.
+pub fn monitor_interface(device: &str) -> Option<String> {
+    let name = crate::wide(device);
+    // SAFETY: an all-zero DISPLAY_DEVICEW is a valid value to fill in.
+    let mut info: DISPLAY_DEVICEW = unsafe { std::mem::zeroed() };
+    info.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as u32;
+    // SAFETY: `name` is NUL-terminated and outlives the call, and `info` is a writable
+    // structure whose `cb` is set.
+    let found =
+        unsafe { EnumDisplayDevicesW(name.as_ptr(), 0, &mut info, EDD_GET_DEVICE_INTERFACE_NAME) };
+    if found == 0 {
+        return None;
+    }
+    let len = info
+        .DeviceID
+        .iter()
+        .position(|c| *c == 0)
+        .unwrap_or(info.DeviceID.len());
+    Some(String::from_utf16_lossy(&info.DeviceID[..len]))
+}
+
+/// Takes away the window's own DWM border (`DWMWA_COLOR_NONE`), which DWM draws outside the
+/// window's region.
+pub fn hide_border(hwnd: isize) {
+    let none: u32 = 0xFFFF_FFFE;
+    // SAFETY: the handle is only an identifier that Windows validates, and the value is a
+    // live `u32` of the size the attribute takes.
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd as *mut c_void,
+            DWMWA_BORDER_COLOR as u32,
+            std::ptr::from_ref(&none).cast(),
+            std::mem::size_of::<u32>() as u32,
+        );
+    }
+}
+
+/// Shows only the part of the window inside `visible` (left, top, right, bottom in the window's
+/// own coordinates), or all of it for `None`. An empty rectangle hides it entirely. Works on
+/// windows of other processes.
+pub fn set_window_clip(hwnd: isize, visible: Option<[i32; 4]>) {
+    let region = match visible {
+        // SAFETY: plain values in, a new region handle out; ownership passes to the window below.
+        Some([l, t, r, b]) => unsafe { CreateRectRgn(l, t, r.max(l), b.max(t)) },
+        None => std::ptr::null_mut(),
+    };
+    if visible.is_some() && region.is_null() {
+        return;
+    }
+    // SAFETY: the handle is only an identifier that Windows validates. On success the window
+    // owns the region, so it is freed here only when the call fails.
+    unsafe {
+        if SetWindowRgn(hwnd as *mut c_void, region, 0) == 0 && !region.is_null() {
+            DeleteObject(region);
+        }
+    }
 }
 
 /// Asks the top-level window `hwnd` to close, exactly as Alt+F4 does (`SC_CLOSE`).

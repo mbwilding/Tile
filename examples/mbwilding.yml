@@ -6,13 +6,14 @@ features:
   log: true
 
 general:
-  layout: master
+  layout:
+    default: master
+    monitors:
+      GSM83CD-4352: master
+      DELA0FA-4355: even
   gaps_in: 20
   gaps_out: 20
   border_width: 3
-
-# theme:
-#   font: NeoSpleen
 
 wallpaper:
   directory: C:\Users\mbwilding\dev\nixos\wallpapers

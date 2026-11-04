@@ -50,6 +50,11 @@ impl Backdrop {
         self.0.set_look(look(wallpaper, image));
     }
 
+    /// The windows' handles, one per monitor in the order of [`monitors`].
+    pub fn handles(&self) -> Vec<isize> {
+        self.0.handles()
+    }
+
     /// Fits the windows to the monitors, after they changed.
     pub fn refresh(&self) {
         self.0.set_areas(areas());

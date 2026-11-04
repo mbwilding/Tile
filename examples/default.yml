@@ -8,7 +8,9 @@ general:
   gaps_in: 20 # px between neighbouring windows
   gaps_out: 20 # px between windows and the monitor edge
   independent_workspaces: true # each monitor has its own workspaces; false syncs them
-  layout: master # dwindle | master | monocle | even
+  layout:
+    default: master # dwindle | master | monocle | scrolling | even
+    monitors: {} # last layout used on each monitor, kept by Tile, like DEL4146-4352: scrolling
   borders: true # colour the window border to show focus (Windows 11)
   border_width: 3 # px at 100% scaling; 1 is Windows' own, more is drawn by Tile
   # border_active: "#89b4fa" # unset follows theme.accent
@@ -61,12 +63,17 @@ animations:
   bezier: [0.0, 0.75, 0.15, 1.0] # cubic-bezier control points (x1, y1, x2, y2)
 
 dwindle:
-  split_ratio: 0.5 # share of a split given to the existing window
+  proportion: 0.5 # share of a split given to the existing window
 
 master:
-  ratio: 0.5 # share of the monitor width given to the master area
+  proportion: 0.5 # share of the monitor width given to the master area
   count: 1 # windows in the master area
   new_is_master: false # new windows become master
+
+scrolling:
+  proportion: 0.5 # width of new columns, as a share of the monitor
+  proportion_presets: [0.25, 0.333, 0.5, 1.0] # widths `cycleproportion` steps through
+  center_focused: never # never | on_overflow | always
 
 remap:
   modifier_guard: true # a layer's lone Alt or Win doesn't open a menu or Start
@@ -187,6 +194,11 @@ binds:
   super+z: lock
   super+s: togglesplit
   super+r: launcher
+  super+ctrl+r: cycleproportion
+  super+c: centercolumn
+  super+bracketleft: consumewindow l
+  super+bracketright: consumewindow r
+  super+backslash: expelwindow
   super+shift+r: reload
   super+shift+p: togglepause
   super+shift+e: exit

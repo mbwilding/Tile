@@ -44,6 +44,22 @@ impl Rect {
         x >= self.x && x < self.right() && y >= self.y && y < self.bottom()
     }
 
+    /// Whether `other` lies wholly inside.
+    pub const fn contains(&self, other: &Self) -> bool {
+        other.x >= self.x
+            && other.y >= self.y
+            && other.right() <= self.right()
+            && other.bottom() <= self.bottom()
+    }
+
+    /// Whether the two share any area.
+    pub const fn overlaps(&self, other: &Self) -> bool {
+        self.x < other.right()
+            && other.x < self.right()
+            && self.y < other.bottom()
+            && other.y < self.bottom()
+    }
+
     /// Shrinks the rectangle by `amount` on every side, never going below 1px.
     pub fn shrink(&self, amount: i32) -> Self {
         Self::new(

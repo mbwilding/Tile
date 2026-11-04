@@ -5,7 +5,7 @@ use tile_core::{Command, Effect, MonitorInfo, OpenTarget, Rect, WindowId};
 use tile_launcher::system::{Action, Power};
 use tile_platform::{close_foreground, cursor_pos, desktops as vd, focus_exe, set_cursor_pos};
 
-use super::Daemon;
+use super::{Daemon, preferred_layouts};
 use crate::{launch, paths};
 
 impl Daemon {
@@ -195,7 +195,7 @@ impl Daemon {
                 });
                 let window = focus.and_then(|id| {
                     effects.iter().rev().find_map(|e| match e {
-                        Effect::Place { id: i, rect } if *i == id => Some(*rect),
+                        Effect::Place { id: i, rect, .. } if *i == id => Some(*rect),
                         _ => None,
                     })
                 });
@@ -213,6 +213,7 @@ impl Daemon {
                     self.show_workspace();
                 } else if layout_change {
                     self.show_layout();
+                    self.remember_layout();
                 }
             }
         }
@@ -244,6 +245,38 @@ impl Daemon {
         {
             self.indicator.show(workspace, monitor.work_area);
         }
+    }
+
+    /// Saves the focused workspace's layout in the config as the one last used on its monitor.
+    fn remember_layout(&mut self) {
+        let state = self.desktops.current_ref();
+        let (Some(layout), Some(id)) =
+            (state.active_layout(), state.focused_monitor().map(|m| m.id))
+        else {
+            return;
+        };
+        let Some(key) = tile_platform::monitor_paths()
+            .into_iter()
+            .find(|(i, _)| *i == id)
+            .and_then(|(_, path)| tile_config::monitor_key(&path))
+        else {
+            return;
+        };
+        if self.loaded.config.general.layout.monitors.get(&key) == Some(&layout) {
+            return;
+        }
+        if let Err(e) = tile_config::write_layout(&self.config_path, &key, layout) {
+            tracing::warn!("failed to save the layout: {e}");
+            return;
+        }
+        self.loaded
+            .config
+            .general
+            .layout
+            .monitors
+            .insert(key, layout);
+        self.desktops
+            .set_preferred_layouts(preferred_layouts(&self.loaded));
     }
 
     /// Flashes the focused workspace's layout name on its monitor.

@@ -33,8 +33,8 @@ keep their order when you do.
 
 ### Built for big and odd-shaped screens
 
-Every monitor has its own workspaces, and portrait
-monitors switch to stacked rows on their own. Rotate the monitor and Tile adapts.
+Every monitor has its own workspaces, and Tile remembers the layout you last used on each one,
+so a portrait monitor can stay on stacked rows.
 
 ![A portrait monitor with three windows stacked in equal rows](docs/images/portrait.png)
 
@@ -75,7 +75,7 @@ or a hard kill.
 
 ## Features
 
-- Four layouts, chosen per workspace: **dwindle**, **master/stack**, **monocle**, and **even** (equal shares, used automatically on portrait monitors)
+- Five layouts, chosen per workspace: **dwindle**, **master/stack**, **monocle**, **scrolling** (a niri-style strip of columns) and **even** (equal shares, side by side or stacked)
 - Numbered workspaces, independent per monitor (or synced, if you prefer); floating and fullscreen windows
 - Native virtual desktops (Windows 11 24H2+): every desktop has its own workspaces and layouts
 - Mouse: hold `Win` and drag a window; drag a tile onto another to swap them, or its edge to
@@ -159,7 +159,7 @@ config to copy and paste, and [`examples/`](examples) has complete configs to st
 | --- | --- |
 | [Configuration](docs/configuration.md) | Every setting, and the default config to copy |
 | [Keybinds](docs/keybinds.md) | Default keys, key names, every dispatcher |
-| [Layouts](docs/layouts.md) | The four layouts, portrait and multi-monitor behaviour |
+| [Layouts](docs/layouts.md) | The layouts, and per-monitor and multi-monitor behaviour |
 | [Window rules](docs/window-rules.md) | Float, ignore or place windows by program, class or title |
 | [Key remapping](docs/key-remapping.md) | Remap layers, overloads and their limits |
 | [Launcher](docs/launcher.md) | The app launcher: searching, keys, launch history |

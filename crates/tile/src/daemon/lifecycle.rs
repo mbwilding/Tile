@@ -16,9 +16,15 @@ impl Daemon {
         for id in self.desktops.managed() {
             self.windows.set_border(id, None);
         }
+        for id in std::mem::take(&mut self.stacked) {
+            self.windows.raise(id);
+        }
         for (id, tracked) in &mut self.tracked {
             if tracked.undecorated.take() == Some(true) {
                 self.windows.set_decorated(*id, true);
+            }
+            if std::mem::take(&mut tracked.clipped) {
+                self.windows.unclip(*id);
             }
         }
     }
@@ -173,10 +179,12 @@ impl Daemon {
                 self.track(id).decoration_rule = rule;
             }
         }
+        self.desktops
+            .set_preferred_layouts(super::preferred_layouts(&self.loaded));
         let config = &self.loaded.config;
         let effects = self
             .desktops
-            .set_settings(config.layout_settings(), config.general.layout);
+            .set_settings(config.layout_settings(), config.general.layout.default);
         self.repaint_borders();
         self.sync_rings();
         self.apply(effects);

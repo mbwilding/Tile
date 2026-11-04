@@ -68,6 +68,8 @@ impl Look {
 struct Wanted {
     areas: Vec<Area>,
     look: Look,
+    /// The windows' handles, one per area, kept up to date by the thread.
+    handles: Vec<isize>,
 }
 
 /// The windows, on a thread of their own. Dropping it removes them.
@@ -79,12 +81,25 @@ pub struct Backdrop {
 impl Backdrop {
     /// Covers `areas` with `look`, one window each.
     pub fn start(areas: Vec<Area>, look: Look) -> io::Result<Self> {
-        let wanted = Arc::new(Mutex::new(Wanted { areas, look }));
+        let wanted = Arc::new(Mutex::new(Wanted {
+            areas,
+            look,
+            handles: Vec::new(),
+        }));
         let (thread, ()) = MessageThread::spawn("backdrop", {
             let wanted = wanted.clone();
             move || Ok((Windows::new(wanted), ()))
         })?;
         Ok(Self { wanted, thread })
+    }
+
+    /// The windows' handles, one per area in the order of the areas given.
+    pub fn handles(&self) -> Vec<isize> {
+        self.wanted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .handles
+            .clone()
     }
 
     /// Moves the windows to cover `areas`, after the monitors changed.
@@ -251,6 +266,10 @@ impl Windows {
                 )
             };
         }
+        self.wanted
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .handles = self.windows.iter().map(|h| *h as isize).collect();
     }
 
     /// Gives `hwnd` the bitmap (or none, for the plain colour) and frees the one it had.

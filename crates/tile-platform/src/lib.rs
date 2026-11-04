@@ -42,7 +42,7 @@ pub use hotkeys::{HotkeyEvent, Hotkeys};
 pub use indicator::{Indicator, IndicatorSettings};
 pub use install::{EXE, install_dir, installed_exe};
 pub use lock::{lock_disabled, lock_workstation, request_lock_permission, set_lock_disabled};
-pub use monitors::{monitors, rect};
+pub use monitors::{monitor_paths, monitors, rect};
 pub use mover::{Animation, Mover};
 pub use sign_in::{
     conhost, headless_command, is_shell as is_sign_in_shell, set_shell as set_sign_in_shell,
@@ -56,6 +56,6 @@ pub use token::{is_elevated, user_sid};
 pub use tray::{Tray, TrayEvent};
 pub use windows::{
     App, Discovered, PlaceError, Windows, close_foreground, cursor_pos, enumerate, focus_desktop,
-    focus_exe, focus_hwnd, foreground, is_shell_window, list_apps, mouse_button_down,
-    restore_windows, run_as_admin, set_cursor_pos, wait_for_exit,
+    focus_exe, focus_hwnd, foreground, is_shell_window, list_apps, lowest_of, mouse_button_down,
+    restore_windows, run_as_admin, send_to_bottom, set_cursor_pos, wait_for_exit,
 };

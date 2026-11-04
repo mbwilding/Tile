@@ -23,7 +23,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use tile_config::Loaded;
-use tile_core::{Command, Desktops, LayoutKind, MonitorInfo, WallpaperAction, WindowId};
+use tile_core::{Command, Desktops, LayoutKind, MonitorId, MonitorInfo, WallpaperAction, WindowId};
 use tile_ipc::{Incoming, Response, Server};
 use tile_launcher::{Launcher, LauncherEvent, LauncherSettings};
 use tile_platform::{
@@ -136,6 +136,10 @@ struct Daemon {
     taskbar_noted: bool,
     /// The desktop Tile paints while it hosts the notification area.
     backdrop: Option<Backdrop>,
+    /// Windows put under the other monitors' backdrops by `stack_scrolling`.
+    stacked: HashSet<WindowId>,
+    /// The backdrop that stacked windows are directly beneath.
+    stack_anchor: Option<isize>,
     /// The wallpaper on the desktop.
     shown: Shown,
     /// When the wallpaper next changes, if it cycles.
@@ -240,11 +244,29 @@ async fn until(at: Option<Instant>) {
 /// No windows or monitors yet, on the native desktop being shown, with `loaded`'s layouts.
 fn fresh_desktops(loaded: &Loaded) -> Desktops {
     let config = &loaded.config;
-    Desktops::new(
+    let mut desktops = Desktops::new(
         vd::current_desktop().unwrap_or_default(),
         config.layout_settings(),
-        config.general.layout,
-    )
+        config.general.layout.default,
+    );
+    desktops.set_preferred_layouts(preferred_layouts(loaded));
+    desktops
+}
+
+/// The layout last used on each connected monitor, from the config's `general.layout.monitors`.
+fn preferred_layouts(loaded: &Loaded) -> HashMap<MonitorId, LayoutKind> {
+    tile_platform::monitor_paths()
+        .into_iter()
+        .filter_map(|(id, path)| {
+            let kind = loaded
+                .config
+                .general
+                .layout
+                .monitors
+                .get(&tile_config::monitor_key(&path)?)?;
+            Some((id, *kind))
+        })
+        .collect()
 }
 
 /// Whether a window currently lives on a native desktop other than the visible one.
@@ -345,6 +367,8 @@ pub async fn run(
         shell_on: saved.shell,
         taskbar_noted: false,
         backdrop: None,
+        stacked: HashSet::new(),
+        stack_anchor: None,
         shown: Shown::default(),
         wallpaper_at: None,
         paused: !saved.tile,

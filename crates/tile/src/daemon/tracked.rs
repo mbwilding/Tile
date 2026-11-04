@@ -50,6 +50,10 @@ impl Expected {
 pub(super) struct Tracked {
     /// The last rect we placed it at (or are animating it towards).
     pub(super) placed: Option<Rect>,
+    /// The cut last given to the platform with `placed`, if any.
+    pub(super) clip: Option<Rect>,
+    /// The core wants it cut to its monitor, so the cut must be lifted when that stops.
+    pub(super) clipped: bool,
     /// Its animation, while one runs.
     pub(super) tween: Option<Tween>,
     /// The user is dragging or resizing it with the mouse.

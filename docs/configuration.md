@@ -37,7 +37,8 @@ or contains `: ` or ` #`, and around numbers meant as text (`"2"`).
 | `gaps_in` | `20` | Pixels between neighbouring tiled windows. |
 | `gaps_out` | `20` | Pixels between tiled windows and the monitor edge. |
 | `independent_workspaces` | `true` | Every monitor has workspaces of its own, so `workspace 2` is workspace 2 on the monitor you are on and never moves focus to another monitor. `false` syncs the monitors: switching workspace switches them all together. See [layouts](layouts.md#workspaces-and-monitors). |
-| `layout` | `master` | Layout of new workspaces: `dwindle`, `master`, `monocle` or `even`. New workspaces on a portrait monitor start with `even` instead. Changing it moves workspaces still on the old default to the new one. See [layouts](layouts.md). |
+| `layout.default` | `master` | Layout of new workspaces: `dwindle`, `master`, `monocle`, `scrolling` or `even`. Changing it moves workspaces still on the old default to the new one. See [layouts](layouts.md). |
+| `layout.monitors` | `{}` | The layout last used on each monitor, which new workspaces there start with instead. Tile keeps it up to date; see [`layout.monitors`](#generallayoutmonitors). |
 | `borders` | `true` | Colour the window border to show focus (Windows 11). |
 | `border_width` | `3` | Border thickness in pixels at 100% scaling. `1` is Windows' own border; wider is drawn by Tile as a smooth ring outside the window, so it needs a gap at least as wide (`gaps_in`, `gaps_out`) to stay clear of its neighbours. It follows the window and stacks just above it. |
 | `border_active` | `theme.accent` | Border colour of the focused window. |
@@ -123,10 +124,34 @@ these in the file applies at once and starts again from `path`.
 
 | Section | Key | Default | Meaning |
 | --- | --- | --- | --- |
-| `dwindle` | `split_ratio` | `0.5` | Share of a split given to the existing window. Changing it resets every split to the new ratio. |
-| `master` | `ratio` | `0.5` | Share of the monitor width given to the master area (0.1 to 0.9). Changing it in the config resets the width on every workspace, undoing any resizing. |
+| `dwindle` | `proportion` | `0.5` | Share of a split given to the existing window. Changing it resets every split to the new proportion. |
+| `master` | `proportion` | `0.5` | Share of the monitor width given to the master area (0.1 to 0.9). Changing it in the config resets the width on every workspace, undoing any resizing. |
 | `master` | `count` | `1` | Windows in the master area. |
 | `master` | `new_is_master` | `false` | New windows become the master. |
+| `scrolling` | `proportion` | `0.5` | Width of new columns, as a share of the monitor: `0.5` shows two windows evenly split. |
+| `scrolling` | `proportion_presets` | `[0.25, 0.333, 0.5, 1.0]` | Widths `cycleproportion` steps through. |
+| `scrolling` | `center_focused` | `never` | When to centre the focused column: `never` (scroll only as far as needed to bring it into view, and not at all if it already is), `on_overflow` (centre it when it doesn't fit on screen together with the column that had focus) or `always`. |
+
+### `general.layout.monitors`
+
+The layout last used on each monitor. A monitor is named by its model and the port it is
+plugged into, like `DEL4146-4352`, which stays the same when Windows renumbers `DISPLAY1` and
+`DISPLAY2`. Two identical monitors differ by port. Move a monitor's cable to another port and it
+counts as a new monitor.
+
+Tile writes an entry into the file when you change layout with `layout`, `cyclelayout` or
+`resetlayout`, and new workspaces on that monitor start with it, ahead of `layout.default`.
+Workspaces already open keep their layout. You can edit it by hand; remove an entry to go back
+to the default. A portrait monitor is no different: set it to `even` once and it stays there.
+
+```yaml
+general:
+  layout:
+    default: master
+    monitors:
+      DEL4146-4352: scrolling
+      GSM5B09-0: even
+```
 
 ### `launcher`
 
@@ -248,7 +273,9 @@ general:
   gaps_in: 20                   # px between neighbouring windows
   gaps_out: 20                  # px between windows and the monitor edge
   independent_workspaces: true  # each monitor has its own workspaces; false syncs them
-  layout: master                # dwindle | master | monocle | even
+  layout:
+    default: master             # dwindle | master | monocle | scrolling | even
+    monitors: {}                # last layout used on each monitor, kept by Tile; see below
   borders: true                 # colour the window border to show focus (Windows 11)
   border_width: 3               # px at 100% scaling; 1 is Windows' own, more is drawn by Tile
   # border_active: "#89b4fa"    # unset follows theme.accent
@@ -301,12 +328,17 @@ animations:
   bezier: [0.0, 0.75, 0.15, 1.0]   # cubic-bezier control points (x1, y1, x2, y2)
 
 dwindle:
-  split_ratio: 0.5              # share of a split given to the existing window
+  proportion: 0.5               # share of a split given to the existing window
 
 master:
-  ratio: 0.5                    # share of the monitor width given to the master area
+  proportion: 0.5               # share of the monitor width given to the master area
   count: 1                      # windows in the master area
   new_is_master: false          # new windows become master
+
+scrolling:
+  proportion: 0.5               # width of new columns, as a share of the monitor
+  proportion_presets: [0.25, 0.333, 0.5, 1.0]   # widths `cycleproportion` steps through
+  center_focused: never         # never | on_overflow | always
 
 remap:
   modifier_guard: true          # a layer's lone Alt or Win doesn't open a menu or Start

@@ -7,11 +7,13 @@ use tile_platform::{
 };
 use tokio::time::Instant;
 
-use super::{DEFOCUS_GRACE, Daemon, FORCE_GRACE, on_other_desktop};
+use super::{DEFOCUS_GRACE, Daemon, FORCE_GRACE, apply::Motion, on_other_desktop};
 use crate::{launch, paths, remap};
 
 impl Daemon {
     pub(super) fn on_foreground(&mut self, id: WindowId) {
+        // Windows raised the window above the backdrops again.
+        self.stack_scrolling();
         tracing::info!(
             "foreground {:#x} {:?} managed={}",
             id.0,
@@ -164,9 +166,14 @@ impl Daemon {
         }
         self.track(id).resizing = true;
         for effect in effects {
-            if let Effect::Place { id: other, rect } = effect {
+            if let Effect::Place {
+                id: other,
+                rect,
+                clip,
+            } = effect
+            {
                 // The window being dragged is skipped by `place`: the user holds it.
-                if let Err(gone) = self.place(other, rect, false) {
+                if let Err(gone) = self.place(other, rect, clip, Motion::Jump) {
                     self.ignored.insert(gone);
                     self.unmanage(gone);
                 }
