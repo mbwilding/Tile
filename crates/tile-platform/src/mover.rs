@@ -14,7 +14,7 @@ use tile_core::{
 use winsafe as w;
 
 use crate::{
-    frame::{Insets, Placement, set_frame},
+    frame::{Cut, Insets, Placement, set_frame},
     windows::put_below,
 };
 
@@ -130,13 +130,20 @@ fn run(hwnd: &w::HWND, shared: &Shared) {
                 None => return,
             }
         };
+        let mut cut: Cut = None;
+        let mut drawn = None;
         loop {
             if let Some(newer) = shared.next.lock().ok().and_then(|mut next| next.take()) {
                 animation = newer;
+                cut = None;
             }
             let (rect, done) = animation.at(Instant::now());
             let started = Instant::now();
-            draw(hwnd, rect, &animation, done);
+            // Easing is slow at the ends: no need to draw the same place twice.
+            if done || drawn != Some(rect) {
+                draw(hwnd, rect, &animation, done, &mut cut);
+                drawn = Some(rect);
+            }
             tracing::trace!(
                 "mover {:#x}: frame drawn in {:.1} ms",
                 hwnd.ptr() as isize,
@@ -155,7 +162,7 @@ fn run(hwnd: &w::HWND, shared: &Shared) {
 }
 
 /// Applies one frame and waits until the app has painted it. `settled` marks the last one.
-fn draw(hwnd: &w::HWND, visible: Rect, animation: &Animation, settled: bool) {
+fn draw(hwnd: &w::HWND, visible: Rect, animation: &Animation, settled: bool, cut: &mut Cut) {
     let how = Placement {
         force: animation.force,
         settled,
@@ -166,7 +173,7 @@ fn draw(hwnd: &w::HWND, visible: Rect, animation: &Animation, settled: bool) {
         // Before the move, so a window that was raised never shows over the next monitor.
         put_below(hwnd, anchor);
     }
-    if let Err(e) = set_frame(hwnd, visible, animation.insets, how) {
+    if let Err(e) = set_frame(hwnd, visible, animation.insets, how, cut) {
         tracing::debug!("mover: SetWindowPos failed: {e}");
     }
 }

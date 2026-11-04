@@ -35,12 +35,18 @@ pub(crate) struct Placement {
     pub clip: Option<Rect>,
 }
 
-/// Moves `hwnd` so its visible frame covers `visible`, given its invisible `insets`.
+/// What the cut was last made as: the visible part of the window, or `None` for no cut. A
+/// mover keeps it across the frames of a move so an unchanged cut isn't made again.
+pub(crate) type Cut = Option<Option<[i32; 4]>>;
+
+/// Moves `hwnd` so its visible frame covers `visible`, given its invisible `insets`. `cut` is
+/// what the last call made of the window's cut (`&mut None` to always make it).
 pub(crate) fn set_frame(
     hwnd: &w::HWND,
     visible: Rect,
     insets: Insets,
     how: Placement,
+    cut: &mut Cut,
 ) -> w::SysResult<()> {
     let pos = w::POINT::with(visible.x - insets.left, visible.y - insets.top);
     let size = w::SIZE::with(
@@ -76,9 +82,15 @@ pub(crate) fn set_frame(
     }
     if let Some(clip) = how.clip {
         let outer = Rect::new(pos.x, pos.y, size.cx, size.cy);
-        tile_sys::set_window_clip(hwnd.ptr() as isize, visible_part(outer, clip));
+        let part = visible_part(outer, clip);
+        if *cut != Some(part) || how.settled {
+            tile_sys::set_window_clip(hwnd.ptr() as isize, part);
+            *cut = Some(part);
+        }
     }
-    if how.sync || how.settled {
+    // A move that keeps the size needs no repaint: the compositor just moves the window, and
+    // forcing one every frame is what makes a window stutter at a high refresh rate.
+    if how.settled || (how.sync && resizing) {
         let everything = w::RECT {
             left: 0,
             top: 0,

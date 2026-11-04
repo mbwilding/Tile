@@ -414,7 +414,7 @@ impl Windows {
             sync: false,
             clip,
         };
-        set_frame(hwnd, target, insets, how).map_err(|e| match e {
+        set_frame(hwnd, target, insets, how, &mut None).map_err(|e| match e {
             co::ERROR::ACCESS_DENIED => PlaceError::AccessDenied,
             co::ERROR::INVALID_WINDOW_HANDLE => PlaceError::Gone,
             other => PlaceError::Other(other),
